@@ -10,7 +10,7 @@ const DEFAULT_INFO = {
 };
 const ROWS = [
   ['diameter', 'Diameter', 'Å', 1], ['minorGrooveWidth', 'Minor groove', 'Å', 1], ['majorGrooveWidth', 'Major groove', 'Å', 1],
-  ['hbondMean', 'Mean H-bond', 'Å', 2], ['rise', 'Rise per bp', 'Å', 2], ['twistDeg', 'Twist per bp', '°', 1],
+  ['hbondMean', 'Mean H-bond', '\u00c5', 2],
 ];
 
 export function createCrystalView(ctx) {
@@ -19,7 +19,7 @@ export function createCrystalView(ctx) {
   const emit = () => H.onCrystal({ waters: state.waters, bfactor: state.bfactor });
 
   const water = toggleTile({ label: 'Water molecules', hint: 'Show crystallographic waters', onChange: v => { state.waters = v; emit(); } });
-  const bfac = toggleTile({ label: 'Colour by B-factor', hint: 'Colour atoms by thermal motion', onChange: v => { state.bfactor = v; bkey.hidden = !v; emit(); } });
+  const bfac = toggleTile({ className: 'tile-wide', label: 'Colour by B-factor', hint: 'Colour atoms by thermal motion', onChange: v => { state.bfactor = v; bkey.hidden = !v; emit(); } });
   const bkey = h('div', { class: 'bkey', hidden: true }, h('span', {}, 'rigid'), h('span', { class: 'bkey-bar' }), h('span', {}, 'mobile'));
 
   const pdb = h('span', { class: 'pdb-id' }, DEFAULT_INFO.id);

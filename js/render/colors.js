@@ -94,7 +94,7 @@ export class ColorModel {
 
 function dimOrBoost(arr, i, e) {
   const o = i * 3, r = arr[o], g = arr[o + 1], b = arr[o + 2];
-  if (e) { arr[o] = r * 1.25; arr[o + 1] = g * 1.25; arr[o + 2] = b * 1.25; return; }
+  if (e) { arr[o] = r * 1.12; arr[o + 1] = g * 1.12; arr[o + 2] = b * 1.12; return; }
   const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   arr[o] = (l + (r - l) * 0.2) * 0.16 + 0.004;
   arr[o + 1] = (l + (g - l) * 0.2) * 0.16 + 0.006;

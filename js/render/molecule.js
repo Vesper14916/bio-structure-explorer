@@ -56,7 +56,7 @@ export class MoleculeLayer {
     });
     this.beadMat = new THREE.ShaderMaterial({
       uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
-        uColor: { value: new THREE.Color(0.35, 1.25, 2.1) }, uTime: { value: 0 }, uPulse: { value: 1 },
+        uColor: { value: new THREE.Color(0.55, 1.9, 3.2) }, uTime: { value: 0 }, uPulse: { value: 1 },
       }]),
       vertexShader: beadVertex, fragmentShader: beadFragment, fog: true,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,

@@ -40,9 +40,9 @@ varying vec3 vV;
 void main() {
   float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
   float rim = pow(f, 2.4);
-  vec3 col = uColor * (0.35 + rim * 2.6);
-  float a = uOpacity * (0.22 + rim * 1.25);
-  gl_FragColor = vec4(col, clamp(a, 0.0, 1.0));
+  float a = clamp(uOpacity * (0.25 + rim * 1.6), 0.0, 1.0);
+  vec3 col = uColor * (0.3 + rim * 2.2);
+  gl_FragColor = vec4(col * a, 1.0);
 }`;
 
 export class OverlayLayer {
@@ -205,7 +205,7 @@ export class OverlayLayer {
       if (!rec) {
         const mat = new THREE.ShaderMaterial({
           uniforms: { uColor: { value: new THREE.Color() }, uOpacity: { value: 0.35 }, uTime: this.timeUniform || (this.timeUniform = { value: 0 }), uSeed: { value: Math.random() * 10 } },
-          vertexShader: blobVertex, fragmentShader: blobFragment, transparent: true, depthWrite: false,
+          vertexShader: blobVertex, fragmentShader: blobFragment, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
         });
         const mesh = new THREE.Mesh(this.blobGeo, mat);
         mesh.renderOrder = 5; mesh.frustumCulled = false;

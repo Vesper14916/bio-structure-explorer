@@ -108,7 +108,7 @@ void main() {
   vBlur = blur; vKind = aSeed.w;
   float size = aSeed.x * (1.0 + 3.0 * blur);
   gl_PointSize = clamp(size * uPx / depth, 1.0, 96.0);
-  float nearFade = smoothstep(4.0, 22.0, depth);
+  float nearFade = smoothstep(uFocus * 0.12, uFocus * 0.6, depth);
   float farFade = 1.0 - smoothstep(uFocus * 2.2, uFocus * 3.2, depth);
   vAlpha = nearFade * farFade / (1.0 + 4.0 * blur * blur);
   gl_Position = projectionMatrix * mv;
@@ -145,7 +145,7 @@ export class Particles {
     this.material = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 }, uDrift: { value: 1 }, uBox: { value: new THREE.Vector3(80, 80, 80) },
-        uCenter: { value: new THREE.Vector3() }, uPx: { value: 500 }, uFocus: { value: 80 }, uIntensity: { value: 0.55 },
+        uCenter: { value: new THREE.Vector3() }, uPx: { value: 500 }, uFocus: { value: 80 }, uIntensity: { value: 0.42 },
       },
       vertexShader: particleVertex, fragmentShader: particleFragment,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
@@ -187,8 +187,8 @@ export class Post {
     this.composer.setPixelRatio(pr);
     this.composer.setSize(size.x, size.y);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.55, 0.92);
-    const scale = tier === 'high' ? 1 : 0.5, orig = this.bloom.setSize.bind(this.bloom);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.6, 0.5, 1.05);
+    const scale = tier === 'high' ? 1 : 0.75, orig = this.bloom.setSize.bind(this.bloom);
     this.bloom.setSize = (w, h) => orig(Math.max(2, Math.round(w * scale)), Math.max(2, Math.round(h * scale)));
     this.bloom.enabled = tier !== 'low';
     this.composer.addPass(this.bloom);

@@ -167,7 +167,7 @@ export function createUI(root, handlers = {}) {
   if (debugChip) root.append(debugChip);
 
   // ---- sheet ------------------------------------------------------------------------------------
-  const sheet = createSheet({ dock, panel, scroller, grip, tabbar: mTabs.list, header, onChange: () => scheduleLayout() });
+  const sheet = createSheet({ dock, panel, scroller, grip, tabbar: mTabs.list, header, onChange: () => { scheduleLayout(); if (!hint.hidden) dismissHint(true); } });
 
   // ---- insets -----------------------------------------------------------------------------------
   let insets = { top: 0, right: 0, bottom: 0, left: 0 }, sent = null;
@@ -199,6 +199,7 @@ export function createUI(root, handlers = {}) {
     root.dataset.mode = id; scroller.scrollTop = 0;
   }
   function userMode(id) {
+    dismissHint(true);
     if (id === mode) { if (mobile) sheet.setSnap(sheet.getSnap() === 'peek' ? 'half' : 'peek'); return; }
     applyMode(id); H.onMode(id);
     if (mobile && sheet.getSnap() === 'peek') { /* keep the peek: it shows the key control */ }
@@ -236,7 +237,7 @@ export function createUI(root, handlers = {}) {
     if (k === 'h' || k === 'H') { if (!mobile) { setPanelOpen(collapsed); e.preventDefault(); } return; }
     if (k === '?') { openAbout(); e.preventDefault(); return; }
     if (k === ' ' && mode === 'replicate') {
-      if (t.closest && t.closest('button, a, [role="radio"], [role="tab"]')) return;
+      if (t.closest && t.closest('button:not([role="tab"]), a, [role="radio"]')) return;
       views.replicate.togglePlay(); e.preventDefault(); return;
     }
     if ((k === 'ArrowLeft' || k === 'ArrowRight') && mode === 'pair') {
@@ -245,6 +246,9 @@ export function createUI(root, handlers = {}) {
     }
   }
   doc.addEventListener('keydown', onKey);
+  // Space on a focused tab would otherwise "click" it on keyup; we use Space for play/pause instead.
+  const onKeyUp = e => { if (e.key === ' ' && mode === 'replicate' && e.target.closest && e.target.closest('[role="tab"]')) e.preventDefault(); };
+  doc.addEventListener('keyup', onKeyUp);
 
   // ---- responsive + keyboard (visualViewport) ----------------------------------------------------
   let preKbSnap = null;
@@ -332,7 +336,7 @@ export function createUI(root, handlers = {}) {
     setSheet: (n, animate = true) => sheet.setSnap(n, animate), getSheet: () => sheet.getSnap(),
     openAbout, closeAbout: () => about.close(),
     destroy() {
-      destroyed = true; doc.removeEventListener('keydown', onKey); removeEventListener('pointerdown', onWinPointer, true);
+      destroyed = true; doc.removeEventListener('keydown', onKey); doc.removeEventListener('keyup', onKeyUp); removeEventListener('pointerdown', onWinPointer, true);
       ro.disconnect(); mq.removeEventListener('change', onBreakpoint); root.replaceChildren();
     },
   };

@@ -4,7 +4,7 @@
 // never fights the sheet.
 import { clamp } from './dom.js';
 
-export const PEEK_H = 108;
+export const PEEK_H = 112;
 const ORDER = ['peek', 'half', 'full'];
 
 export function createSheet({ dock, panel, scroller, grip, tabbar, header, onChange }) {

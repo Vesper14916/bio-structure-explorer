@@ -34,7 +34,7 @@ void main() {
   float edge = smoothstep(0.86, 0.99, vV);
   float facing = abs(dot(normalize(vN), normalize(vView)));
   float a = uOpacity * vF * (0.18 + 0.55 * pow(vV, 1.6) + 0.15 * (1.0 - facing));
-  vec3 col = uColor * (0.75 + 0.6 * vV) + uColor * edge * 2.4;
+  vec3 col = uColor * (0.75 + 0.6 * vV) + uColor * edge * 1.5;
   a = min(1.0, a + edge * 0.55 * vF);
   #ifdef USE_FOG
     float ff = smoothstep(fogNear, fogFar, vFogDepth);
@@ -85,7 +85,7 @@ export class GuideLayer {
     this.group.name = 'guides';
     parent.add(this.group);
     // pre-allocated per-pair scratch (sized on setAssembly)
-    this.axisMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.55, 1.1, 1.9), fog: true, toneMapped: true });
+    this.axisMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.8, 1.7, 2.8), fog: true, toneMapped: true });
     this.axisHaloMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 0.55, 1.0), transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending, fog: true });
     const cyl = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true);
     this.axis = new THREE.Mesh(cyl, this.axisMat);
