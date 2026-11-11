@@ -62,10 +62,15 @@ export const WC_HBONDS = {
 };
 
 // Groove-edge chemistry used for sequence read-out by proteins (Seeman, Rosenberg &
-// Rich 1976). Each entry: [atom, role] with role A = H-bond acceptor, D = donor,
-// M = methyl (hydrophobic), listed across the groove from the first base to its partner.
+// Rich 1976, PNAS 73, 804). Roles: A = H-bond acceptor, D = H-bond donor, M = methyl
+// (hydrophobic), H = non-polar hydrogen. Listed across the groove from the first base
+// of the pair to its partner.
+//   major groove  A·T: N7(A) N6-H(D) O4(A) CH3(M)     G·C: N7(A) O6(A) N4-H(D) C5-H(H)
+//   minor groove  A·T: N3(A) C2-H(H) O2(A)            G·C: N3(A) N2-H(D) O2(A)
+// The major groove gives four distinct patterns (one per pair orientation); the minor
+// groove cannot tell A·T from T·A or G·C from C·G.
 export const GROOVE_PATTERN = {
-  major: { AT: 'ADAM', TA: 'MADA', GC: 'AADA', CG: 'ADAA' },
+  major: { AT: 'ADAM', TA: 'MADA', GC: 'AADH', CG: 'HDAA' },
   minor: { AT: 'AHA', TA: 'AHA', GC: 'ADA', CG: 'ADA' },
 };
 

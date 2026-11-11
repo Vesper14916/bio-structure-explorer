@@ -37,12 +37,11 @@ const SIGMA = 1e-4;               // helix-coil cooperativity: must equal helixC
 const LOG_SIGMA = Math.log(SIGMA);
 const LOG_UNZIP = Math.log(1e-4); // extra penalty on closing at a fraying front while unzipping
 const RATE_FLICKER = 2.0;         // heat-bath attempts per pair per second  (flicker time ~0.5 s)
-const KAPPA = 0.5;                // molecular association/dissociation rate scale (1/s)
 const SUBSTEP = 1 / 30;
 const TARGET_FRONT_TIME = 4;      // s: a domain wall should be able to cross the molecule in about this long
 const OMEGA_OPEN = 9;             // 1/s: critically damped follower of the micro-state
 const OMEGA_SEP = 3;              // 1/s: strand separation follower
-const A_TRANS = 3.4;              // Å: smoothed outward push of an open base along local +y
+const A_TRANS = 3.0;              // Å: smoothed outward push of an open base along local +y
 const THETA_MAX = 38 * DEG;       // swing about the P–O3' line
 const SEP_SHIFT = 18;             // Å: translation of each strand away from the axis
 const COIL_TWIST = 22.5;          // °/residue in the dissociated coil
@@ -78,7 +77,7 @@ export function createMeltSim(sequence, opts = {}) {
   // ---- conditions & equilibrium thermodynamics ------------------------------------------------
   let cond = { T, Na, Ct };
   const logS = new Float64Array(Math.max(n - 1, 1));
-  let dup = 1, ka = KAPPA, kd = 0;
+  let dup = 1;
   const openness = new Float32Array(n);
   const state = {
     T, Na, Ct, Tm: NaN, dH: 0, dS: 0, dG37: 0, gc: 0,
@@ -101,18 +100,20 @@ export function createMeltSim(sequence, opts = {}) {
     state.closed = hc.closed;
     dup = clamp(hc.duplex, 1e-300, 1);
     state.duplexFraction = hc.duplex;
-    // detailed balance between associated and dissociated molecule: ka/kd = dup/(1−dup)
-    if (dup >= 0.5) { ka = KAPPA; kd = KAPPA * (1 - dup) / dup; }
-    else { kd = KAPPA; ka = KAPPA * dup / (1 - dup); }
     state.T = cond.T; state.Na = cond.Na; state.Ct = cond.Ct;
   }
 
   // ---- micro-state machine ---------------------------------------------------------------------
-  const rateFront = Math.max(RATE_FLICKER * 1.5, n / TARGET_FRONT_TIME * 1.5);   // pairs/s at a domain wall
-  const rateUnzip = Math.max(4, n / 6);
+  const rateFront = Math.max(RATE_FLICKER * 1.5, n / TARGET_FRONT_TIME * 1.5);   // attempts/s at a domain wall
+  const rateUnzip = Math.max(4, n / 6);                                          // attempts/s per pair while unzipping
+  const zipSpeed = Math.max(5, n / 4);                                           // pairs/s of the re-annealing zipper
+  const T_UNZIP = (n / 2) / (rateUnzip * 0.9), T_ZIP = (n / 2) / zipSpeed;       // typical transient durations (s)
+  const T_APPROACH = 1.2;                                                        // strands returning (s)
   const micro = new Uint8Array(n);        // 1 closed, 0 open
+  const target = new Uint8Array(n);       // configuration being revealed by the zipper
   let closedCount = 0;
-  let mode = 'A';                          // 'A' associated | 'unzip' | 'D' dissociated | 'approach'
+  let mode = 'A';                          // 'A' associated | 'unzip' | 'D' dissociated | 'approach' | 'zip'
+  let zipJ = 0, zipR = 0;
   let flip = 0;
 
   // Attempt rates may depend on the neighbours (not on the pair itself) without disturbing detailed
@@ -133,22 +134,61 @@ export function createMeltSim(sequence, opts = {}) {
       micro[k] = want; closedCount += want ? 1 : -1;
     }
   }
-  function nucleate() {
+
+  // Exact sample (forward-backward) of a configuration of the helix-coil model conditioned on having
+  // at least one closed pair, i.e. of an associated duplex. States: 0 open before the helix,
+  // 1 closed, 2 open after the helix; weights as in science/thermo.js.
+  const bk = new Float64Array(3 * n);
+  function sampleAssociated(out) {
+    bk[3 * (n - 1)] = 0; bk[3 * (n - 1) + 1] = 1; bk[3 * (n - 1) + 2] = 1;
+    for (let k = n - 2; k >= 0; k--) {
+      const s = Math.exp(logS[k]), o = 3 * (k + 1);
+      let b0 = bk[o] + bk[o + 1], b1 = s * bk[o + 1] + bk[o + 2], b2 = bk[o + 2] + SIGMA * bk[o + 1];
+      const m = Math.max(b0, b1, b2) || 1;
+      bk[3 * k] = b0 / m; bk[3 * k + 1] = b1 / m; bk[3 * k + 2] = b2 / m;
+    }
+    const pick = (w0, w1, w2) => {
+      const tot = w0 + w1 + w2;
+      if (!(tot > 0)) return 1;
+      const r = rng() * tot;
+      return r < w0 ? 0 : r < w0 + w1 ? 1 : 2;
+    };
+    let st = pick(bk[0], bk[1], 0);
+    out[0] = st === 1 ? 1 : 0;
+    for (let k = 1; k < n; k++) {
+      const s = Math.exp(logS[k - 1]), o = 3 * k;
+      if (st === 0) st = pick(bk[o], bk[o + 1], 0);
+      else if (st === 1) st = pick(0, s * bk[o + 1], bk[o + 2]);
+      else st = pick(0, SIGMA * bk[o + 1], bk[o + 2]);
+      out[k] = st === 1 ? 1 : 0;
+    }
+    return out;
+  }
+  function beginZip() {
+    sampleAssociated(target);
+    // nucleate at a closed pair of the sample, chosen in proportion to its equilibrium closing probability
     const cl = state.closed;
     let tot = 0;
-    for (let k = 0; k < n; k++) tot += cl[k];
-    let j = 0;
-    if (tot > 0 && Number.isFinite(tot)) {
-      let r = rng() * tot;
-      for (j = 0; j < n - 1; j++) { r -= cl[j]; if (r <= 0) break; }
-    } else {                                                        // all weights underflowed: prefer GC
-      const w = [...seq].map(b => (b === 'G' || b === 'C' ? 3 : 1)), s = w.reduce((a, b) => a + b, 0);
-      let r = rng() * s;
-      for (j = 0; j < n - 1; j++) { r -= w[j]; if (r <= 0) break; }
-    }
-    micro[j] = 1; closedCount = 1;
+    for (let k = 0; k < n; k++) if (target[k]) tot += cl[k] + 1e-300;
+    let j = 0, r = rng() * tot;
+    for (let k = 0; k < n; k++) if (target[k]) { j = k; r -= cl[k] + 1e-300; if (r <= 0) break; }
+    zipJ = j; zipR = 0; mode = 'zip';
+    micro.fill(0); micro[j] = 1; closedCount = 1;
   }
-  function clearAll() { micro.fill(0); closedCount = 0; }
+
+  // Association/dissociation rates. The molecule cycles A -> unzip -> D -> approach -> zip -> A; the
+  // dwell times in A and D are chosen so that the fraction of time with closed pairs reproduces the
+  // equilibrium duplex fraction, counting half of each (un)zipping transient as closed.
+  let rateA = 0, rateD = 0;           // ka (D->approach) and kd (A->unzip)
+  function setRates() {
+    const U = T_UNZIP + T_ZIP, Xmin = 0.4, Ymin = 0.4;
+    const du = clamp(dup, 0, 1);
+    if (du > 1 - 1e-6) { rateD = 0; rateA = 1 / Ymin; return; }
+    if (du < 1e-6) { rateA = 0; rateD = 1 / Xmin; return; }
+    const C = Math.min(1e7, Math.max(10, (Xmin + 0.5 * U) / du, (Ymin + 0.5 * U + T_APPROACH) / (1 - du)));
+    rateD = 1 / Math.max(Xmin, du * C - 0.5 * U);
+    rateA = 1 / Math.max(Ymin, (1 - du) * C - 0.5 * U - T_APPROACH);
+  }
 
   // ---- continuous variables -------------------------------------------------------------------------
   const open = Array.from({ length: n }, () => ({ x: 0, v: 0 }));
@@ -157,24 +197,29 @@ export function createMeltSim(sequence, opts = {}) {
 
   recomputeSalt();
   recomputeTemperature();
-  if (dup >= 0.5) {                                   // start as an equilibrated duplex
-    micro.fill(1); closedCount = n; mode = 'A';
-    for (let i = 0; i < 400; i++) heatBath(1, 1, false, true);
-  } else { clearAll(); mode = 'D'; }
+  setRates();
+  if (dup >= 0.5) {                                   // start as an equilibrated duplex (exact sample)
+    sampleAssociated(micro); closedCount = micro.reduce((a, b) => a + b, 0); mode = 'A';
+  } else { micro.fill(0); closedCount = 0; mode = 'D'; }
   for (let k = 0; k < n; k++) open[k].x = micro[k] ? 0 : 1;
   sepS.x = mode === 'D' ? 1 : 0;
 
   function stepDynamics(h) {
     if (mode === 'A') {
       heatBath(1 - Math.exp(-RATE_FLICKER * h), 1 - Math.exp(-rateFront * h), false, true);
-      if (rng() < 1 - Math.exp(-kd * h)) mode = 'unzip';
+      if (rng() < 1 - Math.exp(-rateD * h)) mode = 'unzip';
     } else if (mode === 'unzip') {
       heatBath(1 - Math.exp(-rateUnzip * h), 1 - Math.exp(-rateUnzip * h), true, false);
       if (closedCount === 0) mode = 'D';
     } else if (mode === 'D') {
-      if (rng() < 1 - Math.exp(-ka * h)) mode = 'approach';
+      if (rng() < 1 - Math.exp(-rateA * h)) mode = 'approach';
     } else if (mode === 'approach') {
-      if (sepS.x < 0.12) { nucleate(); mode = 'A'; }
+      if (sepS.x < 0.12) beginZip();
+    } else if (mode === 'zip') {
+      zipR += zipSpeed * h;
+      closedCount = 0;
+      for (let k = 0; k < n; k++) { micro[k] = target[k] && Math.abs(k - zipJ) <= zipR ? 1 : 0; closedCount += micro[k]; }
+      if (zipR >= n) mode = 'A';
     }
   }
 
@@ -229,7 +274,7 @@ export function createMeltSim(sequence, opts = {}) {
     }
     if (coil) { buildChain(0, sepv, t); buildChain(1, sepv, t); }
     const tk = cond.T + 273.15;
-    const jAmp = 0.15 * Math.sqrt(tk / 298.15), rAmp = 0.03 * Math.sqrt(tk / 298.15);
+    const jAmp = 0.15 * Math.sqrt(tk / 298.15), rAmp = 0.02 * Math.sqrt(tk / 298.15);
     const nucs = assembly.nucleotides;
     for (let k = 0; k < n; k++) {
       const ok = clamp(open[k].x, 0, 1);
@@ -252,7 +297,7 @@ export function createMeltSim(sequence, opts = {}) {
         vtmp[0] = Ploc[0] - vtmp[0]; vtmp[1] = Ploc[1] - vtmp[1] + push; vtmp[2] = Ploc[2] - vtmp[2];
         mulMV(vtmp2, baseR, vtmp);
         // world translation wobble of frayed regions (spatially correlated so links are not torn)
-        const wa = 0.7 * e;
+        const wa = 0.5 * e;
         F.o[0] = bo[0] + vtmp2[0] + wa * wobbleNoise.at(s * 4, t, k) + jAmp * jitterNoise.at(6 * id, t);
         F.o[1] = bo[1] + vtmp2[1] + wa * wobbleNoise.at(s * 4 + 1, t, k) + jAmp * jitterNoise.at(6 * id + 1, t);
         F.o[2] = bo[2] + vtmp2[2] + wa * wobbleNoise.at(s * 4 + 2, t, k) + jAmp * jitterNoise.at(6 * id + 2, t);
@@ -276,7 +321,7 @@ export function createMeltSim(sequence, opts = {}) {
     state.separation = clamp(sepS.x, 0, 1);
     state.jitter = clamp(0.12 + 0.88 * clamp(cond.T / 100, 0, 1), 0, 1);
     state.phase = state.separation > 0.5 ? 'single strands'
-      : (mode === 'unzip' || mode === 'approach' || fp < 0.6) ? 'melting'
+      : (mode === 'unzip' || mode === 'approach' || mode === 'zip' || fp < 0.6) ? 'melting'
       : fp < 0.92 ? 'fraying' : 'duplex';
   }
 
@@ -309,7 +354,7 @@ export function createMeltSim(sequence, opts = {}) {
     if (c.Na !== undefined && Number.isFinite(c.Na) && c.Na > 0) cond.Na = c.Na;
     if (c.Ct !== undefined && Number.isFinite(c.Ct) && c.Ct > 0) cond.Ct = c.Ct;
     if (saltChanged) recomputeSalt();
-    if (saltChanged || tempChanged) recomputeTemperature();
+    if (saltChanged || tempChanged) { recomputeTemperature(); setRates(); }
     refreshState();
     geometry();
   }

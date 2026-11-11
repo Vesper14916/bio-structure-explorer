@@ -86,7 +86,7 @@ export class GuideLayer {
     parent.add(this.group);
     // pre-allocated per-pair scratch (sized on setAssembly)
     this.axisMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.8, 1.7, 2.8), fog: true, toneMapped: true });
-    this.axisHaloMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 0.55, 1.0), transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending, fog: true });
+    this.axisHaloMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 0.55, 1.0), transparent: true, opacity: 0.1, depthWrite: false, blending: THREE.AdditiveBlending, fog: true });
     const cyl = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true);
     this.axis = new THREE.Mesh(cyl, this.axisMat);
     this.axisHalo = new THREE.Mesh(cyl, this.axisHaloMat);

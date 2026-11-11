@@ -146,13 +146,25 @@ class Viewer {
       else if (!this.raf && !this.lost && !this.disposed) { this.last = 0; this.raf = requestAnimationFrame(this.tick); }
     };
     document.addEventListener('visibilitychange', this.onVisibility);
-    this.onLost = e => { e.preventDefault(); this.lost = true; cancelAnimationFrame(this.raf); this.raf = 0; };
+    this.onLost = e => {
+      e.preventDefault(); this.lost = true; cancelAnimationFrame(this.raf); this.raf = 0;
+      // Release GPU-side handles now (calls on a lost context are silent no-ops); three.js
+      // re-uploads every CPU-side buffer/texture on the first render after restoration.
+      this.scene.traverse(o => {
+        if (o.isInstancedMesh) o.dispatchEvent({ type: 'dispose' });
+        if (o.geometry) o.geometry.dispose();
+        const m = o.material;
+        if (m) (Array.isArray(m) ? m : [m]).forEach(mm => mm.dispose());
+      });
+      this.bgTex.dispose();
+      this.post.dispose();
+      this.envRT.dispose();
+    };
     this.onRestored = () => {
       this.lost = false;
-      this.envRT.dispose();
       this.envRT = buildEnvironment(this.renderer);
       this.scene.environment = this.envRT.texture;
-      this.post.rebuild(this.tier);
+      this.post.build(this.tier);
       this.applyTierSettings();
       this.resize();
       this.recolor();
