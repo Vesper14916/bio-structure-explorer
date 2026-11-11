@@ -29,7 +29,7 @@ import { Assembly, idealPairFrame, cleanSequence } from '../science/assembly.js'
 import { COMPLEMENT } from '../science/bases.js';
 import { HELIX_B } from '../science/templates.js';
 import {
-  mulberry32, clamp, smoothstep, smootherstep, createNoise, DEG, TAU,
+  mulberry32, clamp, smoothstep, smootherstep, createNoise, DEG,
   mulMM, axisAngle, expMap, rotZInto,
 } from './util.js';
 
@@ -201,7 +201,6 @@ export function createReplicationSim(sequence, opts = {}) {
   const eAx = [-dI[1], dI[0], 0];                              // hinge axis = z × dI  (|e| = 1)
   const q = new Array(9), qm = new Array(9), Rz = new Array(9), Rt = new Array(9), Rn = new Array(9), tumble = new Array(9);
   const P = { t: 0, f: F0, Phi: 0, alpha: TILT, delta: SHIFT, zH: 0, env: 0, sep: 0 };
-  const _o = [0, 0, 0];
 
   function params(t) {
     P.t = t;
@@ -289,7 +288,6 @@ export function createReplicationSim(sequence, opts = {}) {
     out[0] += off * (q[0] * ox + q[1] * oy); out[1] += off * (q[3] * ox + q[4] * oy); out[2] += off * (q[6] * ox + q[7] * oy);
     return out;
   }
-  const lagStart = frags.map(fr => fr.tFirst - FLIGHT * 0.6);
   const posA = [0, 0, 0], posB = [0, 0, 0];
 
   function setBlob(id, x, y, z, op) {
@@ -297,8 +295,7 @@ export function createReplicationSim(sequence, opts = {}) {
     b.pos[0] = x; b.pos[1] = y; b.pos[2] = z; b.opacity = op;
     if (op > 0.004) blobs.push(b);
   }
-  const base4 = b => 'ACGT'.includes(b) ? b : '?';
-  const dntp = b => ({ A: 'dATP', T: 'dTTP', G: 'dGTP', C: 'dCTP' })[base4(b)] || 'dNTP';
+  const dntp = b => ({ A: 'dATP', T: 'dTTP', G: 'dGTP', C: 'dCTP' })[b] || 'dNTP';
 
   function updateBlobs(t) {
     blobs.length = 0;
@@ -423,7 +420,7 @@ export function createReplicationSim(sequence, opts = {}) {
   };
 
   // ============================================================================ apply(t): the pure function
-  const tf = blank(), df = blank(), tmpFrame = blank();
+  const df = blank();
   let tNow = 0, dirty = true, disposed = false;
   function apply(t) {
     params(t);
@@ -507,7 +504,7 @@ export function createReplicationSim(sequence, opts = {}) {
     let bx = fl.bd[0], by = fl.bd[1], bz = fl.bd[2];
     const bp = bx * ux + by * uy + bz * uz; bx -= bp * ux; by -= bp * uy; bz -= bp * uz;
     const bl = Math.hypot(bx, by, bz) || 1;
-    const bulge = fl.bulge * Math.sin(Math.PI * e) * (1 - e * 0.0) / bl;
+    const bulge = fl.bulge * Math.sin(Math.PI * e) / bl;
     F.o[0] = s0[0] + dx * e + bx * bulge; F.o[1] = s0[1] + dy * e + by * bulge; F.o[2] = s0[2] + dz * e + bz * bulge;
     const rem = (1 - e) * (1 - e);
     axisAngle(tumble, fl.axis[0], fl.axis[1], fl.axis[2], fl.spin * rem);

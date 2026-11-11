@@ -139,6 +139,9 @@ function showMode(mode, { keepCamera = false } = {}) {
   } else if (mode === 'melt') {
     pushMeltStatic();
   } else if (mode === 'replicate') {
+    const sim = replSim();
+    if (sim.state.progress === 0 || sim.state.finished) { sim.seek(0); sim.play(); }
+    viewer.setBlobs(sim.blobs);
     pushReplication(true);
   } else if (mode === 'crystal') {
     app.pair = null;

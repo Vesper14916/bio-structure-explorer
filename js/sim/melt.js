@@ -28,7 +28,7 @@
 //   * Every nucleotide carries smooth thermal noise ∝ sqrt(T[K]).
 import { buildDuplex, helixCoil, duplexThermo, meltingCurve, stackThermo, cleanSequence } from '../science/index.js';
 import {
-  mulberry32, clamp, smoothstep, dampStep, createNoise, DEG,
+  mulberry32, clamp, dampStep, createNoise, DEG,
   mulMM, mulMV, axisAngle, expMap, rotZInto, rotXInto, rotYInto, composeInto, invertInto, newFrame, copyFrame,
 } from './util.js';
 
@@ -47,7 +47,6 @@ const SEP_SHIFT = 18;             // Å: translation of each strand away from th
 const COIL_TWIST = 22.5;          // °/residue in the dissociated coil
 const BEND_MAX = 3 * DEG;         // rad per residue step, amplitude of coil bending noise
 const KERNEL = [1, 2, 3, 4, 3, 2, 1].map(v => v / 16);
-const FLIP = [1, 0, 0, 0, -1, 0, 0, 0, -1];
 
 export function createMeltSim(sequence, opts = {}) {
   const { T = 25, Na = 0.1, Ct = 1e-6, seed = 1 } = opts;
@@ -178,16 +177,17 @@ export function createMeltSim(sequence, opts = {}) {
 
   // Association/dissociation rates. The molecule cycles A -> unzip -> D -> approach -> zip -> A; the
   // dwell times in A and D are chosen so that the fraction of time with closed pairs reproduces the
-  // equilibrium duplex fraction, counting half of each (un)zipping transient as closed.
+  // equilibrium duplex fraction, counting most of each (un)zipping transient as closed.
   let rateA = 0, rateD = 0;           // ka (D->approach) and kd (A->unzip)
   function setRates() {
     const U = T_UNZIP + T_ZIP, Xmin = 0.4, Ymin = 0.4;
     const du = clamp(dup, 0, 1);
     if (du > 1 - 1e-6) { rateD = 0; rateA = 1 / Ymin; return; }
     if (du < 1e-6) { rateA = 0; rateD = 1 / Xmin; return; }
-    const C = Math.min(1e7, Math.max(10, (Xmin + 0.5 * U) / du, (Ymin + 0.5 * U + T_APPROACH) / (1 - du)));
-    rateD = 1 / Math.max(Xmin, du * C - 0.5 * U);
-    rateA = 1 / Math.max(Ymin, (1 - du) * C - 0.5 * U - T_APPROACH);
+    const w = 0.62 * U;               // the (un)zipping transients keep, on average, ~60% of their pairs closed
+    const C = Math.min(1e7, Math.max(18, (Xmin + w) / du, (Ymin + w + T_APPROACH) / (1 - du)));
+    rateD = 1 / Math.max(Xmin, du * C - w);
+    rateA = 1 / Math.max(Ymin, (1 - du) * C - w - T_APPROACH);
   }
 
   // ---- continuous variables -------------------------------------------------------------------------

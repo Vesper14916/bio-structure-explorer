@@ -40,7 +40,7 @@ export const rotY = t => [Math.cos(t), 0, Math.sin(t), 0, 1, 0, -Math.sin(t), 0,
 export const helixFrame = (k, rise, twistDeg) => ({ o: [0, 0, k * rise], R: rotZ(k * twistDeg * DEG) });
 // Frame of the Watson-Crick partner (strand II) inside a base-pair frame: 180° about x.
 export const FLIP_X = [1, 0, 0, 0, -1, 0, 0, 0, -1];
-export const partnerFrame = f => ({ o: f.o, R: mulMM(f.R, FLIP_X) });
+export const partnerFrame = f => ({ o: f.o.slice(), R: mulMM(f.R, FLIP_X) });
 
 // Jacobi eigen-decomposition of a symmetric n×n matrix (array of rows).
 function jacobi(A) {
