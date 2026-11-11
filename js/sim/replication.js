@@ -56,6 +56,15 @@ const FRAG_TARGET = 9;         // pairs per Okazaki fragment (compressed)
 
 const smooth01 = smoothstep;
 
+/** Enzyme bodies shown as translucent blobs (colours are used by the Copy-mode legend too). */
+export const BLOB_DEF = {
+  helicase: { label: 'Helicase', radius: 13, color: 0x8b6cff },
+  'pol-leading': { label: 'DNA polymerase', radius: 12, color: 0x4fb6ff },
+  'pol-lagging': { label: 'DNA polymerase', radius: 12, color: 0x4fb6ff },
+  primase: { label: 'Primase', radius: 7.5, color: 0xf472b6 },
+  ligase: { label: 'DNA ligase', radius: 8.5, color: 0xffd84a },
+};
+
 export function createReplicationSim(sequence, opts = {}) {
   const { seed = 1, speed: speed0 = 1 } = opts;
   let speedV = Number.isFinite(speed0) && speed0 > 0 ? speed0 : 1;
@@ -265,13 +274,6 @@ export function createReplicationSim(sequence, opts = {}) {
   }
 
   // ============================================================================ blobs & captions
-  const BLOB_DEF = {
-    helicase: { label: 'Helicase', radius: 13, color: 0x7c5cff },
-    'pol-leading': { label: 'DNA polymerase (leading)', radius: 12, color: 0x22d3ee },
-    'pol-lagging': { label: 'DNA polymerase (lagging)', radius: 12, color: 0xf59e0b },
-    primase: { label: 'Primase', radius: 7.5, color: 0xf472b6 },
-    ligase: { label: 'Ligase', radius: 8.5, color: 0xef4444 },
-  };
   const blobObjs = {};
   for (const [id, d] of Object.entries(BLOB_DEF)) blobObjs[id] = { id, pos: [0, 0, 0], radius: d.radius, color: d.color, label: d.label, opacity: 0 };
   const blobs = [];
@@ -355,30 +357,31 @@ export function createReplicationSim(sequence, opts = {}) {
   }
 
   // episodes drive phase + caption (the episode that started last among those active wins)
-  const SCALE_NOTE = 'real primers are ~10 nt of RNA and real Okazaki fragments are 100–200 nt in eukaryotes (1000–2000 nt in bacteria), compressed here to a few nucleotides';
   const episodes = [];
   const ep = (t0, t1, phase, text) => episodes.push({ t0, t1, phase, text });
-  ep(0, INTRO, 'initiation', 'Replication starts at an origin: the helicase, a ring-shaped motor (DnaB in bacteria, MCM in eukaryotes), loads onto the parental duplex at the +z end. It will translocate toward −z, using ATP.');
-  const unwindText = 'The helicase breaks the hydrogen bonds one base pair at a time, opening a Y-shaped fork. The intact duplex ahead must spin 34.3° for every pair opened; in cells topoisomerase relieves the resulting torsion.';
+  // Captions describe what is on screen: the helix axis is vertical, the fork starts at the TOP end
+  // and helicase moves DOWN the helix.
+  ep(0, INTRO, 'initiation', 'Replication starts at an origin: helicase, a ring-shaped motor protein, loads onto the top end of the parent duplex. Powered by ATP, it will move down the helix.');
+  const unwindText = 'Helicase moves down the helix, breaking the hydrogen bonds one base pair at a time and opening a Y-shaped fork. The duplex below must turn 34.3° per pair opened; topoisomerase relieves the strain.';
   ep(INTRO, T_UNWIND_END, 'unwinding', unwindText);
-  ep(T_UNWIND_END, tTerm, 'termination', 'The helicase has reached the end of the template and the parental strands are fully apart; the polymerases finish the last nucleotides.');
+  ep(T_UNWIND_END, tTerm, 'termination', 'Helicase has reached the bottom end and the parental strands are fully apart; the polymerases add the last nucleotides.');
   ep(tStart[nucId(2, n - 1)], tLeadDone, 'leading', null);            // text built dynamically
   ep(tStart[nucId(2, n - 1)] - 0.2, tDock[nucId(2, n - leadPl)] + T_HB + 0.5, 'priming',
-    `Primase starts the leading strand with a short RNA primer (here ${leadPl} nucleotides tagged 'primer'); DNA polymerase can only add nucleotides to an existing 3′-OH. ${SCALE_NOTE[0].toUpperCase()}${SCALE_NOTE.slice(1)}.`);
+    `Primase starts the leading strand with a short RNA primer (${leadPl} nucleotides, shown in pink): DNA polymerase can only extend an existing 3′ end, it cannot start a chain.`);
   for (const fr of frags) {
     ep(fr.tFirst - FLIGHT, tDock[nucId(3, fr.lo + fr.pl - 1)] + T_HB + 0.3, 'priming',
-      `The lagging template (strand II) runs 5′→3′ in the direction of the fork, so it must be copied backwards in pieces: primase lays an RNA primer (${fr.pl} tagged nucleotides) to start Okazaki fragment ${fr.f + 1}. ${SCALE_NOTE[0].toUpperCase()}${SCALE_NOTE.slice(1)}.`);
+      `The lagging template runs 5′→3′ toward the fork, so it is copied backwards in short pieces: primase lays an RNA primer (${fr.pl} nucleotides, pink) to start Okazaki fragment ${fr.f + 1}.`);
     ep(tDock[nucId(3, fr.lo + fr.pl - 1)] + 0.2, fr.tDone, 'lagging', null);
     if (Number.isFinite(fr.tSwap)) {
       ep(fr.tSwap - 0.1, fr.tSwap + 0.95, 'primer-removal',
-        `Okazaki fragment ${fr.f + 1} has reached the primer of fragment ${fr.f}: RNase H and DNA polymerase I (FEN1 in eukaryotes) remove the RNA primer and fill the gap with DNA.`);
+        `Okazaki fragment ${fr.f + 1} has reached the primer of fragment ${fr.f}: the RNA primer is removed (RNase H and DNA polymerase I in bacteria, FEN1 in eukaryotes) and the gap filled with DNA.`);
       ep(fr.tSwap + 0.95, fr.tLig + 1.2, 'ligation',
-        `DNA ligase seals the nick between Okazaki fragments ${fr.f + 1} and ${fr.f} with a new phosphodiester bond, using ATP (or NAD⁺ in bacteria).`);
+        `DNA ligase seals the nick between Okazaki fragments ${fr.f + 1} and ${fr.f} with a new phosphodiester bond, using ATP (NAD⁺ in bacteria).`);
     }
   }
-  ep(tTerm, tFin, 'termination', 'The last primers, at the 5′ ends of the new strands, are replaced by DNA so that every new strand is continuous. (A real linear chromosome needs telomerase at its very ends; this oligo is completed.)');
-  ep(tFin, DURATION - T_HOLD, 'separation', 'Two identical daughter duplexes result. Each holds one old (parental) strand and one newly made strand: semi-conservative replication, as shown by Meselson and Stahl in 1958.');
-  ep(DURATION - T_HOLD, Infinity, 'complete', 'Replication complete: both daughter duplexes are fully base-paired and every phosphodiester bond is sealed. Each is half old, half new.');
+  ep(tTerm, tFin, 'termination', 'The last RNA primers, at the 5′ ends of the new strands, are replaced with DNA so every new strand is continuous. (Real chromosome ends need telomerase.)');
+  ep(tFin, DURATION - T_HOLD, 'separation', 'Two identical daughter duplexes move apart. Each keeps one old (parental) strand and one new strand: semi-conservative replication (Meselson & Stahl, 1958).');
+  ep(DURATION - T_HOLD, Infinity, 'complete', 'Replication complete: both daughter duplexes are fully paired and every backbone bond is sealed. Each is half old, half new.');
 
   const activeIn = (strand, t) => {              // dNTP currently arriving on a daughter strand
     let best = -1, bt = -Infinity;
@@ -393,7 +396,7 @@ export function createReplicationSim(sequence, opts = {}) {
     const hb = tmpl.base === 'G' || tmpl.base === 'C' ? 3 : 2;
     const stage = t < tDock[id] ? 'approaches' : t < tDock[id] + T_HB ? 'forms' : 'is joined';
     if (t < tDock[id]) return `${dntp(nu.base)} diffuses in and ${stage} template ${tmpl.base}.`;
-    return `${dntp(nu.base)} pairs with template ${tmpl.base} (${hb} hydrogen bonds); polymerase then forms the phosphodiester bond and releases pyrophosphate (PPi).`;
+    return `${dntp(nu.base)} pairs with template ${tmpl.base} (${hb} H-bonds) and is joined to the chain, releasing pyrophosphate.`;
   }
   function captionAt(t) {
     let best = null;
@@ -403,11 +406,11 @@ export function createReplicationSim(sequence, opts = {}) {
     if (best.phase === 'leading') {
       if (t < T_UNWIND_END && (t - INTRO) % 9 < 2.6) return { phase: 'unwinding', text: unwindText };
       const id = activeIn(2, t);
-      return { phase: 'leading', text: 'Leading strand: its template (strand I) runs 3′→5′ in the direction of the fork, so DNA polymerase follows the helicase and copies continuously, 5′→3′. ' + (id >= 0 ? describeArrival(id, t) : 'Each new nucleotide is added to the 3′-OH of the growing chain.') };
+      return { phase: 'leading', text: 'Leading strand: its template runs 3′→5′ toward the fork, so polymerase follows helicase down and copies it continuously, 5′→3′. ' + (id >= 0 ? describeArrival(id, t) : 'Each new nucleotide is added to the 3′ end of the chain.') };
     }
     const id = activeIn(3, t);
     const fr = frags.find(f => t >= f.tFirst - FLIGHT && t <= f.tDone + 0.5) || frags[id >= 0 ? fragOf[pairOfNuc(id) % n] : 0];
-    return { phase: 'lagging', text: `Lagging strand: DNA polymerase extends Okazaki fragment ${fr.f + 1} 5′→3′, away from the fork, always adding to the 3′-OH of the new fragment. ` + (id >= 0 ? describeArrival(id, t) : '') };
+    return { phase: 'lagging', text: `Lagging strand: polymerase extends Okazaki fragment ${fr.f + 1} in the 5′→3′ direction, away from the fork (upward). ` + (id >= 0 ? describeArrival(id, t) : '') };
   }
 
   // ============================================================================ state
@@ -519,7 +522,7 @@ export function createReplicationSim(sequence, opts = {}) {
     get speed() { return speedV; },
     set speed(v) { if (Number.isFinite(v) && v > 0) { speedV = v; state.speed = v; } },
     get playing() { return state.playing; },
-    layout: { n, sequence: seq, leadingTemplate: 0, laggingTemplate: 1, leadingDaughter: 2, laggingDaughter: 3, fork: '+z end -> -z', fragments: frags.map(f => ({ start: f.lo, end: f.hi, primerLength: f.pl })) },
+    layout: { forkPlane: { inPlane: dI.slice(), normal: eAx.slice() }, n, sequence: seq, leadingTemplate: 0, laggingTemplate: 1, leadingDaughter: 2, laggingDaughter: 3, fork: '+z end -> -z', fragments: frags.map(f => ({ start: f.lo, end: f.hi, primerLength: f.pl })) },
     /** nucleotide id of the nucleotide of `strand` (0..3) that belongs to pair index k (0 = -z end). */
     nucleotideAt: nucId,
     /** pair index k (0..n-1, 0 at the -z end) of any nucleotide id */

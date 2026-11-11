@@ -201,7 +201,7 @@ body { position: fixed; inset: 0; width: 100%; overflow: hidden; }
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .tile:hover { background: var(--raise-2); }
-.tile-label { font-size: 12.5px; font-weight: 550; line-height: 1.2; }
+.tile-label { font-size: 12.5px; font-weight: 550; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .switch { flex: none; position: relative; width: 32px; height: 19px; border-radius: 10px; background: rgba(255, 255, 255, 0.16); transition: background 0.2s; }
 .switch i { position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); transition: transform 0.2s var(--ease); }
 .tile[aria-pressed="true"] { color: var(--text); border-color: var(--accent-line); background: var(--accent-2); }
@@ -340,7 +340,8 @@ body { position: fixed; inset: 0; width: 100%; overflow: hidden; }
 .scrub { flex: 1; min-width: 0; }
 .range-scrub { height: 44px; touch-action: none; }
 .pct { flex: none; width: 4.6ch; text-align: right; font: 600 12px var(--mono); color: var(--text-2); font-variant-numeric: tabular-nums; }
-.caption { margin-top: 6px; font-size: 13.5px; line-height: 1.4; color: var(--text); min-height: calc(3 * 1.4em); }
+.caption { margin-top: 6px; font-size: 13.5px; line-height: 1.4; color: var(--text); min-height: calc(4 * 1.4em); }
+.explain p.note { margin-top: 8px; font-size: 12px; color: var(--text-3); }
 .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 10px; font-size: 12.5px; color: var(--text); }
 .legend li { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .swatch { flex: none; width: 22px; height: 10px; border-radius: 5px; background: var(--sw); }
@@ -455,7 +456,7 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 7px; text-align: cent
   .tabbar .tab .tab-label { font-size: 10.5px; }
   .kb-open .tabbar { display: none; }
 
-  .caption { font-size: 12.5px; line-height: 1.35; min-height: calc(3 * 1.35em); }
+  .caption { font-size: 12.5px; line-height: 1.35; min-height: calc(4 * 1.35em); }
   .snap-peek .caption { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-height: calc(2 * 1.35em); }
   .snap-peek .peek { margin-bottom: 0; }
   .xpeek .tile { min-width: 150px; }
@@ -479,6 +480,8 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 7px; text-align: cent
   .view-head { margin-bottom: 10px; } .view-head p { display: none; }
   .group { margin-bottom: 14px; }
   .app-header .icon-btn { width: 36px; height: 36px; }
+  .tile { padding: 0 9px; gap: 6px; min-height: 42px; }
+  .tile-label { font-size: 11.5px; }
   .scrim { padding: 8px; } .modal { max-height: 96dvh; }
 }
 

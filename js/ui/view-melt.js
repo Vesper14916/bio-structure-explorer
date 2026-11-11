@@ -41,7 +41,7 @@ export function createMeltView(ctx) {
   }
   for (let T = 0; T <= 100; T += 20) grid.append(s('line', { x1: X(T), x2: X(T), y1: Y(1), y2: Y(0), class: 'ch-vgrid' }), s('text', { x: X(T), y: HT - 8, 'text-anchor': 'middle', class: 'ch-tick' }, `${T}°`));
   const area = s('path', { class: 'ch-area' }), line = s('path', { class: 'ch-line' });
-  const tmLine = s('line', { class: 'ch-tm', y1: Y(1), y2: Y(0) }), tmTxt = s('text', { class: 'ch-tmtxt', y: MT + 10 }, 'Tm');
+  const tmLine = s('line', { class: 'ch-tm', y1: Y(1), y2: Y(0) }), tmTxt = s('text', { class: 'ch-tmtxt', y: MT + 22 }, 'Tm');
   const curG = s('g', { class: 'ch-cur' }, s('line', { y1: Y(1), y2: Y(0) }), s('circle', { r: 4.5, cy: Y(1) }));
   const curDot = curG.querySelector('circle');
   const svg = s('svg', { class: 'chart', viewBox: `0 0 ${W} ${HT}`, role: 'img', 'aria-label': 'Melting curve: fraction of base pairs intact versus temperature' },
@@ -60,6 +60,7 @@ export function createMeltView(ctx) {
     curG.setAttribute('transform', `translate(${X(clamp(st.T, T_MIN, T_MAX)).toFixed(2)},0)`);
     const p = Number.isFinite(st.fractionPaired) ? st.fractionPaired : 1;
     curDot.setAttribute('cy', Y(clamp(p, 0, 1)).toFixed(2));
+    placeTmText();
   }
   function placeTm() {
     const ok = Number.isFinite(st.Tm) && st.Tm > T_MIN && st.Tm < T_MAX;
@@ -69,8 +70,17 @@ export function createMeltView(ctx) {
     setText(tmTick.firstChild, `Tm ${st.Tm.toFixed(1)}°`);
     const x = X(st.Tm);
     tmLine.setAttribute('x1', x); tmLine.setAttribute('x2', x);
-    tmTxt.setAttribute('x', x + (x > W - 60 ? -5 : 5)); tmTxt.setAttribute('text-anchor', x > W - 60 ? 'end' : 'start');
     tmTxt.textContent = `Tm ${st.Tm.toFixed(1)}°C`;
+    placeTmText();
+  }
+  // Put the Tm label on the side of the Tm line away from the temperature cursor (and inside the plot).
+  function placeTmText() {
+    if (!Number.isFinite(st.Tm)) return;
+    const x = X(st.Tm), cx = X(clamp(st.T, T_MIN, T_MAX)), wTxt = 62;
+    let right = x <= W - MR - wTxt;
+    if (right && cx > x && cx < x + wTxt + 6) right = x - wTxt - 6 < ML ? true : false;
+    else if (!right && cx < x && cx > x - wTxt - 6) right = false;
+    tmTxt.setAttribute('x', x + (right ? 5 : -5)); tmTxt.setAttribute('text-anchor', right ? 'start' : 'end');
   }
 
   // ---- openness strip --------------------------------------------------------------------------------

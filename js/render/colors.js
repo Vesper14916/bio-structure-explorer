@@ -3,6 +3,10 @@ import * as THREE from 'three';
 import { ELEMENTS, ELEMENT_INFO, BASE_INFO } from '../science/index.js';
 
 export const STRAND_HEX = [0x4cc9f0, 0xff9f5a, 0xb58cff, 0x5fe3a1, 0xffd35c, 0xff6fae, 0x7f9cff, 0xc8f36b];
+// Replication palette (strand index -> colour; matches the Copy-mode legend). Old (parental) strands share
+// one muted colour so the new strands stand out; RNA primers (nuc.tag === 'primer') get their own colour.
+export const REPLICATION_HEX = { parental: 0x9fb2dc, leading: 0x2fd9b9, lagging: 0xffa34d, primer: 0xff4fa3 };
+const REPL_STRAND = [REPLICATION_HEX.parental, REPLICATION_HEX.parental, REPLICATION_HEX.leading, REPLICATION_HEX.lagging];
 export const PART_HEX = [0x5fd0ff, 0xf0dfbd, 0xffa23a];          // base, sugar, phosphate
 export const PART_NAMES = ['Base', 'Sugar', 'Phosphate'];
 const SUGAR_NEUTRAL = 0xaeb6c8, PHOS_NEUTRAL = 0xcdb894;
@@ -48,13 +52,15 @@ export class ColorModel {
     const asm = this.asm, A = asm.atoms, N = A.count;
     if (scheme === 'bfactor' && !this.hasB) scheme = 'element';
     const bt = v => (v - this.bLo) / Math.max(1e-3, this.bHi - this.bLo);
+    const repl = asm.meta && asm.meta.kind === 'replication';
+    const strandHex = nu => (repl ? (nu.tag === 'primer' ? REPLICATION_HEX.primer : REPL_STRAND[nu.strand % 4]) : STRAND_HEX[nu.strand % STRAND_HEX.length]);
     for (let g = 0; g < N; g++) {
       const nu = asm.nucleotides[A.nuc[g]], part = A.part[g];
       switch (scheme) {
         case 'base':
           set(this.atom, g, part === 0 ? BASE_INFO[nu.base].color : part === 1 ? SUGAR_NEUTRAL : PHOS_NEUTRAL); break;
         case 'strand':
-          set(this.atom, g, STRAND_HEX[nu.strand % STRAND_HEX.length]);
+          set(this.atom, g, strandHex(nu));
           if (part === 0) lerpWhite(this.atom, g, 0.35);
           break;
         case 'part': set(this.atom, g, PART_HEX[part]); break;
@@ -66,8 +72,8 @@ export class ColorModel {
       const i = nu.id;
       switch (scheme) {
         case 'strand':
-          set(this.nucBack, i, STRAND_HEX[nu.strand % STRAND_HEX.length]);
-          set(this.nucBase, i, STRAND_HEX[nu.strand % STRAND_HEX.length]); lerpWhite(this.nucBase, i, 0.35); break;
+          set(this.nucBack, i, strandHex(nu));
+          set(this.nucBase, i, strandHex(nu)); lerpWhite(this.nucBase, i, 0.35); break;
         case 'part': set(this.nucBack, i, PART_HEX[2]); set(this.nucBase, i, PART_HEX[0]); break;
         case 'bfactor': ramp(this.nucBack, i, bt(this.nucB[i])); ramp(this.nucBase, i, bt(this.nucB[i])); break;
         case 'element': set(this.nucBack, i, ELEMENT_INFO.P.color); set(this.nucBase, i, BASE_INFO[nu.base].color); break;

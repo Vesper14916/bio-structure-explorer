@@ -5,7 +5,8 @@ import {
 import { createViewer } from './render/viewer.js';
 import { createUI, pairPayload } from './ui/ui.js';
 import { createMeltSim } from './sim/melt.js';
-import { createReplicationSim } from './sim/replication.js';
+import { createReplicationSim, BLOB_DEF } from './sim/replication.js';
+import { REPLICATION_HEX } from './render/colors.js';
 
 const DEFAULT_SEQUENCE = 'CGCGAATTCGCGATATGGCC';
 const params = new URLSearchParams(location.search);
@@ -49,6 +50,8 @@ function styleForMode() {
     s.color = 'strand'; s.grooves = false; s.autoRotate = false;
   } else if (app.mode === 'melt') {
     s.grooves = false; s.hbonds = true;
+  } else if (app.mode === 'pair') {
+    s.autoRotate = false;                 // keep the face-on view of the selected pair steady
   }
   return s;
 }
@@ -70,14 +73,17 @@ function measurementAnnotations(asm) {
     const z0 = -m.pitch / 2;
     out.push({ id: 'pitch', kind: 'distance', from: [-R, 0, z0], to: [-R, 0, z0 + m.pitch], label: `pitch ${fmt(m.pitch)} Å · ${HELIX_B.bpPerTurn} bp` });
   }
-  // Diameter: through the axis, in the direction of a phosphate near one end.
+  // Diameter: a bar just below the bottom end (so it is not hidden inside the atoms), spanning the
+  // phosphate-to-phosphate width in the direction of the first phosphate; label underneath.
   const k = Math.min(n - 1, 1), p = asm.position(asm.atomOf(2 * k, 'P'));
-  const r = Math.hypot(p[0], p[1]), ux = p[0] / r, uy = p[1] / r, h = m.diameter / 2;
-  out.push({ id: 'dia', kind: 'distance', from: [-ux * h, -uy * h, p[2]], to: [ux * h, uy * h, p[2]], label: `diameter ≈ ${fmt(m.diameter, 0)} Å` });
-  // Grooves: +x of a pair frame looks into the major groove, −x into the minor groove.
+  const r = Math.hypot(p[0], p[1]), ux = p[0] / r, uy = p[1] / r, h = m.diameter / 2, zb = z(0) - 6;
+  out.push({ id: 'dia', kind: 'distance', labelPos: 'below', from: [-ux * h, -uy * h, zb], to: [ux * h, uy * h, zb], label: `diameter ≈ ${fmt(m.diameter, 0)} Å` });
+  // Grooves: +x of a pair frame looks into the major groove, −x into the minor groove. Groove widths
+  // need at least a full turn on each side, so short duplexes get the label without a number.
   const kg = Math.min(n - 1, mid + 3), kh = Math.max(0, mid - 3);
-  out.push({ id: 'major', kind: 'label', at: applyFrame(idealPairFrame(kg, n), [9.5, 0, 0]), label: `Major groove · ${fmt(m.majorGrooveWidth)} Å` });
-  out.push({ id: 'minor', kind: 'label', at: applyFrame(idealPairFrame(kh, n), [-8.5, 0, 0]), label: `Minor groove · ${fmt(m.minorGrooveWidth)} Å` });
+  const w = v => (Number.isFinite(v) ? ` · ${fmt(v)} Å` : '');
+  out.push({ id: 'major', kind: 'label', at: applyFrame(idealPairFrame(kg, n), [9.5, 0, 0]), label: `Major groove${w(m.majorGrooveWidth)}` });
+  out.push({ id: 'minor', kind: 'label', at: applyFrame(idealPairFrame(kh, n), [-8.5, 0, 0]), label: `Minor groove${w(m.minorGrooveWidth)}` });
   return out;
 }
 
@@ -86,7 +92,7 @@ function pairAnnotations(asm, index) {
   if (!p) return [];
   return p.hbonds.map((h, i) => {
     const a = asm.position(h.a), b = asm.position(h.b);
-    return { id: 'hb' + i, kind: 'distance', from: a, to: b, label: `${fmt(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), 2)} Å` };
+    return { id: 'hb' + i, kind: 'distance', size: 'sm', from: a, to: b, label: `${fmt(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), 2)} Å` };
   });
 }
 
@@ -109,7 +115,7 @@ function selectPair(index, { focus = true } = {}) {
   } else {
     viewer.setHighlight({ pairs: [index] });
     ui.setPair(pairPayload(asm, index));
-    if (focus) viewer.focus({ pair: index }, { duration: 0.8 });
+    if (focus) viewer.focus({ pair: index }, { duration: 0.8, view: 'face' });
   }
   refreshAnnotations();
 }
@@ -121,6 +127,7 @@ function showMode(mode, { keepCamera = false } = {}) {
   viewer.setHighlight(null);
   viewer.setBlobs([]);
   viewer.setAnnotations([]);
+  viewer.setFraming?.(mode === 'replicate' ? replicationFraming(replSim()) : null);
 
   if (mode === 'crystal') app.asm = crystal();
   else if (mode === 'melt') { const s = meltSim(); s.setConditions({ T: app.melt.T, Na: app.melt.Na }); app.asm = s.assembly; }
@@ -145,6 +152,7 @@ function showMode(mode, { keepCamera = false } = {}) {
     pushReplication(true);
   } else if (mode === 'crystal') {
     app.pair = null;
+    ui.setCrystalInfo({ atoms: app.asm.atoms.count, waters: app.asm.waters ? app.asm.waters.count : null });
     ui.setCompare({ ideal: measureDuplex(buildDuplex(app.asm.meta.sequence)), crystal: measureDuplex(app.asm) });
   }
   refreshAnnotations();
@@ -171,10 +179,59 @@ function tickMelt(dt) {
 // ---------------------------------------------------------------------------------------------
 // Replication
 let lastCaption = '';
+const REPL_PHASE = {
+  initiation: 'Helicase loading', unwinding: 'Unwinding', priming: 'Priming', leading: 'Leading strand',
+  lagging: 'Lagging strand', 'primer-removal': 'Primer removal', ligation: 'Ligation', termination: 'Finishing',
+  separation: 'Daughters separate', complete: 'Complete',
+};
+const hexCss = c => '#' + c.toString(16).padStart(6, '0');
+const REPL_LEGEND = [
+  { id: 'parental', label: 'Parental (old)', color: hexCss(REPLICATION_HEX.parental), kind: 'strand' },
+  { id: 'leading', label: 'New leading strand', color: hexCss(REPLICATION_HEX.leading), kind: 'strand' },
+  { id: 'lagging', label: 'New lagging strand', color: hexCss(REPLICATION_HEX.lagging), kind: 'strand' },
+  { id: 'primer', label: 'RNA primer', color: hexCss(REPLICATION_HEX.primer), kind: 'strand' },
+  { id: 'helicase', label: BLOB_DEF.helicase.label, color: hexCss(BLOB_DEF.helicase.color), kind: 'blob' },
+  { id: 'polymerase', label: BLOB_DEF['pol-leading'].label, color: hexCss(BLOB_DEF['pol-leading'].color), kind: 'blob' },
+  { id: 'primase', label: BLOB_DEF.primase.label, color: hexCss(BLOB_DEF.primase.color), kind: 'blob' },
+  { id: 'ligase', label: BLOB_DEF.ligase.label, color: hexCss(BLOB_DEF.ligase.color), kind: 'blob' },
+];
+
+/**
+ * Camera framing for the whole replication timeline: the oriented bounding box (fork plane axes) of every
+ * docked / settled atom and every enzyme body over the animation, so nothing important ever leaves the
+ * view, and a view direction perpendicular to the plane of the Y-shaped fork. Cached per sim.
+ */
+function replicationFraming(sim) {
+  if (sim._framing) return sim._framing;
+  const fp = sim.layout.forkPlane, U = fp.inPlane, N = fp.normal, Z = [0, 0, 1];
+  const dot = (a, x, y, z) => a[0] * x + a[1] * y + a[2] * z;
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  const add = (x, y, z, r = 0) => {
+    const c = [dot(U, x, y, z), dot(N, x, y, z), z];
+    for (let i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], c[i] - r); hi[i] = Math.max(hi[i], c[i] + r); }
+  };
+  const save = sim.state.progress, asm = sim.assembly, P = asm.atoms.pos;
+  for (let i = 0; i <= 48; i++) {
+    sim.seek(i / 48);
+    for (const nu of asm.nucleotides) {
+      if (nu.visible === false || nu.opacity < 0.7) continue;
+      for (let a = 0; a < nu.atomCount; a += 3) { const g = (nu.atomStart + a) * 3; add(P[g], P[g + 1], P[g + 2]); }
+    }
+    for (const b of sim.blobs) if (b.opacity > 0.08) add(b.pos[0], b.pos[1], b.pos[2], b.radius * 0.9);
+  }
+  sim.seek(save);
+  hi[2] += 7;                                          // room for the enzyme labels above the top blob
+  const pts = [];
+  for (const a of [lo[0], hi[0]]) for (const b of [lo[1], hi[1]]) for (const c of [lo[2], hi[2]]) {
+    pts.push([a * U[0] + b * N[0] + c * Z[0], a * U[1] + b * N[1] + c * Z[1], a * U[2] + b * N[2] + c * Z[2]]);
+  }
+  const d = [N[0], N[1], N[2] + 0.14], l = Math.hypot(...d);
+  return (sim._framing = { points: pts, dir: d.map(v => v / l) });
+}
 function pushReplication(force = false) {
   const sim = replSim(), st = sim.state;
   const payload = {
-    progress: st.progress, playing: !!st.playing && !st.finished, speed: app.replSpeed, phase: st.phase,
+    progress: st.progress, playing: !!st.playing && !st.finished, speed: app.replSpeed, phase: REPL_PHASE[st.phase] || st.phase,
     unwound: st.unwound, leadingCount: st.leadingCount, laggingCount: st.laggingCount, fragments: st.fragments,
   };
   if (force || st.caption !== lastCaption) { payload.caption = st.caption; lastCaption = st.caption; }
@@ -280,6 +337,7 @@ function boot() {
   });
 
   ui.setSequence(app.sequence);
+  ui.setReplicationLegend?.(REPL_LEGEND);
   const startMode = ['structure', 'pair', 'melt', 'replicate', 'crystal'].includes(params.get('mode')) ? params.get('mode') : 'structure';
   ui.setMode(startMode);
   showMode(startMode);

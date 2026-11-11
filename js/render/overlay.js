@@ -15,7 +15,8 @@ const CSS = `
   box-shadow:0 2px 10px rgba(0,0,0,.45);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);will-change:transform,opacity;
   font-variant-numeric:tabular-nums}
 .hx-tag.hx-label{border-color:rgba(255,255,255,.28)}
-.hx-tag.hx-blob{font-size:13px;letter-spacing:.02em;border-color:rgba(255,255,255,.3)}
+.hx-tag.hx-blob{font-size:12.5px;letter-spacing:.02em;border-color:rgba(255,255,255,.3);transition:opacity .25s}
+.hx-tag.hx-sm{font-size:11px;padding:2px 6px;background:rgba(8,16,30,.8)}
 @media (max-width:600px){.hx-tag{font-size:12px;padding:3px 7px}}
 `;
 
@@ -38,10 +39,12 @@ uniform float uOpacity;
 varying vec3 vN;
 varying vec3 vV;
 void main() {
+  // Drawn on BACK faces only: the glow sits behind anything inside the body, so the DNA it encloses
+  // keeps its own colours. Soft rim, faint core, feathered silhouette.
   float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
-  float rim = pow(f, 2.4);
-  float a = clamp(uOpacity * (0.25 + rim * 1.6), 0.0, 1.0);
-  vec3 col = uColor * (0.3 + rim * 2.2);
+  float rim = pow(f, 1.7) * (1.0 - 0.7 * smoothstep(0.82, 1.0, f));
+  float a = clamp(uOpacity * (0.16 + rim * 1.25), 0.0, 1.0);
+  vec3 col = uColor * (0.6 + rim * 1.5);
   gl_FragColor = vec4(col * a, 1.0);
 }`;
 
@@ -148,7 +151,7 @@ export class OverlayLayer {
   makeAnnot(a) {
     const g = new THREE.Group();
     const el = document.createElement('div');
-    el.className = 'hx-tag' + (a.kind === 'label' ? ' hx-label' : '');
+    el.className = 'hx-tag' + (a.kind === 'label' ? ' hx-label' : '') + (a.size === 'sm' ? ' hx-sm' : '');
     this.el.appendChild(el);
     const rec = { kind: a.kind, group: g, el, at: new THREE.Vector3(), text: '' };
     if (a.kind === 'distance') {
@@ -166,7 +169,7 @@ export class OverlayLayer {
   }
 
   placeAnnot(rec, a) {
-    if (rec.text !== (a.label || '')) { rec.text = a.label || ''; rec.el.textContent = rec.text; rec.el.style.display = rec.text ? '' : 'none'; }
+    if (rec.text !== (a.label || '')) { rec.text = a.label || ''; rec.el.textContent = rec.text; rec.el.style.display = rec.text ? '' : 'none'; rec.w = 0; }
     if (a.kind === 'distance') {
       const A = new THREE.Vector3(...a.from), B = new THREE.Vector3(...a.to);
       const d = B.clone().sub(A), L = d.length(), u = d.clone().normalize();
@@ -182,7 +185,7 @@ export class OverlayLayer {
       rec.d1.position.copy(A); rec.d2.position.copy(B);
       rec.d1.scale.setScalar(0.16); rec.d2.scale.setScalar(0.16);
       rec.at.copy(A).add(B).multiplyScalar(0.5);
-      rec.dx = 0; rec.dy = -14;
+      rec.dx = 0; rec.dy = -14; rec.below = a.labelPos === 'below';
     } else {
       rec.d1.position.set(...a.at); rec.d1.scale.setScalar(0.32);
       rec.at.set(...a.at);
@@ -205,7 +208,7 @@ export class OverlayLayer {
       if (!rec) {
         const mat = new THREE.ShaderMaterial({
           uniforms: { uColor: { value: new THREE.Color() }, uOpacity: { value: 0.35 }, uTime: this.timeUniform || (this.timeUniform = { value: 0 }), uSeed: { value: Math.random() * 10 } },
-          vertexShader: blobVertex, fragmentShader: blobFragment, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+          vertexShader: blobVertex, fragmentShader: blobFragment, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.BackSide,
         });
         const mesh = new THREE.Mesh(this.blobGeo, mat);
         mesh.renderOrder = 5; mesh.frustumCulled = false;
@@ -222,7 +225,7 @@ export class OverlayLayer {
       rec.mesh.visible = b.visible !== false;
       rec.at.copy(rec.mesh.position); rec.radius = r * (b.scale ? Math.max(...b.scale) : 1);
       const text = b.label || '';
-      if (text !== rec.text) { rec.text = text; rec.el.textContent = text; }
+      if (text !== rec.text) { rec.text = text; rec.el.textContent = text; rec.w = 0; }
       rec.el.style.borderColor = '#' + (b.color ?? 0x7c5cff).toString(16).padStart(6, '0') + 'aa';
     }
     for (const [id, rec] of this.blobs) if (!keep.has(id)) {
@@ -230,26 +233,48 @@ export class OverlayLayer {
     }
   }
 
-  /** Per-frame: move DOM tags to their projected anchors. */
+  /** Per-frame: move DOM tags to their projected anchors, keep them inside the free view area and
+   *  nudge apart tags that would overlap (tags that still collide are faded). */
   updateTags(ctx, t) {
     if (this.timeUniform) this.timeUniform.value = t;
-    const p = this.p;
+    const p = this.p, I = ctx.insets || { top: 0, right: 0, bottom: 0, left: 0 };
+    const W = ctx.width || 1e5, Hh = ctx.height || 1e5;
+    const items = [];
+    const size = rec => { if (!rec.w) { rec.w = rec.el.offsetWidth || 60; rec.h = rec.el.offsetHeight || 22; } };
+    for (const rec of this.blobs.values()) {
+      if (!rec.text || !rec.mesh.visible || rec.mat.uniforms.uOpacity.value < 0.03) { if (rec.el.style.display !== 'none') rec.el.style.display = 'none'; continue; }
+      if (rec.el.style.display === 'none') { rec.el.style.display = ''; rec.w = 0; }
+      this.project(rec.at.x, rec.at.y, rec.at.z, p);
+      if (!p.ok) { rec.el.style.opacity = '0'; continue; }
+      size(rec);
+      const rpx = rec.radius * ctx.pxPerAAt(p.z);
+      // centred above the body; if that would leave the free area, put it on the body itself
+      let x = p.x - rec.w / 2, y = p.y - rpx - 6 - rec.h;
+      if (y < I.top + 4) y = Math.max(I.top + 4, p.y - rpx * 0.55 - rec.h / 2);
+      items.push({ rec, x, y, op: Math.min(1, rec.mat.uniforms.uOpacity.value / 0.25) });
+    }
     for (const rec of this.annots.values()) {
       if (!rec.text) continue;
       this.project(rec.at.x, rec.at.y, rec.at.z, p);
       if (!p.ok) { rec.el.style.opacity = '0'; continue; }
-      const tx = rec.anchorLeft ? `translate(${rec.dx}px,-50%)` : 'translate(-50%,-100%)';
-      rec.el.style.transform = `translate3d(${p.x.toFixed(1)}px,${(p.y + (rec.anchorLeft ? rec.dy : rec.dy + 4)).toFixed(1)}px,0) ${tx}`;
-      rec.el.style.opacity = '1';
+      size(rec);
+      const x = rec.anchorLeft ? p.x + rec.dx : p.x - rec.w / 2;
+      const y = rec.anchorLeft ? p.y + rec.dy - rec.h / 2 : rec.below ? p.y + 10 : p.y + rec.dy + 4 - rec.h;
+      items.push({ rec, x, y, op: 1 });
     }
-    for (const rec of this.blobs.values()) {
-      if (!rec.text || !rec.mesh.visible) { rec.el.style.display = 'none'; continue; }
-      rec.el.style.display = '';
-      this.project(rec.at.x, rec.at.y, rec.at.z, p);
-      if (!p.ok) { rec.el.style.opacity = '0'; continue; }
-      const rpx = rec.radius * ctx.pxPerAAt(p.z);
-      rec.el.style.transform = `translate3d(${p.x.toFixed(1)}px,${(p.y - rpx - 8).toFixed(1)}px,0) translate(-50%,-100%)`;
-      rec.el.style.opacity = '1';
+    const placed = [];
+    const hit = (x, y, w, h) => placed.some(q => x < q.x + q.w + 3 && x + w + 3 > q.x && y < q.y + q.h + 2 && y + h + 2 > q.y);
+    for (const it of items) {
+      const { rec } = it, w = rec.w, h = rec.h;
+      let x = Math.min(Math.max(it.x, I.left + 4), Math.max(I.left + 4, W - I.right - 4 - w));
+      let y = Math.min(Math.max(it.y, I.top + 2), Math.max(I.top + 2, Hh - I.bottom - 4 - h));
+      let ok = !hit(x, y, w, h);
+      if (!ok) {
+        for (const dy of [-(h + 3), h + 3, -2 * (h + 3), 2 * (h + 3)]) { if (!hit(x, y + dy, w, h)) { y += dy; ok = true; break; } }
+      }
+      placed.push({ x, y, w, h });
+      rec.el.style.transform = `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0)`;
+      rec.el.style.opacity = String(ok ? it.op : 0);
     }
   }
 

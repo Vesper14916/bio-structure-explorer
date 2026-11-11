@@ -241,7 +241,8 @@ class Viewer {
     this.recolor();
     this.dirty = true;
     this.updateGeometry();
-    if (!keepCamera) { this.frameAll(0); this.autoFramed = true; }
+    // a fresh model gets the default three-quarter side view (not e.g. a leftover face-on pair view)
+    if (!keepCamera) { this.anim = null; this.hasFramed = false; this.faceView = false; this.frameAll(0); this.autoFramed = true; }
   }
 
   /** Root transform: helix axis -> screen vertical (+Y), centred on the origin. */
@@ -433,7 +434,8 @@ class Viewer {
     const { w, h, vw, vh } = this.viewport();
     const tv = Math.tan(THREE.MathUtils.degToRad(FOV) / 2), th = tv * (w / h);
     const hw = (hi[0] - lo[0]) / 2 + 1.5, hh = (hi[1] - lo[1]) / 2 + 1.5, hd = (hi[2] - lo[2]) / 2;
-    const dist = Math.max(hw * 1.04 / (th * (vw / w)), hh * 1.04 / (tv * (vh / h)), 12) + hd;
+    // depth: points in front of the box centre look bigger; a partial allowance is enough in practice
+    const dist = Math.max(hw * 1.06 / (th * (vw / w)), hh * 1.06 / (tv * (vh / h)), 12) + hd * 0.4;
     const target = right.clone().multiplyScalar((lo[0] + hi[0]) / 2)
       .addScaledVector(up, (lo[1] + hi[1]) / 2).addScaledVector(dir, (lo[2] + hi[2]) / 2);
     this.fit = { cy: target.y, h: hi[1] - lo[1], r: Math.max(hw, hd) };
@@ -449,8 +451,9 @@ class Viewer {
     const target = new THREE.Vector3(0, f.cy, 0);
     const dist = this.fitDistance(f.h / 2 + 2, f.r);
     this.controls.maxDistance = Math.max(200, dist * 5);
-    this.moveCamera(target, dist, duration, this.anim ? null : (this.hasFramed ? null : new THREE.Vector3(0.0, 0.16, 1).normalize()));
-    this.hasFramed = true;
+    const side = this.faceView || !this.hasFramed;      // leave a face-on view for the default side view
+    this.moveCamera(target, dist, duration, side ? new THREE.Vector3(0.0, 0.16, 1).normalize() : (this.anim ? this.anim.toDir.clone() : null));
+    this.hasFramed = true; this.faceView = false;
   }
 
   moveCamera(target, dist, duration, dir = null) {
@@ -500,7 +503,8 @@ class Viewer {
     if (view === 'face' && pts.length > 1) { this.focusFace(asm.pairs[sel.pair], cs, c, duration, cutaway); return; }
     if (this.cutActive) this.setCut(null);
     const r = pts.length > 1 ? 11 : 8;
-    this.moveCamera(c, this.fitDistance(r * 1.3, r), duration);
+    this.moveCamera(c, this.fitDistance(r * 1.3, r), duration, this.faceView ? new THREE.Vector3(0.0, 0.16, 1).normalize() : null);
+    this.faceView = false;
   }
 
   /**
@@ -529,6 +533,7 @@ class Viewer {
     const tv = Math.tan(THREE.MathUtils.degToRad(FOV) / 2), th = tv * (w / h);
     const dist = Math.max(12.5 / (th * (vw / w)), 10 / (tv * (vh / h)), 30);
     this.moveCamera(cw, dist, duration, dir);
+    this.faceView = true;
     if (cutaway !== false) {
       const s0 = cs.dot(n);
       this.setCut(nu => {
@@ -645,6 +650,7 @@ class Viewer {
     const ctx = this.labelCtx || (this.labelCtx = { pxPerAAt: d => this.pxPerA(d) });
     ctx.pxPerA = this.pxPerA(dist);
     ctx.centerDepth = dist;
+    ctx.insets = this.insets; ctx.width = this.width; ctx.height = this.height;
     ctx.emph = this.colors && this.colors.highlightActive ? this.colors.emph : null;
     if (this.asm) this.overlay.updateBaseLabels(this.style.labels, this.nucScale, this.nucOff, ctx);
     this.overlay.updateTags(ctx, this.t);

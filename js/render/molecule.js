@@ -52,7 +52,7 @@ export class MoleculeLayer {
     this.atomMat = new THREE.MeshStandardMaterial({ roughness: 0.32, metalness: 0.06, envMapIntensity: 1.0 });
     this.bondMat = new THREE.MeshStandardMaterial({ roughness: 0.42, metalness: 0.05, envMapIntensity: 0.9 });
     this.waterMat = new THREE.MeshStandardMaterial({
-      color: 0xff7a6e, roughness: 0.15, metalness: 0, transparent: true, opacity: 0.38, depthWrite: false, envMapIntensity: 1.2,
+      color: 0x8fd8ff, roughness: 0.2, metalness: 0, transparent: true, opacity: 0.26, depthWrite: false, envMapIntensity: 0.8,
     });
     this.beadMat = new THREE.ShaderMaterial({
       uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
@@ -202,7 +202,7 @@ export class MoleculeLayer {
       this.waters.visible = !!style.waters;
       if (this.waters.visible && !this._waterDone) {
         const w = asm.waters, m = this.waters.instanceMatrix.array;
-        for (let i = 0; i < w.count; i++) writeSphere(m, i, w.pos[i * 3], w.pos[i * 3 + 1], w.pos[i * 3 + 2], rep === 'spacefill' ? 1.2 : 0.62);
+        for (let i = 0; i < w.count; i++) writeSphere(m, i, w.pos[i * 3], w.pos[i * 3 + 1], w.pos[i * 3 + 2], rep === 'spacefill' ? 1.1 : 0.4);
         this.waters.instanceMatrix.needsUpdate = true;
         this._waterDone = rep;
       }

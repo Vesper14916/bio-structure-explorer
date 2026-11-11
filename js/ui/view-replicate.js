@@ -4,12 +4,13 @@ import { icon } from './icons.js';
 import { segmented, range, stat, sectionLabel } from './components.js';
 
 export const DEFAULT_LEGEND = [
-  { id: 'parental', label: 'Parental strands', color: '#8fa8d8', kind: 'strand' },
-  { id: 'leading', label: 'Leading strand', color: '#35d6c0', kind: 'strand' },
-  { id: 'lagging', label: 'Lagging strand', color: '#ffa94d', kind: 'strand' },
-  { id: 'primer', label: 'RNA primer', color: '#ff5fa2', kind: 'strand' },
-  { id: 'helicase', label: 'Helicase', color: '#7c5cff', kind: 'blob' },
+  { id: 'parental', label: 'Parental (old)', color: '#9fb2dc', kind: 'strand' },
+  { id: 'leading', label: 'New leading strand', color: '#2fd9b9', kind: 'strand' },
+  { id: 'lagging', label: 'New lagging strand', color: '#ffa34d', kind: 'strand' },
+  { id: 'primer', label: 'RNA primer', color: '#ff4fa3', kind: 'strand' },
+  { id: 'helicase', label: 'Helicase', color: '#8b6cff', kind: 'blob' },
   { id: 'polymerase', label: 'DNA polymerase', color: '#4fb6ff', kind: 'blob' },
+  { id: 'primase', label: 'Primase', color: '#f472b6', kind: 'blob' },
   { id: 'ligase', label: 'DNA ligase', color: '#ffd84a', kind: 'blob' },
 ];
 
@@ -48,7 +49,7 @@ export function createReplicateView(ctx) {
 
   const C = {
     unwound: stat({ label: 'Base pairs unwound', unit: 'bp', big: true }),
-    frag: stat({ label: 'Okazaki fragments', unit: '', big: true }),
+    frag: stat({ label: 'Okazaki fragments', unit: 'made', big: true }),
     lead: stat({ label: 'Leading strand', unit: 'nt added', big: true }),
     lag: stat({ label: 'Lagging strand', unit: 'nt added', big: true }),
   };
@@ -69,7 +70,8 @@ export function createReplicateView(ctx) {
     h('div', { class: 'stats stats-2' }, Object.values(C).map(c => c.el)),
     h('div', { class: 'card' }, h('div', { class: 'card-title' }, h('h3', {}, 'Legend')), legendList),
     h('div', { class: 'explain' }, h('h3', { class: 'label' }, 'What you are seeing'),
-      h('p', {}, 'Helicase unzips the parent duplex. Polymerase can only extend a 3′ end, so the leading strand is copied continuously while the lagging strand is built backwards from RNA primers as short Okazaki fragments that ligase later joins. Each new duplex keeps one old and one new strand.')));
+      h('p', {}, 'Helicase unzips the parent duplex. Polymerase can only extend a 3′ end, so the leading strand is copied continuously while the lagging strand is built backwards from RNA primers as short Okazaki fragments that ligase later joins. Each new duplex keeps one old and one new strand.'),
+      h('p', { class: 'note' }, 'Not to scale in time or length: real primers are about 10 nucleotides of RNA, and Okazaki fragments are 100–200 nucleotides long in eukaryotes (1000–2000 in bacteria). Here they are shortened to a few nucleotides.')));
 
   return {
     el,
@@ -87,7 +89,16 @@ export function createReplicateView(ctx) {
       if ('unwound' in s) C.unwound.set(String(s.unwound));
       if ('leadingCount' in s) C.lead.set(String(s.leadingCount));
       if ('laggingCount' in s) C.lag.set(String(s.laggingCount));
-      if ('fragments' in s) C.frag.set(String(s.fragments));
+      if ('fragments' in s) {
+        // number, or the sim's array of {start, end, primed, complete, ligated}
+        const f = s.fragments;
+        if (Array.isArray(f)) {
+          const made = f.filter(x => x.complete).length;
+          const joined = f.filter((x, i) => i > 0 && x.ligated).length;      // nicks sealed by ligase
+          C.frag.set(`${made}/${f.length}`);
+          C.frag.setUnit(joined ? `made · ${joined} joined` : 'made');
+        } else C.frag.set(String(f ?? '—'));
+      }
     },
     setLegend, togglePlay() { setPlaying(!playing); send(playing ? 'play' : 'pause'); },
     isPlaying: () => playing,

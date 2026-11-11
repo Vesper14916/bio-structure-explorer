@@ -355,7 +355,7 @@ test('replication: synthesis is always 5′→3′; links form only between plac
       linkWasActive[li] = true;
     });
     if (sim.state.phase === 'primer-removal') sawPrimerRemoval = true;
-    if (sim.blobs.some(b => b.label === 'Ligase')) sawLigase = true;
+    if (sim.blobs.some(b => b.id === 'ligase')) sawLigase = true;
   }
   assert.ok(sawLaggingPrimer && sawLeadingPrimer && sawLigase && sawPrimerRemoval);
   assert.ok(maxLeadPrimer >= 1 && maxLeadPrimer <= 3);
@@ -403,7 +403,8 @@ test('replication: state fields are consistent and monotone over time; captions 
   }
   for (const ph of ['initiation', 'unwinding', 'leading', 'priming', 'lagging', 'primer-removal', 'ligation', 'separation', 'complete']) assert.ok(phases.has(ph), `phase ${ph}`);
   const text = [...captions].join(' ');
-  for (const w of ['topoisomerase', 'RNA', 'Okazaki', 'ligase', 'pyrophosphate', 'hydrogen bond', 'Meselson', '1000–2000', '100–200', 'RNase H']) assert.ok(text.toLowerCase().includes(w.toLowerCase()), `caption mentions ${w}`);
+  // (the not-to-scale note on primer / fragment lengths lives in the Copy panel, not in the captions)
+  for (const w of ['topoisomerase', 'RNA', 'Okazaki', 'ligase', 'pyrophosphate', 'hydrogen bond', 'Meselson', 'RNase H']) assert.ok(text.toLowerCase().includes(w.toLowerCase()), `caption mentions ${w}`);
   assert.equal(sim.state.leadingCount, n); assert.equal(sim.state.laggingCount, n);
   sim.seek(0);
   assert.equal(sim.state.unwound, 0); assert.equal(sim.state.leadingCount, 0);
@@ -415,12 +416,12 @@ test('replication: blobs — helicase, polymerases, primase and ligase appear wi
   for (let i = 0; i <= 300; i++) {
     sim.seek(i / 300);
     for (const b of sim.blobs) {
-      seen.add(b.label);
+      seen.add(b.id);
       assert.ok(typeof b.id === 'string' && Array.isArray(b.pos) && b.pos.length === 3 && b.radius > 0 && Number.isInteger(b.color) && b.opacity > 0 && b.opacity <= 1);
-      if (b.label === 'Helicase') { assert.equal(b.radius, 13); helicaseZ.push(b.pos[2]); }
+      if (b.id === 'helicase') { assert.equal(b.radius, 13); helicaseZ.push(b.pos[2]); }
     }
   }
-  for (const l of ['Helicase', 'DNA polymerase (leading)', 'DNA polymerase (lagging)', 'Primase', 'Ligase']) assert.ok(seen.has(l), l);
+  for (const l of ['helicase', 'pol-leading', 'pol-lagging', 'primase', 'ligase']) assert.ok(seen.has(l), l);
   // the helicase translocates along the axis from +z to −z
   assert.ok(helicaseZ[0] > helicaseZ[helicaseZ.length - 1] + 40);
   const mid = helicaseZ.filter((_, i) => i > 0); mid.forEach((z, i) => assert.ok(z <= helicaseZ[i] + 1e-9, 'monotone descent'));
