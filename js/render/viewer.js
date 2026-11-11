@@ -58,6 +58,8 @@ class Viewer {
     this.autoFramed = true;
     this.resumeAt = 0; this.interacting = false;
     this.anim = null;
+    this.framing = null;          // {points:[[x,y,z]...] science coords, dir:[x,y,z] science view direction}
+    this.cutCur = null; this.cutTgt = null; this.cutActive = false; this.tagSig = 0;
 
     if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
     const canvas = this.canvas = document.createElement('canvas');
@@ -229,6 +231,8 @@ class Viewer {
     this.atomPh = new Float32Array(N * 3).map(() => Math.random() * 6.283);
     this.atomFr = new Float32Array(N).map(() => 2.2 + Math.random() * 1.6);
     this.colors = new ColorModel(asm);
+    this.cutCur = new Float32Array(n); this.cutTgt = new Float32Array(n); this.cutActive = false;
+    this.tagSig = this.tagSignature();
     this.molecule.setAssembly(asm);
     this.cartoon.setAssembly(asm);
     this.guides.setAssembly(asm);
@@ -325,13 +329,45 @@ class Viewer {
   updateGeometry() {
     const asm = this.asm; if (!asm) return;
     const sc = this.nucScale;
-    for (const nu of asm.nucleotides) sc[nu.id] = nu.visible === false ? 0 : clamp(nu.opacity ?? 1, 0, 1);
+    const sig = this.tagSignature();
+    if (sig !== this.tagSig) { this.tagSig = sig; this.recolor(); }
+    const cut = this.cutActive ? this.cutCur : null;
+    for (const nu of asm.nucleotides) sc[nu.id] = (nu.visible === false ? 0 : clamp(nu.opacity ?? 1, 0, 1)) * (cut ? 1 - cut[nu.id] : 1);
     this.updateDisplayPositions(this.t);
     const st = this.style, hl = this.colors.highlightActive;
     this.molecule.update(this.dpos, sc, st, hl);
     this.cartoon.update(this.dpos, sc, this.nucOff, st.representation === 'cartoon');
     this.guides.update(sc, st);
     this.dirty = false;
+  }
+
+  /** Cheap hash of nucleotide tags (e.g. 'primer'), so colour schemes that depend on tags refresh. */
+  tagSignature() {
+    const asm = this.asm; if (!asm) return 0;
+    let h = 0;
+    for (const nu of asm.nucleotides) if (nu.tag) h = (h * 31 + nu.id + 1 + nu.tag.length * 7919) | 0;
+    return h;
+  }
+
+  /** Animate the per-nucleotide cutaway (used by the face-on base-pair view). */
+  stepCut(dt) {
+    if (!this.cutActive) return;
+    const c = this.cutCur, g = this.cutTgt, k = this.reducedMotion ? 1 : Math.min(1, dt / 0.35);
+    let moving = false, any = false;
+    for (let i = 0; i < c.length; i++) {
+      const d = g[i] - c[i];
+      if (Math.abs(d) > 0.002) { c[i] += d * k + Math.sign(d) * Math.min(Math.abs(d), dt * 0.6); if ((d > 0) !== (g[i] - c[i] > 0)) c[i] = g[i]; moving = true; }
+      else c[i] = g[i];
+      if (c[i] > 0) any = true;
+    }
+    if (moving) this.dirty = true;
+    if (!any && !moving) { this.cutActive = false; this.dirty = true; }
+  }
+
+  setCut(maskFn) {
+    if (!this.asm) return;
+    for (const nu of this.asm.nucleotides) this.cutTgt[nu.id] = maskFn ? maskFn(nu) : 0;
+    this.cutActive = true;
   }
 
   // ------------------------------------------------------------ camera
@@ -366,7 +402,48 @@ class Viewer {
     this.fit = { cy: (lo + hi) / 2, h: hi - lo, r: Math.sqrt(r2) + 1.5 };
   }
 
-  frameAll(duration = 0.8) {
+  /** Science-space vector -> world-space direction (root rotation only). */
+  toWorldDir(v) { return new THREE.Vector3(v[0], v[1], v[2]).applyQuaternion(this.root.quaternion).normalize(); }
+
+  /** Frame atoms + framing points as seen from a fixed direction (oriented box fit). */
+  frameOriented(duration) {
+    const asm = this.asm, F = this.framing;
+    const dir = this.toWorldDir(F.dir);
+    const up0 = new THREE.Vector3(0, 1, 0);
+    const right = new THREE.Vector3().crossVectors(up0, dir);
+    if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
+    right.normalize();
+    const up = new THREE.Vector3().crossVectors(dir, right).normalize();
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    const v = new THREE.Vector3();
+    const add = () => {
+      const a = v.dot(right), b = v.dot(up), c = v.dot(dir);
+      if (a < lo[0]) lo[0] = a; if (a > hi[0]) hi[0] = a;
+      if (b < lo[1]) lo[1] = b; if (b > hi[1]) hi[1] = b;
+      if (c < lo[2]) lo[2] = c; if (c > hi[2]) hi[2] = c;
+    };
+    const m = this.root.matrixWorld;
+    for (const p of F.points || []) { v.set(p[0], p[1], p[2]).applyMatrix4(m); add(); }
+    const pos = asm.atoms.pos, A = asm.atoms;
+    for (let g = 0; g < A.count; g += 2) {
+      if (this.nucScale && this.nucScale[A.nuc[g]] <= 0.001) continue;
+      v.set(pos[g * 3], pos[g * 3 + 1], pos[g * 3 + 2]).applyMatrix4(m); add();
+    }
+    if (!(hi[0] > lo[0])) return this.frameAll(duration, true);
+    const { w, h, vw, vh } = this.viewport();
+    const tv = Math.tan(THREE.MathUtils.degToRad(FOV) / 2), th = tv * (w / h);
+    const hw = (hi[0] - lo[0]) / 2 + 1.5, hh = (hi[1] - lo[1]) / 2 + 1.5, hd = (hi[2] - lo[2]) / 2;
+    const dist = Math.max(hw * 1.04 / (th * (vw / w)), hh * 1.04 / (tv * (vh / h)), 12) + hd;
+    const target = right.clone().multiplyScalar((lo[0] + hi[0]) / 2)
+      .addScaledVector(up, (lo[1] + hi[1]) / 2).addScaledVector(dir, (lo[2] + hi[2]) / 2);
+    this.fit = { cy: target.y, h: hi[1] - lo[1], r: Math.max(hw, hd) };
+    this.controls.maxDistance = Math.max(200, dist * 5);
+    this.moveCamera(target, dist, duration, dir);
+    this.hasFramed = true;
+  }
+
+  frameAll(duration = 0.8, plain = false) {
+    if (!plain && this.framing && this.framing.dir && this.asm) return this.frameOriented(duration);
     this.measureFit();
     const f = this.fit;
     const target = new THREE.Vector3(0, f.cy, 0);
@@ -405,10 +482,10 @@ class Viewer {
     if (a.t >= a.dur) this.anim = null;
   }
 
-  focus(sel, { duration = 0.8 } = {}) {
+  focus(sel, { duration = 0.8, view = 'auto', cutaway = true } = {}) {
     if (!this.asm) return;
     this.autoFramed = !sel;
-    if (!sel) { this.frameAll(duration); return; }
+    if (!sel) { if (this.cutActive) this.setCut(null); this.frameAll(duration); return; }
     const asm = this.asm, pts = [];
     if (sel.pair !== undefined && asm.pairs[sel.pair]) { const p = asm.pairs[sel.pair]; pts.push(p.a, p.b); }
     else if (sel.nucleotide !== undefined && asm.nucleotides[sel.nucleotide]) pts.push(sel.nucleotide);
@@ -418,9 +495,48 @@ class Viewer {
       const nu = asm.nucleotides[id];
       for (let i = 0; i < nu.atomCount; i++) { const g = nu.atomStart + i; c.x += asm.atoms.pos[g * 3]; c.y += asm.atoms.pos[g * 3 + 1]; c.z += asm.atoms.pos[g * 3 + 2]; cnt++; }
     }
-    c.multiplyScalar(1 / Math.max(1, cnt)).applyMatrix4(this.root.matrixWorld);
+    const cs = c.clone().multiplyScalar(1 / Math.max(1, cnt));       // science coords
+    c.copy(cs).applyMatrix4(this.root.matrixWorld);
+    if (view === 'face' && pts.length > 1) { this.focusFace(asm.pairs[sel.pair], cs, c, duration, cutaway); return; }
+    if (this.cutActive) this.setCut(null);
     const r = pts.length > 1 ? 11 : 8;
     this.moveCamera(c, this.fitDistance(r * 1.3, r), duration);
+  }
+
+  /**
+   * Look down the helix axis onto the plane of a base pair (H-bonds face-on), major groove at the top of
+   * the screen, and fade away everything stacked above it so the pair is unobstructed.
+   */
+  focusFace(pair, cs, cw, duration, cutaway) {
+    const asm = this.asm, A = asm.nucleotides[pair.a], B = asm.nucleotides[pair.b];
+    // pair plane normal ~ mean of the two base normals (local z), flipped to point along the helix axis
+    const ax = this.axisDir;
+    let n = new THREE.Vector3(A.frame.R[2] - B.frame.R[2], A.frame.R[5] - B.frame.R[5], A.frame.R[8] - B.frame.R[8]);
+    if (n.lengthSq() < 1e-6) n.copy(ax);
+    n.normalize(); if (n.dot(ax) < 0) n.negate();
+    // groove direction: pair x axis (into the major groove) = mean of both local x axes
+    const gx = new THREE.Vector3(A.frame.R[0] + B.frame.R[0], A.frame.R[3] + B.frame.R[3], A.frame.R[6] + B.frame.R[6]);
+    gx.addScaledVector(n, -gx.dot(n));
+    if (gx.lengthSq() < 1e-6) gx.set(1, 0, 0).addScaledVector(n, -n.x);
+    gx.normalize();
+    // camera sits above the pair (along +axis) and a little to the minor-groove side, so the
+    // screen's "up" points into the major groove.
+    const tilt = THREE.MathUtils.degToRad(17);
+    const dSci = n.clone().multiplyScalar(Math.cos(tilt)).addScaledVector(gx, -Math.sin(tilt));
+    const dir = this.toWorldDir(dSci.toArray());
+    // fit a ~24 x 18 Å slab (C1'-C1' is 10.5 Å, the phosphates reach ~9 Å from the axis)
+    const { w, h, vw, vh } = this.viewport();
+    const tv = Math.tan(THREE.MathUtils.degToRad(FOV) / 2), th = tv * (w / h);
+    const dist = Math.max(12.5 / (th * (vw / w)), 10 / (tv * (vh / h)), 30);
+    this.moveCamera(cw, dist, duration, dir);
+    if (cutaway !== false) {
+      const s0 = cs.dot(n);
+      this.setCut(nu => {
+        if (nu.visible === false) return 0;
+        const s = nu.frame.o[0] * n.x + nu.frame.o[1] * n.y + nu.frame.o[2] * n.z;   // base-frame origin along the normal
+        return s > s0 + 1.6 ? 1 : 0;
+      });
+    } else if (this.cutActive) this.setCut(null);
   }
 
   // ------------------------------------------------------------ projection / picking
@@ -502,6 +618,7 @@ class Viewer {
 
     // camera
     if (this.anim) this.stepCameraAnim(dt);
+    this.stepCut(dt);
     const wantRotate = this.style.autoRotate && !this.reducedMotion && !this.interacting && !this.anim && now >= this.resumeAt;
     this.controls.autoRotate = wantRotate;
     this.controls.update(dt);
@@ -572,6 +689,9 @@ class Viewer {
       focus: (sel, o) => v.focus(sel, o),
       setAnnotations: list => v.overlay.setAnnotations(list || []),
       setBlobs: list => v.overlay.setBlobs(list || []),
+      /** Persistent framing hints for focus(null)/auto-framing: extra science-space points that must stay
+       *  in view (e.g. the bounding box of a whole animation) and a fixed science-space view direction. */
+      setFraming(f) { v.framing = f && (f.points || f.dir) ? { points: f.points || null, dir: f.dir || null } : null; },
       setViewInsets(ins = {}) {
         v.insets = { top: 0, right: 0, bottom: 0, left: 0, ...ins };
         v.applyViewOffset();
