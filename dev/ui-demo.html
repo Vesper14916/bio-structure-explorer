@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Helix UI demo (mock stage)</title>
+  <meta name="theme-color" content="#04070f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    /* Mock stage: gradient + a faux helix that is centred in the free area reported by onLayout. */
+    #free { position: absolute; display: grid; place-items: center; transition: all .25s; outline: 1px dashed rgba(169,155,255,.35); outline-offset: -1px; }
+    #free svg { width: min(90%, 160px); height: min(86%, 560px); filter: drop-shadow(0 0 18px rgba(143,211,255,.35)); }
+    #free small { position: absolute; left: 8px; bottom: 6px; font: 11px ui-monospace, monospace; color: rgba(169,155,255,.7); }
+  </style>
+  <script type="importmap">{"imports":{"three":"../js/vendor/three.module.min.js","three/addons/":"../js/vendor/addons/"}}</script>
+</head>
+<body>
+  <div id="stage"><div id="free"><small id="insets"></small>
+    <svg viewBox="0 0 100 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><g fill="none" stroke-width="5" stroke-linecap="round">
+      <path d="M20 0c0 50 60 50 60 100S20 150 20 200s60 50 60 100-60 50-60 100" stroke="#8fd3ff"/><path d="M80 0c0 50-60 50-60 100s60 50 60 100-60 50-60 100 60 50 60 100" stroke="#a99bff"/>
+      <g stroke="#ffc233" stroke-width="3" opacity=".8"><path d="M30 35h40M24 100h52M30 165h40M24 230h52M30 295h40M24 360h52"/></g></g></svg></div></div>
+  <div id="ui"></div>
+
+  <script type="module">
+    import { createUI, pairPayload, meltStatic, meltDynamic } from '../js/ui/ui.js';
+    import { buildDuplex, buildCrystal, measureDuplex, cleanSequence } from '../js/science/index.js';
+
+    const q = new URLSearchParams(location.search);
+    const log = (name, payload) => { console.log(`[handler] ${name}`, payload); if (name !== 'onLayout' && name !== 'onMelt' && !(name === 'onReplication' && payload.action === 'seek')) ui.toast(`${name} ${JSON.stringify(payload)}`); };
+
+    let seq = 'CGCGAATTCGCG', Na = 0.1, T = 25, asm = buildDuplex(seq);
+    let melt = {}, pairIdx = null, repl = { progress: 0, playing: false, speed: 1 };
+
+    const freeEl = document.getElementById('free'), insEl = document.getElementById('insets');
+    const ui = createUI(document.getElementById('ui'), {
+      onMode: m => { log('onMode', m); },
+      onStyle: p => { log('onStyle', p); ui.setStyle(p); },
+      onSequence: s => { log('onSequence', s); setSeq(s); },
+      onSelectPair: i => { log('onSelectPair', i); pairIdx = i; ui.setPair(i == null ? null : pairPayload(asm, i)); },
+      onMeasureToggle: b => log('onMeasureToggle', b),
+      onMelt: ({ T: t, Na: n }) => { log('onMelt', { T: t, Na: n }); T = t; if (n !== Na) { Na = n; ui.setMeltState({ ...meltStatic(seq, Na) }); } ui.setMeltState(meltDynamic(seq, T, Na)); },
+      onReplication: a => { log('onReplication', a); if (a.action === 'play') repl.playing = true; if (a.action === 'pause') repl.playing = false; if (a.action === 'restart') { repl.progress = 0; repl.playing = true; } if (a.action === 'seek') repl.progress = a.value; if (a.action === 'speed') repl.speed = a.value; pushRepl(); },
+      onCrystal: c => { log('onCrystal', c); ui.setStyle({ waters: c.waters, color: c.bfactor ? 'bfactor' : 'base' }); },
+      onLayout: i => {
+        log('onLayout', i);
+        Object.assign(freeEl.style, { left: i.left + 'px', right: i.right + 'px', top: i.top + 'px', bottom: i.bottom + 'px' });
+        insEl.textContent = `free area: t${i.top} r${i.right} b${i.bottom} l${i.left}`;
+      },
+      onAbout: o => log('onAbout', o),
+    });
+    window.ui = ui;
+
+    function setSeq(s) {
+      seq = cleanSequence(s); asm = buildDuplex(seq);
+      ui.setSequence(seq); ui.setMeasurements(measureDuplex(asm));
+      ui.setMeltState({ ...meltStatic(seq, Na), ...meltDynamic(seq, T, Na) });
+      if (pairIdx != null && pairIdx >= asm.pairs.length) { pairIdx = null; ui.setPair(null); }
+    }
+    ui.setLoading(true, 'Building the double helix…');
+    setSeq(seq);
+    ui.setStyle({ representation: 'ballstick', color: 'element', hbonds: true, grooves: false, axis: false, labels: false, autoRotate: true, waters: false });
+    ui.setCrystalInfo({ waters: 109 });
+    ui.setCompare({ ideal: measureDuplex(buildDuplex('CGCGAATTCGCG')), crystal: measureDuplex(buildCrystal()) });
+    ui.setDebug({ fps: 60, quality: 'high', atoms: 486 });
+
+    // fake replication timeline
+    const STEPS = [
+      [0, 'Ready', 'Helicase unwinds the parental duplex ahead of the replication fork.'],
+      [0.15, 'Unwinding', 'Helicase breaks the hydrogen bonds between base pairs, opening the fork.'],
+      [0.35, 'Priming', 'Primase lays down short RNA primers that give polymerase a 3′ end to extend.'],
+      [0.55, 'Elongation', 'Polymerase copies the leading strand continuously and the lagging strand in Okazaki fragments.'],
+      [0.85, 'Ligation', 'Ligase seals the nicks between fragments, completing the lagging strand.'],
+      [1, 'Complete', 'Two identical daughter duplexes, each with one old and one new strand.'],
+    ];
+    function pushRepl() {
+      const p = repl.progress; let s = STEPS[0]; for (const st of STEPS) if (p >= st[0]) s = st;
+      ui.setReplicationState({ progress: p, playing: repl.playing, speed: repl.speed, phase: s[1], caption: s[2], unwound: Math.round(p * 12), leadingCount: Math.round(Math.max(0, p - 0.3) * 120), laggingCount: Math.round(Math.max(0, p - 0.4) * 80), fragments: Math.floor(Math.max(0, p - 0.45) * 6) });
+    }
+    let last = performance.now();
+    setInterval(() => {
+      const now = performance.now(), dt = (now - last) / 1000; last = now;
+      if (repl.playing) { repl.progress = Math.min(1, repl.progress + dt * 0.04 * repl.speed); if (repl.progress >= 1) repl.playing = false; pushRepl(); }
+      if (pairIdx != null && asm.pairs[pairIdx]) { const d = pairPayload(asm, pairIdx); d.hbonds.forEach((b, k) => b.length += 0.05 * Math.sin(now / 400 + k)); ui.setPair(d); }
+    }, 50);
+    pushRepl();
+
+    // query params for review screenshots: ?mode=melt&sheet=half&panel=0&pair=4&T=62
+    setTimeout(() => ui.setLoading(false), q.has('fast') ? 0 : 500);
+    if (q.get('mode')) ui.setMode(q.get('mode'));
+    if (q.get('sheet')) ui.setSheet(q.get('sheet'), false);
+    if (q.get('panel') === '0') ui.setPanelOpen(false);
+    if (q.get('pair')) { pairIdx = +q.get('pair'); ui.setPair(pairPayload(asm, pairIdx)); }
+    if (q.get('T')) { T = +q.get('T'); ui.setMeltState({ T }); ui.setMeltState(meltDynamic(seq, T, Na)); }
+    if (q.get('repl')) { repl.progress = +q.get('repl'); pushRepl(); }
+    if (q.get('about')) ui.openAbout();
+  </script>
+</body>
+</html>
