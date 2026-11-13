@@ -18,6 +18,38 @@ Project conventions:
 - A downloadable single-file demo or an offline-capable website is an optional later deliverable. Neither capability is currently implemented.
 - This document defines the proposed implementation baseline. Unverified assets, performance figures, and scientific details remain explicitly provisional.
 
+### Quality bar
+
+The Helix DNA explorer (`origin/claude/dna-structure-visualization-85q6rc`, commit `246fa52`) is the benchmark for this demo. The gene-expression demo must reach at least the same level of visual craft, motion polish, and interaction quality. Palette, typography, layout, and presentation may differ; the bar applies to craft and feel, not to copying Helix's look or code. Recorded 2026-11-13.
+
+When requirements conflict, apply these priorities in order:
+
+1. **Facts first.** Every biological statement, sequence, strand direction, codon, residue, asset, and timing rule must trace to a source or to an explicit scenario annotation. A visual idea that contradicts the sourced biology or the tested state model is changed or dropped, never kept for effect. Quality claims (fidelity, performance, accessibility) need recorded evidence, not assertion.
+2. **Interaction must feel excellent.** Motion is continuous, eased, and interruptible. The user never faces a frozen, jumping, or unexplained view.
+3. **Strict physical realism is optional.** Stylized or approximate motion is acceptable when it is labeled as an approximation in the app and in `docs/SCIENCE.md`. Helix already discloses this kind of approximation: "Thermal motion in the 3D view is a visual effect, not computed physics."
+
+Reference qualities in Helix, checked in source at `246fa52`:
+
+- **Sourced geometry, reproducible build.** Base geometry follows the Olson et al. (2001) reference frame. Backbone coordinates are derived from PDB 1BNA by `tools/build-templates.mjs`. Thermodynamics use SantaLucia (1998) nearest-neighbour parameters. The About sheet lists these references (`js/ui/about.js`).
+- **Model first, animation derived.** Melting computes equilibrium pair probabilities, then animates one molecule with stochastic dynamics whose long-run statistics match them (`js/sim/melt.js`). The replication timeline is a pure function of time, so seeking backward reproduces earlier states exactly (`js/sim/replication.js`, covered by a test).
+- **Legible micro-choreography.** Each replication event has explicit timing: a nucleotide flies in along a curved path while tumbling, docks into its template partner, hydrogen bonds form, then the backbone link seals (`js/sim/replication.js`).
+- **Cinematic camera.** Camera moves ease target, view direction, and distance over about 0.8 s by default; distance is interpolated geometrically. Orbit controls use damping. Idle auto-rotation stops during interaction and guided moves, and resumes 3 s after the user stops (`js/render/viewer.js`).
+- **Depth and atmosphere.** Scene fog follows camera distance. Drifting solvent particles blur with distance from the focus plane. A bloom pass, a vignette, ACES Filmic tone mapping, and a key/fill/rim light rig that moves with the camera complete the look (`js/render/stage.js`, `js/render/viewer.js`).
+- **Adaptive quality.** Three tiers set pixel ratio, sphere tessellation, bloom, particle count, and anti-aliasing. The tier is chosen from the device, steps down when frames run slow, and can be forced with `?quality=` (`js/render/viewer.js`).
+- **Motion preference honored.** With reduced motion, camera moves are instant, auto-rotation and particle drift stop, and CSS transitions collapse (`js/render/viewer.js`, `css/style.css`).
+- **Keyboard and touch.** Keys 1–5 switch modes, H toggles the panel, Space plays or pauses replication, arrow keys step base pairs, and ? opens help. Screens up to 699 px wide get a draggable bottom sheet (`js/ui/about.js`, `js/ui/ui.js`, `css/style.css`).
+- **Tested science.** Node tests cover geometry, thermodynamics, and simulation invariants. All 29 passed at `246fa52` on 2026-11-13.
+
+The bar rests on judgment of Helix's visual impact. Section 2 notes that the browser review of Helix has been partial, so re-check it in a browser before treating it as a pixel-level reference.
+
+Interaction standard for the new demo, in addition to E03 to E07:
+
+- Camera preset and focus changes are eased, except under reduced motion. Manual orbit or zoom takes over at once (E03).
+- Play, pause, restart, speed, and seeking respond immediately. Backward seeking leaves no stale actors or captions.
+- Hover and selection feedback has no perceptible delay. Captions and highlights change with each biological event.
+- Labels fade rather than pop, and never cover an active site (E05).
+- The phone layout keeps touch orbit and pinch zoom, and honors reduced motion.
+
 ## 2. Existing foundation
 
 The DNA demo exists in `origin/claude/dna-structure-visualization-85q6rc`, inspected at commit `246fa52`. The current checkout is `main`, which contained only `.gitattributes` before this plan was added. Do not infer that the DNA source is missing or overwrite the source branch to match this checkout.
@@ -235,6 +267,7 @@ The first concrete development objective is T01–T07: a complete working skelet
 
 ### Visual and interaction checks
 
+- Review the demo against the Helix quality bar (section 1) in a browser, side by side at desktop and phone sizes. Record the outcome and any gap in `docs/VALIDATION.md`.
 - Inspect start, bubble formation, RNA growth, translation initiation, elongation, termination, and final overview.
 - Inspect from several camera angles; no critical molecule permanently obscures the event being taught.
 - Observe actual playback as well as screenshots; static captures cannot establish motion quality.
