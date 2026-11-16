@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Helix — interactive DNA structure explorer</title>
+  <meta name="description" content="Explore an atomic, scientifically accurate model of the DNA double helix in 3D: base pairs, melting, replication and the real 1BNA crystal structure.">
+  <meta name="theme-color" content="#04070f">
+  <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Helix">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2304070f'/%3E%3Cpath d='M10 4c0 7 12 7 12 12S10 21 10 28' fill='none' stroke='%238fd3ff' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M22 4c0 7-12 7-12 12s12 5 12 12' fill='none' stroke='%23a99bff' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M12.500 9h7M11 16h10M12.500 23h7' stroke='%23ffc233' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./css/style.css">
+  <script type="importmap">{"imports":{"three":"./js/vendor/three.module.min.js","three/addons/":"./js/vendor/addons/"}}</script>
+</head>
+<body>
+  <!-- The viewer mounts its <canvas> here (full viewport, behind the UI). -->
+  <div id="stage" aria-label="3D view of a DNA double helix" role="img"></div>
+
+  <!-- UI root: createUI(document.getElementById('ui'), handlers) -->
+  <div id="ui"></div>
+
+  <!-- Shown by the inline script below if the app module fails to load, or by main.js on WebGL failure
+       (remove the `hidden` attribute and set [data-fallback-message]). -->
+  <div id="fallback" class="fallback" role="alert" hidden>
+    <div>
+      <h1>Helix could not start</h1>
+      <p data-fallback-message>This explorer needs WebGL and a recent browser (Safari 16+, Chrome, Firefox or Edge). Try enabling hardware acceleration or updating your browser.</p>
+    </div>
+  </div>
+
+  <noscript>
+    <div class="fallback" role="alert">
+      <div>
+        <h1>Helix needs JavaScript</h1>
+        <p>This interactive 3D model of DNA runs entirely in your browser. Please enable JavaScript and reload the page.</p>
+      </div>
+    </div>
+  </noscript>
+
+  <script>
+    // If the app module cannot be fetched or parsed, say so instead of showing an empty dark screen.
+    addEventListener('error', function (e) {
+      var t = e.target;
+      if (t && t.tagName === 'SCRIPT' && /main\.js/.test(t.src || '')) {
+        var f = document.getElementById('fallback');
+        f.querySelector('[data-fallback-message]').textContent = 'The application script failed to load. Check your connection and reload the page.';
+        f.hidden = false;
+      }
+    }, true);
+  </script>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
