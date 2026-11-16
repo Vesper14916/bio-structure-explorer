@@ -342,11 +342,14 @@ class Viewer {
     this.dirty = false;
   }
 
-  /** Cheap hash of nucleotide tags (e.g. 'primer'), so colour schemes that depend on tags refresh. */
+  /** Cheap hash of nucleotide tags/roles (e.g. 'primer', 'mrna'), so colour schemes that depend on them refresh. */
   tagSignature() {
     const asm = this.asm; if (!asm) return 0;
     let h = 0;
-    for (const nu of asm.nucleotides) if (nu.tag) h = (h * 31 + nu.id + 1 + nu.tag.length * 7919) | 0;
+    for (const nu of asm.nucleotides) {
+      if (nu.tag) h = (h * 31 + nu.id + 1 + nu.tag.length * 7919) | 0;
+      if (nu.role) h = (h * 31 + nu.id + 3 + nu.role.length * 4099) | 0;
+    }
     return h;
   }
 
@@ -399,6 +402,16 @@ class Viewer {
       const rr = wx * wx + wz * wz; if (rr > r2) r2 = rr;
       any = true;
     }
+    if (asm.residues && asm.residues.length) {
+      for (const res of asm.residues) {
+        if (!res || !res.visible || (res.opacity ?? 1) <= 0.01 || !res.pos) continue;
+        const x = res.pos[0], y = res.pos[1], z = res.pos[2];
+        const wx = m[0] * x + m[4] * y + m[8] * z + m[12], wy = m[1] * x + m[5] * y + m[9] * z + m[13], wz = m[2] * x + m[6] * y + m[10] * z + m[14];
+        if (wy < lo) lo = wy; if (wy > hi) hi = wy;
+        const rr = wx * wx + wz * wz; if (rr > r2) r2 = rr;
+        any = true;
+      }
+    }
     if (!any) { lo = -10; hi = 10; r2 = 100; }
     this.fit = { cy: (lo + hi) / 2, h: hi - lo, r: Math.sqrt(r2) + 1.5 };
   }
@@ -429,6 +442,12 @@ class Viewer {
     for (let g = 0; g < A.count; g += 2) {
       if (this.nucScale && this.nucScale[A.nuc[g]] <= 0.001) continue;
       v.set(pos[g * 3], pos[g * 3 + 1], pos[g * 3 + 2]).applyMatrix4(m); add();
+    }
+    if (asm.residues && asm.residues.length) {
+      for (const res of asm.residues) {
+        if (!res || !res.visible || (res.opacity ?? 1) <= 0.01 || !res.pos) continue;
+        v.set(res.pos[0], res.pos[1], res.pos[2]).applyMatrix4(m); add();
+      }
     }
     if (!(hi[0] > lo[0])) return this.frameAll(duration, true);
     const { w, h, vw, vh } = this.viewport();
@@ -485,6 +504,71 @@ class Viewer {
     if (a.t >= a.dur) this.anim = null;
   }
 
+  setFollowTarget(spec) {
+    if (!spec || spec.mode === 'overview' || spec.mode === 'free' || spec.mode === 'none') {
+      this.followTarget = null;
+      return;
+    }
+    this.followTarget = typeof spec === 'string' ? { mode: spec } : { ...spec };
+  }
+
+  resolveFollowSpec() {
+    const ft = this.followTarget;
+    if (!ft) return null;
+    if (Array.isArray(ft.center) && ft.center.length === 3) {
+      return { center: ft.center, radius: ft.radius || 22, dir: ft.dir || null, distance: ft.distance || 0 };
+    }
+    const blobs = this.overlay && this.overlay.blobs;
+    const mode = ft.mode || ft.blobId;
+    if (mode === 'rnap' && blobs) {
+      const b = blobs.get('rnap');
+      if (b && b.mesh.visible) return { center: [b.at.x, b.at.y, b.at.z], radius: ft.radius || Math.max(18, b.radius * 1.15), dir: ft.dir || null, distance: ft.distance || 0 };
+    }
+    if (mode === 'ribosome' && blobs) {
+      const b30 = blobs.get('ribosome-30s'), b50 = blobs.get('ribosome-50s'), bRib = blobs.get('ribosome');
+      const active = [b30, b50, bRib].filter(b => b && b.mesh.visible);
+      if (active.length) {
+        let x = 0, y = 0, z = 0, r = 18;
+        for (const b of active) { x += b.at.x; y += b.at.y; z += b.at.z; r = Math.max(r, b.radius * 1.25); }
+        const inv = 1 / active.length;
+        return { center: [x * inv, y * inv, z * inv], radius: ft.radius || r, dir: ft.dir || null, distance: ft.distance || 0 };
+      }
+      const rnap = blobs.get('rnap');
+      if (rnap && rnap.mesh.visible) return { center: [rnap.at.x, rnap.at.y, rnap.at.z], radius: ft.radius || Math.max(18, rnap.radius * 1.15), dir: ft.dir || null, distance: ft.distance || 0 };
+    }
+    if (mode === 'peptide' && this.asm && this.asm.residues) {
+      const vis = this.asm.residues.filter(r => r && r.visible && r.pos);
+      if (vis.length) {
+        let x = 0, y = 0, z = 0;
+        for (const r of vis) { x += r.pos[0]; y += r.pos[1]; z += r.pos[2]; }
+        const inv = 1 / vis.length;
+        return { center: [x * inv, y * inv, z * inv], radius: ft.radius || 18, dir: ft.dir || null, distance: ft.distance || 0 };
+      }
+    }
+    return null;
+  }
+
+  stepFollow(dt, now) {
+    if (!this.followTarget || this.interacting || this.anim) return;
+    const resolved = this.resolveFollowSpec();
+    if (!resolved) return;
+    const worldTarget = this.tmpV.set(resolved.center[0], resolved.center[1], resolved.center[2]).applyMatrix4(this.root.matrixWorld);
+    const c = this.controls, cam = this.camera;
+    const offset = this.tmpV2.copy(cam.position).sub(c.target);
+    const curDist = offset.length() || 40;
+    offset.normalize();
+    const k = this.reducedMotion ? 1 : 1 - Math.exp(-dt * 5.0);
+    c.target.lerp(worldTarget, k);
+    const manualGrace = now < this.resumeAt;
+    if (!manualGrace && resolved.dir) {
+      const wantDir = this.toWorldDir(resolved.dir);
+      offset.lerp(wantDir, k * 0.6).normalize();
+    }
+    const wantDist = resolved.distance || this.fitDistance(resolved.radius * 1.15, resolved.radius);
+    const newDist = manualGrace ? curDist : curDist + (wantDist - curDist) * k;
+    cam.position.copy(c.target).addScaledVector(offset, newDist);
+  }
+
   focus(sel, { duration = 0.8, view = 'auto', cutaway = true } = {}) {
     if (!this.asm) return;
     this.autoFramed = !sel;
@@ -492,19 +576,40 @@ class Viewer {
     const asm = this.asm, pts = [];
     if (sel.pair !== undefined && asm.pairs[sel.pair]) { const p = asm.pairs[sel.pair]; pts.push(p.a, p.b); }
     else if (sel.nucleotide !== undefined && asm.nucleotides[sel.nucleotide]) pts.push(sel.nucleotide);
-    if (!pts.length) return;
-    const c = new THREE.Vector3(); let cnt = 0;
-    for (const id of pts) {
-      const nu = asm.nucleotides[id];
-      for (let i = 0; i < nu.atomCount; i++) { const g = nu.atomStart + i; c.x += asm.atoms.pos[g * 3]; c.y += asm.atoms.pos[g * 3 + 1]; c.z += asm.atoms.pos[g * 3 + 2]; cnt++; }
+    else if (Array.isArray(sel.nucleotides)) {
+      for (const id of sel.nucleotides) if (asm.nucleotides[id]) pts.push(id);
     }
-    const cs = c.clone().multiplyScalar(1 / Math.max(1, cnt));       // science coords
-    c.copy(cs).applyMatrix4(this.root.matrixWorld);
-    if (view === 'face' && pts.length > 1) { this.focusFace(asm.pairs[sel.pair], cs, c, duration, cutaway); return; }
-    if (this.cutActive) this.setCut(null);
-    const r = pts.length > 1 ? 11 : 8;
-    this.moveCamera(c, this.fitDistance(r * 1.3, r), duration, this.faceView ? new THREE.Vector3(0.0, 0.16, 1).normalize() : null);
-    this.faceView = false;
+    if (pts.length) {
+      const c = new THREE.Vector3(); let cnt = 0;
+      for (const id of pts) {
+        const nu = asm.nucleotides[id];
+        for (let i = 0; i < nu.atomCount; i++) { const g = nu.atomStart + i; c.x += asm.atoms.pos[g * 3]; c.y += asm.atoms.pos[g * 3 + 1]; c.z += asm.atoms.pos[g * 3 + 2]; cnt++; }
+      }
+      const cs = c.clone().multiplyScalar(1 / Math.max(1, cnt));       // science coords
+      c.copy(cs).applyMatrix4(this.root.matrixWorld);
+      if (view === 'face' && pts.length > 1 && sel.pair !== undefined && asm.pairs[sel.pair]) { this.focusFace(asm.pairs[sel.pair], cs, c, duration, cutaway); return; }
+      if (this.cutActive) this.setCut(null);
+      const r = pts.length > 2 ? 14 : pts.length > 1 ? 11 : 8;
+      this.moveCamera(c, this.fitDistance(r * 1.3, r), duration, this.faceView ? new THREE.Vector3(0.0, 0.16, 1).normalize() : null);
+      this.faceView = false;
+      return;
+    }
+    if (sel.residue !== undefined && asm.residues && asm.residues[sel.residue] && asm.residues[sel.residue].pos) {
+      const res = asm.residues[sel.residue];
+      const c = new THREE.Vector3(...res.pos).applyMatrix4(this.root.matrixWorld);
+      if (this.cutActive) this.setCut(null);
+      const r = 10;
+      this.moveCamera(c, this.fitDistance(r * 1.3, r), duration, null);
+      this.faceView = false;
+      return;
+    }
+    if (Array.isArray(sel.center) && sel.center.length === 3) {
+      const c = new THREE.Vector3(...sel.center).applyMatrix4(this.root.matrixWorld);
+      if (this.cutActive) this.setCut(null);
+      const r = sel.radius || 16;
+      this.moveCamera(c, this.fitDistance(r * 1.2, r), duration, sel.dir ? this.toWorldDir(sel.dir) : null);
+      this.faceView = false;
+    }
   }
 
   /**
@@ -583,9 +688,45 @@ class Viewer {
       const th = tc - Math.sqrt(r * r - d2);
       if (th < bestT) { bestT = th; best = g; }
     }
+    let bestRes = null, bestResT = bestT;
+    if (asm.residues && asm.residues.length) {
+      for (let i = 0; i < asm.residues.length; i++) {
+        const res = asm.residues[i];
+        if (!res || !res.visible || !res.pos) continue;
+        const op = clamp(res.opacity ?? 1, 0, 1);
+        if (op <= 0.05) continue;
+        const wx = res.pos[0] - ox, wy = res.pos[1] - oy, wz = res.pos[2] - oz;
+        const tc = wx * dx + wy * dy + wz * dz;
+        if (tc <= 0) continue;
+        const d2 = wx * wx + wy * wy + wz * wz - tc * tc;
+        const r = Math.max((res.radius || 1.85) * op, minR);
+        if (d2 > r * r) continue;
+        const th = tc - Math.sqrt(r * r - d2);
+        if (th < bestResT) { bestResT = th; bestRes = res; }
+      }
+    }
+    if (bestRes) {
+      return {
+        residue: bestRes.id ?? bestRes.index ?? 0,
+        codon: bestRes.codonIndex ?? -1,
+        nucleotide: -1,
+        atom: -1,
+        pair: -1,
+        clientX,
+        clientY,
+      };
+    }
     if (best < 0) return null;
     const nu = asm.nucleotides[A.nuc[best]];
-    return { nucleotide: nu.id, atom: best, pair: nu.pair, clientX, clientY };
+    return {
+      nucleotide: nu.id,
+      atom: best,
+      pair: nu.pair,
+      codon: nu.codon ?? -1,
+      role: nu.role || '',
+      clientX,
+      clientY,
+    };
   }
 
   // ------------------------------------------------------------ loop
@@ -623,8 +764,9 @@ class Viewer {
 
     // camera
     if (this.anim) this.stepCameraAnim(dt);
+    else if (this.followTarget) this.stepFollow(dt, now);
     this.stepCut(dt);
-    const wantRotate = this.style.autoRotate && !this.reducedMotion && !this.interacting && !this.anim && now >= this.resumeAt;
+    const wantRotate = this.style.autoRotate && !this.reducedMotion && !this.interacting && !this.anim && !this.followTarget && now >= this.resumeAt;
     this.controls.autoRotate = wantRotate;
     this.controls.update(dt);
 
@@ -652,6 +794,7 @@ class Viewer {
     ctx.centerDepth = dist;
     ctx.insets = this.insets; ctx.width = this.width; ctx.height = this.height;
     ctx.emph = this.colors && this.colors.highlightActive ? this.colors.emph : null;
+    ctx.resEmph = this.colors && this.colors.highlightActive ? this.colors.resEmph : null;
     if (this.asm) this.overlay.updateBaseLabels(this.style.labels, this.nucScale, this.nucOff, ctx);
     this.overlay.updateTags(ctx, this.t);
 
@@ -689,10 +832,15 @@ class Viewer {
         v.dirty = true;
       },
       setHighlight(h) {
-        v.highlight = h && ((h.nucleotides && h.nucleotides.length) || (h.pairs && h.pairs.length)) ? h : null;
+        v.highlight = h && (
+          (h.nucleotides && h.nucleotides.length) ||
+          (h.pairs && h.pairs.length) ||
+          (h.residues && h.residues.length)
+        ) ? h : null;
         v.recolor();
       },
       focus: (sel, o) => v.focus(sel, o),
+      setFollowTarget: spec => v.setFollowTarget(spec),
       setAnnotations: list => v.overlay.setAnnotations(list || []),
       setBlobs: list => v.overlay.setBlobs(list || []),
       /** Persistent framing hints for focus(null)/auto-framing: extra science-space points that must stay

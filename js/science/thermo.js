@@ -1,41 +1,70 @@
-// DNA duplex thermodynamics: unified nearest-neighbour model (SantaLucia 1998, PNAS 95,
-// 1460) and a nearest-neighbour helix-coil (zipper/Ising) model for per-base-pair opening.
+// Nucleic acid duplex thermodynamics:
+// - DNA: unified nearest-neighbour model (SantaLucia 1998, PNAS 95, 1460)
+// - RNA: Turner / Xia et al. (1998) nearest-neighbour model (Biochemistry 37, 14719)
+// Plus a nearest-neighbour helix-coil (zipper/Ising transfer-matrix) model for per-base-pair opening.
 const R = 1.98720425e-3;                       // gas constant, kcal mol^-1 K^-1
-// Stack 5'-XY-3' / 3'-X'Y'-5': [ΔH° kcal/mol, ΔS° cal/(mol·K)] at 1 M NaCl.
-const NN = {
+
+// DNA Stack 5'-XY-3' / 3'-X'Y'-5': [ΔH° kcal/mol, ΔS° cal/(mol·K)] at 1 M NaCl (SantaLucia 1998).
+export const DNA_NN = {
   AA: [-7.9, -22.2], TT: [-7.9, -22.2], AT: [-7.2, -20.4], TA: [-7.2, -21.3],
   CA: [-8.5, -22.7], TG: [-8.5, -22.7], GT: [-8.4, -22.4], AC: [-8.4, -22.4],
   CT: [-7.8, -21.0], AG: [-7.8, -21.0], GA: [-8.2, -22.2], TC: [-8.2, -22.2],
   CG: [-10.6, -27.2], GC: [-9.8, -24.4], GG: [-8.0, -19.9], CC: [-8.0, -19.9],
 };
+const NN = DNA_NN;
 const INIT_GC = [0.1, -2.8], INIT_AT = [2.3, 4.1], SYMMETRY_DS = -1.4;
-const comp = { A: 'T', T: 'A', G: 'C', C: 'G' };
-const isSelfComplementary = s => [...s].reverse().map(b => comp[b]).join('') === s;
+
+// RNA Stack 5'-XY-3' / 3'-X'Y'-5': [ΔH° kcal/mol, ΔS° cal/(mol·K)] at 1 M NaCl (Xia et al. 1998, Table 2).
+export const RNA_NN = {
+  AA: [-6.82, -19.0], UU: [-6.82, -19.0], AU: [-9.38, -26.7], UA: [-7.69, -20.5],
+  CA: [-10.44, -26.9], UG: [-10.44, -26.9], GU: [-11.40, -29.5], AC: [-11.40, -29.5],
+  CU: [-10.48, -27.1], AG: [-10.48, -27.1], GA: [-12.44, -32.5], UC: [-12.44, -32.5],
+  CG: [-10.64, -26.7], GC: [-14.88, -36.9], GG: [-13.39, -32.7], CC: [-13.39, -32.7],
+};
+// Xia et al. (1998) initiation [3.61, -1.5] split across two ends + terminal AU penalty [3.72, 10.5].
+const RNA_INIT_GC = [1.805, -0.75], RNA_INIT_AU = [5.525, 9.75];
+
+const compDna = { A: 'T', T: 'A', G: 'C', C: 'G' };
+const compRna = { A: 'U', U: 'A', G: 'C', C: 'G' };
+const isRnaMode = (seq, nucleicAcid) => nucleicAcid === 'rna' || (!nucleicAcid && seq.includes('U') && !seq.includes('T'));
+const normSeq = (seq, rna) => (seq || '').toUpperCase().replace(rna ? /T/g : /U/g, rna ? 'U' : 'T').replace(rna ? /[^ACGU]/g : /[^ACGT]/g, '');
+const isSelfComplementary = (s, rna) => {
+  const c = rna ? compRna : compDna;
+  return [...s].reverse().map(b => c[b]).join('') === s;
+};
 
 /** ΔH (kcal/mol) and ΔS (cal/mol/K, salt-corrected) of the stack between pairs k and k+1. */
-export function stackThermo(seq, k, Na = 1) {
-  const [h, s] = NN[seq[k] + seq[k + 1]];
+export function stackThermo(seq, k, Na = 1, nucleicAcid) {
+  const rna = isRnaMode(seq, nucleicAcid);
+  const sNorm = normSeq(seq, rna);
+  const table = rna ? RNA_NN : NN;
+  const [h, s] = table[sNorm[k] + sNorm[k + 1]];
   return { dH: h, dS: s + 0.368 * Math.log(Na) };
 }
 
 /**
  * Two-state duplex thermodynamics. seq: one strand 5'->3'. Na: monovalent cation (M).
- * Ct: total strand concentration (M). Returns ΔH° (kcal/mol), ΔS° (cal/mol/K), ΔG°37
- * (kcal/mol), Tm (°C), plus GC fraction.
+ * Ct: total strand concentration (M). nucleicAcid: 'dna' | 'rna'.
+ * Returns ΔH° (kcal/mol), ΔS° (cal/mol/K), ΔG°37 (kcal/mol), Tm (°C), plus GC fraction.
  */
-export function duplexThermo(seq, { Na = 1, Ct = 1e-6 } = {}) {
-  const n = seq.length;
-  if (n < 2) return { dH: 0, dS: 0, dG37: 0, Tm: NaN, gc: NaN, selfComplementary: false, length: n };
+export function duplexThermo(seq, { Na = 1, Ct = 1e-6, nucleicAcid } = {}) {
+  const rna = isRnaMode(seq, nucleicAcid);
+  const sNorm = normSeq(seq, rna);
+  const n = sNorm.length;
+  if (n < 2) return { dH: 0, dS: 0, dG37: 0, Tm: NaN, gc: NaN, selfComplementary: false, length: n, nucleicAcid: rna ? 'rna' : 'dna' };
+  const table = rna ? RNA_NN : NN;
+  const initGC = rna ? RNA_INIT_GC : INIT_GC;
+  const initAT = rna ? RNA_INIT_AU : INIT_AT;
   let dH = 0, dS = 0;
-  for (let k = 0; k + 1 < n; k++) { dH += NN[seq[k] + seq[k + 1]][0]; dS += NN[seq[k] + seq[k + 1]][1]; }
-  for (const end of [seq[0], seq[n - 1]]) { const t = 'GC'.includes(end) ? INIT_GC : INIT_AT; dH += t[0]; dS += t[1]; }
-  const self = isSelfComplementary(seq);
+  for (let k = 0; k + 1 < n; k++) { dH += table[sNorm[k] + sNorm[k + 1]][0]; dS += table[sNorm[k] + sNorm[k + 1]][1]; }
+  for (const end of [sNorm[0], sNorm[n - 1]]) { const t = 'GC'.includes(end) ? initGC : initAT; dH += t[0]; dS += t[1]; }
+  const self = isSelfComplementary(sNorm, rna);
   if (self) dS += SYMMETRY_DS;
-  dS += 0.368 * (n - 1) * Math.log(Na);        // SantaLucia salt correction (entropic)
+  dS += 0.368 * (n - 1) * Math.log(Na);        // monovalent cation entropic correction
   const x = self ? Ct : Ct / 4;
   const Tm = (dH * 1000) / (dS + R * 1000 * Math.log(x)) - 273.15;
-  const gc = [...seq].filter(b => b === 'G' || b === 'C').length / n;
-  return { dH, dS, dG37: dH - 310.15 * dS / 1000, Tm, gc, selfComplementary: self, length: n };
+  const gc = [...sNorm].filter(b => b === 'G' || b === 'C').length / n;
+  return { dH, dS, dG37: dH - 310.15 * dS / 1000, Tm, gc, selfComplementary: self, length: n, nucleicAcid: rna ? 'rna' : 'dna' };
 }
 
 /**
@@ -47,13 +76,17 @@ export function duplexThermo(seq, { Na = 1, Ct = 1e-6 } = {}) {
  * (forward-backward). Returns { closed: Float64Array per-pair probability of being paired,
  * duplex: fraction of molecules with at least one pair, paired: mean fraction of closed pairs }.
  */
-export function helixCoil(seq, T, { Na = 1, Ct = 1e-6, sigma = 1e-4 } = {}) {
-  const n = seq.length, TK = T + 273.15, RT = R * TK;
+export function helixCoil(seq, T, { Na = 1, Ct = 1e-6, sigma = 1e-4, nucleicAcid } = {}) {
+  const rna = isRnaMode(seq, nucleicAcid);
+  const sNorm = normSeq(seq, rna);
+  const n = sNorm.length, TK = T + 273.15, RT = R * TK;
   const s = new Float64Array(Math.max(n - 1, 0));
-  for (let k = 0; k + 1 < n; k++) { const { dH, dS } = stackThermo(seq, k, Na); s[k] = Math.exp(-(dH - TK * dS / 1000) / RT); }
-  const gcEnds = 'GC'.includes(seq[0]) + 'GC'.includes(seq[n - 1]);
-  const iH = gcEnds * INIT_GC[0] + (2 - gcEnds) * INIT_AT[0], iS = gcEnds * INIT_GC[1] + (2 - gcEnds) * INIT_AT[1];
-  const self = isSelfComplementary(seq);
+  for (let k = 0; k + 1 < n; k++) { const { dH, dS } = stackThermo(sNorm, k, Na, rna ? 'rna' : 'dna'); s[k] = Math.exp(-(dH - TK * dS / 1000) / RT); }
+  const initGC = rna ? RNA_INIT_GC : INIT_GC;
+  const initAT = rna ? RNA_INIT_AU : INIT_AT;
+  const gcEnds = 'GC'.includes(sNorm[0]) + 'GC'.includes(sNorm[n - 1]);
+  const iH = gcEnds * initGC[0] + (2 - gcEnds) * initAT[0], iS = gcEnds * initGC[1] + (2 - gcEnds) * initAT[1];
+  const self = isSelfComplementary(sNorm, rna);
   const kappa = (self ? Ct : Ct / 4) * Math.exp(-(iH - TK * (iS + (self ? SYMMETRY_DS : 0)) / 1000) / RT);
   // States per pair: 0 = open, no helix yet; 1 = closed; 2 = open, after a helix.
   const f = Array.from({ length: n }, () => [0, 0, 0]), b = Array.from({ length: n }, () => [0, 0, 0]);

@@ -149,7 +149,7 @@ export class CartoonLayer {
       const a = this.cpAtom[i];
       if (c1 < 0 || a < 0) { writeHidden(cm, i); continue; }
       let tx = pos[a * 3], ty = pos[a * 3 + 1], tz = pos[a * 3 + 2];
-      const strand = asm.strands[nu.strand], nextId = strand[nu.index + 1];
+      const strand = asm.strands[nu.strand] || [], nextId = strand[nu.index + 1];
       const nl = nextId !== undefined ? this.prevLink[nextId] : null;
       const b = nl && nl.active && nucScale[nextId] > 0.001 ? this.cpAtom[nextId] : this.o3Atom[i];
       if (b >= 0) { tx = (tx + pos[b * 3]) * 0.5; ty = (ty + pos[b * 3 + 1]) * 0.5; tz = (tz + pos[b * 3 + 2]) * 0.5; }

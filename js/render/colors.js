@@ -6,11 +6,20 @@ export const STRAND_HEX = [0x4cc9f0, 0xff9f5a, 0xb58cff, 0x5fe3a1, 0xffd35c, 0xf
 // Replication palette (strand index -> colour; matches the Copy-mode legend). Old (parental) strands share
 // one muted colour so the new strands stand out; RNA primers (nuc.tag === 'primer') get their own colour.
 export const REPLICATION_HEX = { parental: 0x9fb2dc, leading: 0x2fd9b9, lagging: 0xffa34d, primer: 0xff4fa3 };
+export const EXPRESSION_HEX = {
+  coding: 0x7c93c3,
+  template: 0x9fb2dc,
+  mrna: 0x2fd9b9,
+  trna: 0xffd43b,
+  peptide: 0xff7a45,
+};
 const REPL_STRAND = [REPLICATION_HEX.parental, REPLICATION_HEX.parental, REPLICATION_HEX.leading, REPLICATION_HEX.lagging];
 export const PART_HEX = [0x5fd0ff, 0xf0dfbd, 0xffa23a];          // base, sugar, phosphate
 export const PART_NAMES = ['Base', 'Sugar', 'Phosphate'];
+export const O2_PRIME_HEX = 0x00f5d4;                             // RNA 2'-OH oxygen accent in 'part' scheme
 const SUGAR_NEUTRAL = 0xaeb6c8, PHOS_NEUTRAL = 0xcdb894;
 const ELEMENT_HEX = ELEMENTS.map(e => ELEMENT_INFO[e].color);
+const baseColor = base => (BASE_INFO[base] || BASE_INFO.T || { color: 0xff8a3d }).color;
 
 const tmp = new THREE.Color();
 const set = (arr, i, hex) => { tmp.setHex(hex); arr[i * 3] = tmp.r; arr[i * 3 + 1] = tmp.g; arr[i * 3 + 2] = tmp.b; };
@@ -30,11 +39,13 @@ export class ColorModel {
   constructor(asm) {
     this.asm = asm;
     const N = asm.atoms.count, n = asm.nucleotides.length;
+    const nr = (asm.residues && asm.residues.length) || 0;
     this.atom = new Float32Array(N * 3);
     this.nucBase = new Float32Array(n * 3);     // cartoon slab colour
     this.nucBack = new Float32Array(n * 3);     // cartoon tube colour
     this.emph = new Float32Array(n).fill(1);    // 1 emphasised/normal, 0 dimmed
     this.pairEmph = new Float32Array(asm.pairs.length).fill(1);
+    this.resEmph = new Float32Array(nr).fill(1);
     this.highlightActive = false;
     // B-factor normalisation (5th..95th percentile so a few outliers do not flatten the ramp)
     const b = Array.from(asm.atoms.bfactor).filter(v => v > 0).sort((x, y) => x - y);
@@ -53,17 +64,35 @@ export class ColorModel {
     if (scheme === 'bfactor' && !this.hasB) scheme = 'element';
     const bt = v => (v - this.bLo) / Math.max(1e-3, this.bHi - this.bLo);
     const repl = asm.meta && asm.meta.kind === 'replication';
-    const strandHex = nu => (repl ? (nu.tag === 'primer' ? REPLICATION_HEX.primer : REPL_STRAND[nu.strand % 4]) : STRAND_HEX[nu.strand % STRAND_HEX.length]);
+    const expr = asm.meta && asm.meta.kind === 'expression';
+    const strandHex = nu => {
+      if (expr) {
+        if (nu.role === 'coding') return EXPRESSION_HEX.coding;
+        if (nu.role === 'template') return EXPRESSION_HEX.template;
+        if (nu.role === 'mrna') return EXPRESSION_HEX.mrna;
+        if (nu.role === 'trna') return EXPRESSION_HEX.trna;
+        return STRAND_HEX[nu.strand % STRAND_HEX.length];
+      }
+      if (repl) return nu.tag === 'primer' ? REPLICATION_HEX.primer : REPL_STRAND[nu.strand % 4];
+      return STRAND_HEX[nu.strand % STRAND_HEX.length];
+    };
+    const codonHex = nu => (nu.codon !== undefined && nu.codon >= 0 ? STRAND_HEX[nu.codon % STRAND_HEX.length] : strandHex(nu));
     for (let g = 0; g < N; g++) {
       const nu = asm.nucleotides[A.nuc[g]], part = A.part[g];
       switch (scheme) {
         case 'base':
-          set(this.atom, g, part === 0 ? BASE_INFO[nu.base].color : part === 1 ? SUGAR_NEUTRAL : PHOS_NEUTRAL); break;
+          set(this.atom, g, part === 0 ? baseColor(nu.base) : part === 1 ? SUGAR_NEUTRAL : PHOS_NEUTRAL); break;
         case 'strand':
           set(this.atom, g, strandHex(nu));
           if (part === 0) lerpWhite(this.atom, g, 0.35);
           break;
-        case 'part': set(this.atom, g, PART_HEX[part]); break;
+        case 'codon':
+          set(this.atom, g, codonHex(nu));
+          if (part === 0) lerpWhite(this.atom, g, 0.35);
+          break;
+        case 'part':
+          set(this.atom, g, A.names && A.names[g] === "O2'" ? O2_PRIME_HEX : PART_HEX[part]);
+          break;
         case 'bfactor': ramp(this.atom, g, bt(A.bfactor[g])); break;
         default: set(this.atom, g, ELEMENT_HEX[A.el[g]]);
       }
@@ -74,22 +103,29 @@ export class ColorModel {
         case 'strand':
           set(this.nucBack, i, strandHex(nu));
           set(this.nucBase, i, strandHex(nu)); lerpWhite(this.nucBase, i, 0.35); break;
+        case 'codon':
+          set(this.nucBack, i, codonHex(nu));
+          set(this.nucBase, i, codonHex(nu)); lerpWhite(this.nucBase, i, 0.35); break;
         case 'part': set(this.nucBack, i, PART_HEX[2]); set(this.nucBase, i, PART_HEX[0]); break;
         case 'bfactor': ramp(this.nucBack, i, bt(this.nucB[i])); ramp(this.nucBase, i, bt(this.nucB[i])); break;
-        case 'element': set(this.nucBack, i, ELEMENT_INFO.P.color); set(this.nucBase, i, BASE_INFO[nu.base].color); break;
-        default: set(this.nucBack, i, SUGAR_NEUTRAL); set(this.nucBase, i, BASE_INFO[nu.base].color);
+        case 'element': set(this.nucBack, i, ELEMENT_INFO.P.color); set(this.nucBase, i, baseColor(nu.base)); break;
+        default: set(this.nucBack, i, SUGAR_NEUTRAL); set(this.nucBase, i, baseColor(nu.base));
       }
     }
     // Highlight: emphasised nucleotides keep (slightly boosted) colour, the rest is desaturated + dimmed.
+    const nr = (asm.residues && asm.residues.length) || 0;
+    if (this.resEmph.length !== nr) this.resEmph = new Float32Array(nr);
     this.highlightActive = !!highlight;
     this.emph.fill(highlight ? 0 : 1);
     this.pairEmph.fill(highlight ? 0 : 1);
+    this.resEmph.fill(highlight ? 0 : 1);
     if (highlight) {
       for (const id of highlight.nucleotides || []) if (id >= 0 && id < this.emph.length) this.emph[id] = 1;
       for (const pid of highlight.pairs || []) {
         const p = asm.pairs[pid]; if (!p) continue;
         this.emph[p.a] = this.emph[p.b] = 1;
       }
+      for (const rid of highlight.residues || []) if (rid >= 0 && rid < this.resEmph.length) this.resEmph[rid] = 1;
       for (const p of asm.pairs) this.pairEmph[p.id] = this.emph[p.a] && this.emph[p.b] ? 1 : 0;
       for (let g = 0; g < N; g++) dimOrBoost(this.atom, g, this.emph[A.nuc[g]]);
       for (let i = 0; i < this.emph.length; i++) { dimOrBoost(this.nucBack, i, this.emph[i]); dimOrBoost(this.nucBase, i, this.emph[i]); }
@@ -98,7 +134,7 @@ export class ColorModel {
   }
 }
 
-function dimOrBoost(arr, i, e) {
+export function dimOrBoost(arr, i, e) {
   const o = i * 3, r = arr[o], g = arr[o + 1], b = arr[o + 2];
   if (e) { arr[o] = r * 1.12; arr[o + 1] = g * 1.12; arr[o + 2] = b * 1.12; return; }
   const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;

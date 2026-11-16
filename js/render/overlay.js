@@ -36,6 +36,7 @@ void main() {
 const blobFragment = /* glsl */`
 uniform vec3 uColor;
 uniform float uOpacity;
+uniform float uCutaway;
 varying vec3 vN;
 varying vec3 vV;
 void main() {
@@ -43,8 +44,10 @@ void main() {
   // keeps its own colours. Soft rim, faint core, feathered silhouette.
   float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
   float rim = pow(f, 1.7) * (1.0 - 0.7 * smoothstep(0.82, 1.0, f));
-  float a = clamp(uOpacity * (0.16 + rim * 1.25), 0.0, 1.0);
-  vec3 col = uColor * (0.6 + rim * 1.5);
+  float coreMask = 1.0 - 0.85 * uCutaway * (1.0 - smoothstep(0.42, 0.62, f));
+  float ring = uCutaway * 0.55 * exp(-pow((f - 0.55) / 0.065, 2.0));
+  float a = clamp(uOpacity * (0.16 * coreMask + rim * 1.25 + ring), 0.0, 1.0);
+  vec3 col = uColor * (0.6 + rim * 1.5 + ring * 1.9);
   gl_FragColor = vec4(col * a, 1.0);
 }`;
 
@@ -61,6 +64,7 @@ export class OverlayLayer {
     this.group = new THREE.Group(); this.group.name = 'overlay3d';
     parent.add(this.group);
     this.baseEls = [];
+    this.resEls = [];
     this.annots = new Map();
     this.blobs = new Map();
     this.blobGeo = new THREE.SphereGeometry(1, 48, 32);
@@ -69,13 +73,16 @@ export class OverlayLayer {
     this.lineMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.5, 1.0), fog: false });
     this.dotMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.9, 1.7, 1.1), fog: false });
     this.p = { x: 0, y: 0, z: 0, ok: false };
+    this._rotM = new THREE.Matrix4();
     this.time = 0;
   }
 
-  // ---------- base letters ----------
+  // ---------- base & residue letters ----------
   setAssembly(asm) {
     for (const e of this.baseEls) e.el.remove();
+    for (const e of this.resEls) e.el.remove();
     this.baseEls = [];
+    this.resEls = [];
     this.asm = asm;
     this.labelLocal = new Float32Array(asm.nucleotides.length * 3);
     for (const nu of asm.nucleotides) {
@@ -93,7 +100,8 @@ export class OverlayLayer {
       const el = document.createElement('div');
       el.className = 'hx-base';
       el.textContent = nu.base;
-      el.style.color = '#' + BASE_INFO[nu.base].color.toString(16).padStart(6, '0');
+      const col = (BASE_INFO[nu.base] || { color: 0xff8a3d }).color;
+      el.style.color = '#' + col.toString(16).padStart(6, '0');
       el.style.display = 'none';
       frag.appendChild(el);
       this.baseEls.push({ el, shown: false, last: '' });
@@ -101,8 +109,28 @@ export class OverlayLayer {
     this.el.appendChild(frag);
   }
 
+  ensureResEls() {
+    if (this.resEls.length || !this.asm || !this.asm.residues || !this.asm.residues.length) return;
+    const frag = document.createDocumentFragment();
+    for (const res of this.asm.residues) {
+      const el = document.createElement('div');
+      el.className = 'hx-base hx-res';
+      el.textContent = res.code3 || res.code1 || res.name || '';
+      const col = res.color ?? 0xff7a45;
+      el.style.color = '#' + col.toString(16).padStart(6, '0');
+      el.style.display = 'none';
+      frag.appendChild(el);
+      this.resEls.push({ el, shown: false, last: '' });
+    }
+    this.el.appendChild(frag);
+  }
+
   updateBaseLabels(on, nucScale, nucOff, ctx) {
-    if (!on || !this.asm) { for (const b of this.baseEls) if (b.shown) { b.el.style.display = 'none'; b.shown = false; } return; }
+    if (!on || !this.asm) {
+      for (const b of this.baseEls) if (b.shown) { b.el.style.display = 'none'; b.shown = false; }
+      for (const r of this.resEls) if (r.shown) { r.el.style.display = 'none'; r.shown = false; }
+      return;
+    }
     this.ensureBaseEls();
     const asm = this.asm, L = this.labelLocal, p = this.p;
     const n = asm.nucleotides.length;
@@ -128,6 +156,30 @@ export class OverlayLayer {
         }
       }
       if (show !== b.shown) { b.el.style.display = show ? '' : 'none'; b.shown = show; }
+    }
+    if (asm.residues && asm.residues.length) {
+      this.ensureResEls();
+      const resSize = clamp(pxPerA * 1.85, 10, 15);
+      const resDense = pxPerA * 3.8 < 9;
+      for (let i = 0; i < asm.residues.length; i++) {
+        const res = asm.residues[i], rEl = this.resEls[i];
+        if (!rEl) continue;
+        const opRes = !res || !res.visible ? 0 : clamp(res.opacity ?? 1, 0, 1);
+        let show = !resDense && opRes > 0.15 && !!res.pos;
+        if (show) {
+          this.project(res.pos[0], res.pos[1], res.pos[2], p);
+          show = p.ok;
+          if (show) {
+            const back = clamp((p.z - ctx.centerDepth) / 10, 0, 1);
+            const op = (1 - 0.65 * back) * opRes * (ctx.resEmph ? (ctx.resEmph[i] ? 1 : 0.25) : 1);
+            rEl.el.style.transform = `translate3d(${p.x.toFixed(1)}px,${p.y.toFixed(1)}px,0) translate(-50%,-50%)`;
+            rEl.el.style.opacity = op.toFixed(2);
+            const fs = resSize.toFixed(0) + 'px';
+            if (rEl.last !== fs) { rEl.el.style.fontSize = fs; rEl.last = fs; }
+          }
+        }
+        if (show !== rEl.shown) { rEl.el.style.display = show ? '' : 'none'; rEl.shown = show; }
+      }
     }
   }
 
@@ -207,7 +259,13 @@ export class OverlayLayer {
       let rec = this.blobs.get(id);
       if (!rec) {
         const mat = new THREE.ShaderMaterial({
-          uniforms: { uColor: { value: new THREE.Color() }, uOpacity: { value: 0.35 }, uTime: this.timeUniform || (this.timeUniform = { value: 0 }), uSeed: { value: Math.random() * 10 } },
+          uniforms: {
+            uColor: { value: new THREE.Color() },
+            uOpacity: { value: 0.35 },
+            uCutaway: { value: 0 },
+            uTime: this.timeUniform || (this.timeUniform = { value: 0 }),
+            uSeed: { value: Math.random() * 10 },
+          },
           vertexShader: blobVertex, fragmentShader: blobFragment, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.BackSide,
         });
         const mesh = new THREE.Mesh(this.blobGeo, mat);
@@ -220,8 +278,25 @@ export class OverlayLayer {
       const r = b.radius ?? 12;
       rec.mesh.position.set(...(b.pos || [0, 0, 0]));
       if (b.scale) rec.mesh.scale.set(r * b.scale[0], r * b.scale[1], r * b.scale[2]); else rec.mesh.scale.setScalar(r);
+      if (Array.isArray(b.rot)) {
+        if (b.rot.length === 9) {
+          const R = b.rot;
+          this._rotM.set(
+            R[0], R[1], R[2], 0,
+            R[3], R[4], R[5], 0,
+            R[6], R[7], R[8], 0,
+            0, 0, 0, 1
+          );
+          rec.mesh.quaternion.setFromRotationMatrix(this._rotM);
+        } else if (b.rot.length === 3) {
+          rec.mesh.rotation.set(b.rot[0], b.rot[1], b.rot[2]);
+        }
+      } else {
+        rec.mesh.quaternion.identity();
+      }
       rec.mat.uniforms.uColor.value.setHex(b.color ?? 0x7c5cff);
       rec.mat.uniforms.uOpacity.value = b.opacity ?? 0.35;
+      rec.mat.uniforms.uCutaway.value = b.cutaway ? (typeof b.cutaway === 'number' ? clamp(b.cutaway, 0, 1) : 1) : 0;
       rec.mesh.visible = b.visible !== false;
       rec.at.copy(rec.mesh.position); rec.radius = r * (b.scale ? Math.max(...b.scale) : 1);
       const text = b.label || '';

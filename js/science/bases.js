@@ -30,6 +30,11 @@ export const BASE_ATOMS = {
     ['O4', 'O', 1.944, 2.119], ['C5', 'C', 1.106, 4.338], ['C7', 'C', 2.466, 4.961],
     ['C6', 'C', -0.024, 5.057],
   ],
+  U: [
+    ["C1'", 'C', -2.481, 5.354], ['N1', 'N', -1.284, 4.500], ['C2', 'C', -1.462, 3.135],
+    ['O2', 'O', -2.562, 2.608], ['N3', 'N', -0.298, 2.407], ['C4', 'C', 0.994, 2.897],
+    ['O4', 'O', 1.944, 2.119], ['C5', 'C', 1.106, 4.338], ['C6', 'C', -0.024, 5.057],
+  ],
 };
 
 // Covalent bonds inside each base (plus the glycosidic bond to C1').
@@ -42,6 +47,8 @@ export const BASE_BONDS = {
       ['C4', 'C5'], ['C5', 'C6'], ['C6', 'N1']],
   T: [["C1'", 'N1'], ['N1', 'C2'], ['C2', 'O2'], ['C2', 'N3'], ['N3', 'C4'], ['C4', 'O4'],
       ['C4', 'C5'], ['C5', 'C7'], ['C5', 'C6'], ['C6', 'N1']],
+  U: [["C1'", 'N1'], ['N1', 'C2'], ['C2', 'O2'], ['C2', 'N3'], ['N3', 'C4'], ['C4', 'O4'],
+      ['C4', 'C5'], ['C5', 'C6'], ['C6', 'N1']],
 };
 
 // Sugar-phosphate backbone connectivity within one nucleotide.
@@ -50,15 +57,25 @@ export const BACKBONE_BONDS = [
   ["C4'", "C3'"], ["C3'", "O3'"], ["C3'", "C2'"], ["C2'", "C1'"], ["O4'", "C1'"],
 ];
 
-export const COMPLEMENT = { A: 'T', T: 'A', G: 'C', C: 'G' };
+export const BACKBONE_BONDS_RNA = [
+  ...BACKBONE_BONDS,
+  ["C2'", "O2'"],
+];
 
-// Watson-Crick hydrogen bonds, written [atom on first base, atom on partner, donor side].
+export const COMPLEMENT = { A: 'T', T: 'A', G: 'C', C: 'G', U: 'A' };
+export const COMPLEMENT_RNA = { A: 'U', U: 'A', G: 'C', C: 'G', T: 'A' };
+
+// Watson-Crick and G·U wobble hydrogen bonds, written [atom on first base, atom on partner, donor side].
 // donor: 0 = the first base donates the H, 1 = the partner donates.
 export const WC_HBONDS = {
   AT: [['N6', 'O4', 0], ['N1', 'N3', 1]],
   TA: [['O4', 'N6', 1], ['N3', 'N1', 0]],
+  AU: [['N6', 'O4', 0], ['N1', 'N3', 1]],
+  UA: [['O4', 'N6', 1], ['N3', 'N1', 0]],
   GC: [['O6', 'N4', 1], ['N1', 'N3', 0], ['N2', 'O2', 0]],
   CG: [['N4', 'O6', 0], ['N3', 'N1', 1], ['O2', 'N2', 1]],
+  GU: [['O6', 'N3', 1], ['N1', 'O2', 0]],
+  UG: [['N3', 'O6', 0], ['O2', 'N1', 1]],
 };
 
 // Groove-edge chemistry used for sequence read-out by proteins (Seeman, Rosenberg &
@@ -70,8 +87,8 @@ export const WC_HBONDS = {
 // The major groove gives four distinct patterns (one per pair orientation); the minor
 // groove cannot tell A·T from T·A or G·C from C·G.
 export const GROOVE_PATTERN = {
-  major: { AT: 'ADAM', TA: 'MADA', GC: 'AADH', CG: 'HDAA' },
-  minor: { AT: 'AHA', TA: 'AHA', GC: 'ADA', CG: 'ADA' },
+  major: { AT: 'ADAM', TA: 'MADA', AU: 'ADAH', UA: 'HADA', GC: 'AADH', CG: 'HDAA', GU: 'AADA', UG: 'ADAA' },
+  minor: { AT: 'AHA', TA: 'AHA', AU: 'AHA', UA: 'AHA', GC: 'ADA', CG: 'ADA', GU: 'ADA', UG: 'ADA' },
 };
 
 export const ELEMENT_INFO = {
@@ -84,6 +101,7 @@ export const ELEMENT_INFO = {
 export const BASE_INFO = {
   A: { name: 'Adenine', kind: 'purine', formula: 'C5H5N5', color: 0x3fd67a },
   T: { name: 'Thymine', kind: 'pyrimidine', formula: 'C5H6N2O2', color: 0xff5964 },
+  U: { name: 'Uracil', kind: 'pyrimidine', formula: 'C4H4N2O2', color: 0xff8a3d },
   G: { name: 'Guanine', kind: 'purine', formula: 'C5H5N5O', color: 0xffc233 },
   C: { name: 'Cytosine', kind: 'pyrimidine', formula: 'C4H5N3O', color: 0x38a8ff },
 };

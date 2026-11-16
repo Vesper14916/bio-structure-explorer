@@ -2,11 +2,12 @@
 // hydrogen-bond beads and crystal waters. All instance buffers are updated in place.
 import * as THREE from 'three';
 import { ELEMENTS, ELEMENT_INFO } from '../science/index.js';
-import { writeSphere, writeCylinder, writeHidden, smoothstep, sphereGeometry, cylinderGeometry } from './util.js';
+import { dimOrBoost, EXPRESSION_HEX } from './colors.js';
+import { writeSphere, writeCylinder, writeHidden, smoothstep, clamp, sphereGeometry, cylinderGeometry } from './util.js';
 
 const BEADS = 7;
 const VDW = ELEMENTS.map(e => ELEMENT_INFO[e].vdw);
-export const BALL_SCALE = 0.3, BOND_RADIUS = 0.17;
+export const BALL_SCALE = 0.3, BOND_RADIUS = 0.17, PEPTIDE_BOND_RADIUS = 0.42;
 
 const beadVertex = /* glsl */`
 #include <common>
@@ -51,6 +52,7 @@ export class MoleculeLayer {
     this.tier = tier;
     this.atomMat = new THREE.MeshStandardMaterial({ roughness: 0.32, metalness: 0.06, envMapIntensity: 1.0 });
     this.bondMat = new THREE.MeshStandardMaterial({ roughness: 0.42, metalness: 0.05, envMapIntensity: 0.9 });
+    this.residueMat = new THREE.MeshStandardMaterial({ roughness: 0.24, metalness: 0.12, envMapIntensity: 1.15 });
     this.waterMat = new THREE.MeshStandardMaterial({
       color: 0x8fd8ff, roughness: 0.2, metalness: 0, transparent: true, opacity: 0.26, depthWrite: false, envMapIntensity: 0.8,
     });
@@ -64,6 +66,7 @@ export class MoleculeLayer {
     this.sphereGeo = sphereGeometry(tier);
     this.cylGeo = cylinderGeometry(tier);
     this.asm = null;
+    this._tmpColor = new THREE.Color();
   }
 
   setTier(tier) {
@@ -73,18 +76,20 @@ export class MoleculeLayer {
     if (this.atoms) this.atoms.geometry = s;
     if (this.bonds) this.bonds.geometry = c;
     if (this.waters) this.waters.geometry = s;
+    if (this.residuesMesh) this.residuesMesh.geometry = s;
+    if (this.peptideBonds) this.peptideBonds.geometry = c;
     this.sphereGeo.dispose(); this.cylGeo.dispose();
     this.sphereGeo = s; this.cylGeo = c;
   }
 
   clear() {
-    for (const m of [this.atoms, this.bonds, this.beads, this.waters]) {
+    for (const m of [this.atoms, this.bonds, this.beads, this.waters, this.residuesMesh, this.peptideBonds]) {
       if (!m) continue;
       this.group.remove(m);
       if (m === this.beads) m.geometry.dispose();
       m.dispose();
     }
-    this.atoms = this.bonds = this.beads = this.waters = null;
+    this.atoms = this.bonds = this.beads = this.waters = this.residuesMesh = this.peptideBonds = null;
   }
 
   setAssembly(asm) {
@@ -124,6 +129,14 @@ export class MoleculeLayer {
       this.waters = mk(this.sphereGeo, this.waterMat, asm.waters.count);
       this.waters.renderOrder = 1;
     }
+
+    if (asm.residues && asm.residues.length > 0) {
+      const nr = asm.residues.length;
+      this.residuesMesh = mk(this.sphereGeo, this.residueMat, nr);
+      this.residuesMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, nr) * 3), 3);
+      this.peptideBonds = mk(this.cylGeo, this.residueMat, nr);
+      this.peptideBonds.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, nr) * 3), 3);
+    }
   }
 
   recolor(colors) {
@@ -137,6 +150,32 @@ export class MoleculeLayer {
     for (let l = 0; l < asm.links.length; l++) { const L = asm.links[l]; cp(bc, 2 * (nb + l), L.a); cp(bc, 2 * (nb + l) + 1, L.b); }
     this.bonds.instanceColor.needsUpdate = true;
     this.pairEmph = colors.pairEmph;
+    this.resEmph = colors.resEmph;
+    this.recolorResidues(colors.highlightActive);
+  }
+
+  recolorResidues(highlightActive) {
+    const asm = this.asm;
+    if (!asm || !this.residuesMesh || !asm.residues || !asm.residues.length) return;
+    const R = asm.residues, nr = R.length;
+    const rc = this.residuesMesh.instanceColor.array, pc = this.peptideBonds.instanceColor.array;
+    const c = this._tmpColor;
+    for (let i = 0; i < nr; i++) {
+      c.setHex(R[i].color ?? EXPRESSION_HEX.peptide);
+      rc[i * 3] = c.r; rc[i * 3 + 1] = c.g; rc[i * 3 + 2] = c.b;
+      if (highlightActive && this.resEmph && i < this.resEmph.length) dimOrBoost(rc, i, this.resEmph[i]);
+    }
+    for (let i = 0; i < nr; i++) {
+      if (i === 0) {
+        pc[0] = rc[0]; pc[1] = rc[1]; pc[2] = rc[2];
+      } else {
+        pc[i * 3] = (rc[(i - 1) * 3] + rc[i * 3]) * 0.5;
+        pc[i * 3 + 1] = (rc[(i - 1) * 3 + 1] + rc[i * 3 + 1]) * 0.5;
+        pc[i * 3 + 2] = (rc[(i - 1) * 3 + 2] + rc[i * 3 + 2]) * 0.5;
+      }
+    }
+    this.residuesMesh.instanceColor.needsUpdate = true;
+    this.peptideBonds.instanceColor.needsUpdate = true;
   }
 
   /**
@@ -170,6 +209,38 @@ export class MoleculeLayer {
         this.halfBond(m, nb + l, pos, L.a, L.b, s);
       }
       this.bonds.instanceMatrix.needsUpdate = true;
+    }
+    // Nascent polypeptide chain (always visible across ballstick, spacefill, and cartoon)
+    if (this.residuesMesh && asm.residues && asm.residues.length > 0) {
+      this.residuesMesh.visible = true;
+      this.peptideBonds.visible = true;
+      const R = asm.residues, nr = R.length;
+      const rm = this.residuesMesh.instanceMatrix.array, pm = this.peptideBonds.instanceMatrix.array;
+      writeHidden(pm, 0);
+      for (let i = 0; i < nr; i++) {
+        const res = R[i];
+        const op = !res || !res.visible ? 0 : clamp(res.opacity ?? 1, 0, 1);
+        if (op <= 0.001 || !res.pos) {
+          writeHidden(rm, i);
+          if (i > 0) writeHidden(pm, i);
+          continue;
+        }
+        const r = (res.radius || 1.85) * op;
+        writeSphere(rm, i, res.pos[0], res.pos[1], res.pos[2], r);
+        if (i > 0) {
+          const prev = R[i - 1];
+          const prevOp = !prev || !prev.visible ? 0 : clamp(prev.opacity ?? 1, 0, 1);
+          if (res.peptideBondActive && res.visible && prev && prev.visible && prevOp > 0.001 && prev.pos) {
+            const bs = Math.min(op, prevOp);
+            writeCylinder(pm, i, prev.pos[0], prev.pos[1], prev.pos[2], res.pos[0], res.pos[1], res.pos[2], PEPTIDE_BOND_RADIUS * bs);
+          } else {
+            writeHidden(pm, i);
+          }
+        }
+      }
+      this.residuesMesh.instanceMatrix.needsUpdate = true;
+      this.peptideBonds.instanceMatrix.needsUpdate = true;
+      this.recolorResidues(highlightActive);
     }
     // Hydrogen bonds
     this.beads.visible = !!style.hbonds && this.nHb > 0;
@@ -223,7 +294,7 @@ export class MoleculeLayer {
 
   dispose() {
     this.clear();
-    this.atomMat.dispose(); this.bondMat.dispose(); this.waterMat.dispose(); this.beadMat.dispose();
+    this.atomMat.dispose(); this.bondMat.dispose(); this.residueMat.dispose(); this.waterMat.dispose(); this.beadMat.dispose();
     this.sphereGeo.dispose(); this.cylGeo.dispose();
     this.group.removeFromParent();
   }
