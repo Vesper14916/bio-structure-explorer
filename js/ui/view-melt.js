@@ -119,8 +119,28 @@ export function createMeltView(ctx) {
     fp: stat({ label: 'Pairs intact', unit: '%' }),
   };
 
+  const headSub = h('p', {}, 'Raise the temperature until the two strands come apart.');
+  const explainBody = h('p', {}, 'Each base pair is either closed or open. Closed neighbours gain a stacking free energy from the nearest-neighbour parameters of SantaLucia (1998), corrected for sodium concentration; that helix–coil equilibrium is solved exactly at every temperature. AT-rich stretches and the ends have the weakest stacks, so they open first, and the midpoint Tm shifts with GC content, length and salt.');
+
+  let nucleicAcid = 'dna';
+  function setNucleicAcid(na) {
+    const next = na === 'rna' ? 'rna' : 'dna';
+    if (next === nucleicAcid) return;
+    nucleicAcid = next;
+    setText(headSub, next === 'rna'
+      ? 'Raise the temperature of the A-RNA duplex. 2′-OH hydration and A-form base stacking shift Tm upward.'
+      : 'Raise the temperature until the two strands come apart.');
+    setText(explainBody, next === 'rna'
+      ? 'Each RNA base pair is either closed or open. Closed neighbours gain stacking free energy from the RNA nearest-neighbour parameters of Xia et al. (1998) / Turner & Mathews (2010), corrected for sodium concentration. Because A-form base stacking and 2′-OH hydration stabilize the duplex, an A-RNA duplex melts at a significantly higher Tm than B-DNA of the same sequence.'
+      : 'Each base pair is either closed or open. Closed neighbours gain a stacking free energy from the nearest-neighbour parameters of SantaLucia (1998), corrected for sodium concentration; that helix–coil equilibrium is solved exactly at every temperature. AT-rich stretches and the ends have the weakest stacks, so they open first, and the midpoint Tm shifts with GC content, length and salt.');
+    if (seq) {
+      seq = next === 'rna' ? seq.replace(/T/g, 'U') : seq.replace(/U/g, 'T');
+      if (fills.length === seq.length) buildStrip(seq.length);
+    }
+  }
+
   const el = h('section', { class: 'view', id: 'view-melt', 'aria-labelledby': 'tab-melt', role: 'tabpanel', hidden: true },
-    h('header', { class: 'view-head' }, h('h2', {}, 'Melt the duplex'), h('p', {}, 'Raise the temperature until the two strands come apart.')),
+    h('header', { class: 'view-head' }, h('h2', {}, 'Melt the duplex'), headSub),
     peek,
     h('div', { class: 'group' }, sectionLabel('Sodium [Na⁺]'), salt.el),
     h('div', { class: 'card' },
@@ -133,12 +153,13 @@ export function createMeltView(ctx) {
     h('div', { class: 'stats stats-2' }, Object.values(R).map(x => x.el)),
     h('div', { class: 'explain' },
       h('h3', { class: 'label' }, 'What is modelled'),
-      h('p', {}, 'Each base pair is either closed or open. Closed neighbours gain a stacking free energy from the nearest-neighbour parameters of SantaLucia (1998), corrected for sodium concentration; that helix–coil equilibrium is solved exactly at every temperature. AT-rich stretches and the ends have the weakest stacks, so they open first, and the midpoint Tm shifts with GC content, length and salt.')));
+      explainBody));
 
   buildStrip(0);
 
   function setMeltState(m) {
     if (!m) return;
+    if ('nucleicAcid' in m && m.nucleicAcid) setNucleicAcid(m.nucleicAcid);
     if ('Na' in m && m.Na !== st.Na) { st.Na = m.Na; salt.set(m.Na); }
     if ('T' in m && m.T !== st.T) {
       st.T = m.T; setText(tText, m.T.toFixed(1));
@@ -160,8 +181,8 @@ export function createMeltView(ctx) {
   }
 
   return {
-    el, setMeltState,
+    el, setMeltState, setNucleicAcid,
     setSequence(sq) { seq = sq || ''; if (fills.length === seq.length) { buildStrip(seq.length); } },
-    getState: () => ({ T: st.T, Na: st.Na }),
+    getState: () => ({ T: st.T, Na: st.Na, nucleicAcid }),
   };
 }

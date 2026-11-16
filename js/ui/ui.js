@@ -85,6 +85,7 @@ import { createStructureView } from './view-structure.js';
 import { createPairView } from './view-pair.js';
 import { createMeltView } from './view-melt.js';
 import { createReplicateView } from './view-replicate.js';
+import { createExpressView } from './view-express.js';
 import { createCrystalView } from './view-crystal.js';
 
 export { pairPayload, meltStatic, meltDynamic, meltPhase } from './payloads.js';
@@ -94,10 +95,14 @@ export const MODES = [
   { id: 'pair', label: 'Pairs', title: 'Base pair', icon: 'pairs' },
   { id: 'melt', label: 'Melt', title: 'Melting', icon: 'melt' },
   { id: 'replicate', label: 'Copy', title: 'Replication', icon: 'replicate' },
+  { id: 'express', label: 'Express', title: 'Gene expression', icon: 'express' },
   { id: 'crystal', label: 'X-ray', title: 'Crystal structure', icon: 'xray' },
 ];
 const NOOP = () => {};
-const HANDLER_NAMES = ['onMode', 'onStyle', 'onSequence', 'onSelectPair', 'onMeasureToggle', 'onMelt', 'onReplication', 'onCrystal', 'onLayout', 'onAbout'];
+const HANDLER_NAMES = [
+  'onMode', 'onNucleicAcid', 'onStyle', 'onSequence', 'onSelectPair', 'onMeasureToggle',
+  'onMelt', 'onReplication', 'onExpression', 'onCrystal', 'onLayout', 'onAbout',
+];
 const HINT_KEY = 'helix.hint.v1';
 
 export function createUI(root, handlers = {}) {
@@ -108,7 +113,10 @@ export function createUI(root, handlers = {}) {
   let mobile = mq.matches, mode = 'structure', collapsed = false, destroyed = false;
 
   // colours from the science layer
-  const colors = {}; for (const k of Object.keys(BASE_INFO)) { colors[k] = hex(BASE_INFO[k].color); root.style.setProperty(`--base-${k}`, colors[k]); }
+  const colors = { U: '#ff8a3d' };
+  for (const k of Object.keys(BASE_INFO)) { colors[k] = hex(BASE_INFO[k].color); root.style.setProperty(`--base-${k}`, colors[k]); }
+  if (!colors.U) colors.U = '#ff8a3d';
+  root.style.setProperty('--base-U', colors.U);
   const ctx = { H, col: b => colors[b] || 'var(--text-2)', mode: () => mode };
 
   root.classList.add('ui-root'); root.replaceChildren();
@@ -116,7 +124,7 @@ export function createUI(root, handlers = {}) {
   // ---- views ------------------------------------------------------------------------------------
   const views = {
     structure: createStructureView(ctx), pair: createPairView(ctx), melt: createMeltView(ctx),
-    replicate: createReplicateView(ctx), crystal: createCrystalView(ctx),
+    replicate: createReplicateView(ctx), express: createExpressView(ctx), crystal: createCrystalView(ctx),
   };
   ctx.onColourPicked = () => views.crystal.setToggles({ bfactor: false });
 
@@ -124,7 +132,7 @@ export function createUI(root, handlers = {}) {
   const aboutBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'About, references and shortcuts', onclick: () => openAbout() }, icon('info', 20));
   const logo = h('span', { class: 'logo' }); logo.innerHTML = LOGO_SVG;
   const header = h('header', { class: 'app-header' },
-    logo, h('div', { class: 'brand' }, h('h1', {}, 'Helix'), h('p', {}, 'Interactive DNA structure explorer')), aboutBtn);
+    logo, h('div', { class: 'brand' }, h('h1', {}, 'Helix'), h('p', {}, 'Interactive DNA & RNA structure explorer')), aboutBtn);
 
   function makeTabs(prefix, cls) {
     const list = h('div', { class: cls, role: 'tablist', 'aria-label': 'Mode' });
@@ -233,21 +241,25 @@ export function createUI(root, handlers = {}) {
     const t = e.target;
     if (t.closest && t.closest('input[type="text"], textarea, select, [contenteditable]')) return;
     const k = e.key;
-    if (k >= '1' && k <= '5') { userMode(MODES[+k - 1].id); e.preventDefault(); return; }
+    if (k >= '1' && k <= '6' && MODES[+k - 1]) { userMode(MODES[+k - 1].id); e.preventDefault(); return; }
     if (k === 'h' || k === 'H') { if (!mobile) { setPanelOpen(collapsed); e.preventDefault(); } return; }
     if (k === '?') { openAbout(); e.preventDefault(); return; }
-    if (k === ' ' && mode === 'replicate') {
+    if (k === ' ' && (mode === 'replicate' || mode === 'express')) {
       if (t.closest && t.closest('button:not([role="tab"]), a, [role="radio"]')) return;
-      views.replicate.togglePlay(); e.preventDefault(); return;
+      views[mode].togglePlay(); e.preventDefault(); return;
     }
     if ((k === 'ArrowLeft' || k === 'ArrowRight') && mode === 'pair') {
       if (t.closest && t.closest('input[type="range"], [role="radio"], [role="tab"]')) return;
-      views.pair.step(k === 'ArrowRight' ? 1 : -1); e.preventDefault();
+      views.pair.step(k === 'ArrowRight' ? 1 : -1); e.preventDefault(); return;
+    }
+    if ((k === 'ArrowLeft' || k === 'ArrowRight') && mode === 'express') {
+      if (t.closest && t.closest('input[type="range"], [role="radio"], [role="tab"]')) return;
+      views.express.stepCodon?.(k === 'ArrowRight' ? 1 : -1); e.preventDefault();
     }
   }
   doc.addEventListener('keydown', onKey);
   // Space on a focused tab would otherwise "click" it on keyup; we use Space for play/pause instead.
-  const onKeyUp = e => { if (e.key === ' ' && mode === 'replicate' && e.target.closest && e.target.closest('[role="tab"]')) e.preventDefault(); };
+  const onKeyUp = e => { if (e.key === ' ' && (mode === 'replicate' || mode === 'express') && e.target.closest && e.target.closest('[role="tab"]')) e.preventDefault(); };
   doc.addEventListener('keyup', onKeyUp);
 
   // ---- responsive + keyboard (visualViewport) ----------------------------------------------------
@@ -300,6 +312,11 @@ export function createUI(root, handlers = {}) {
       loading.classList.toggle('is-off', !on);
       if (!on) { setTimeout(() => showHint(), 700); root.classList.add('is-ready'); }
     },
+    setNucleicAcid(na) {
+      views.structure.setNucleicAcid?.(na);
+      views.pair.setNucleicAcid?.(na);
+      views.melt.setNucleicAcid?.(na);
+    },
     setSequence(seq) { views.structure.setSequence(seq); views.pair.setSequence(seq); views.melt.setSequence(seq); },
     setStyle(st) {
       if (!st) return;
@@ -313,6 +330,8 @@ export function createUI(root, handlers = {}) {
     setMeltState: s => views.melt.setMeltState(s),
     setReplicationState: s => views.replicate.setState(s),
     setReplicationLegend: i => views.replicate.setLegend(i),
+    setExpressState: s => views.express.setState(s),
+    setExpressLegend: i => views.express.setLegend(i),
     setCrystalInfo: i => views.crystal.setInfo(i),
     setCompare: c => views.crystal.setCompare(c),
     toast(message) {

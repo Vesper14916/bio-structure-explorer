@@ -4,6 +4,7 @@ const P = {
   pairs: '<circle cx="5.5" cy="12" r="3"/><circle cx="18.5" cy="12" r="3"/><path d="M10 9.6h4M10 12h4M10 14.4h4"/>',
   melt: '<path d="M10 14.2V5.5a2 2 0 0 1 4 0v8.7a4 4 0 1 1-4 0z"/><path d="M12 9.5v6"/><path d="M17.5 5.5h2.5M17.5 9h2.5"/>',
   replicate: '<path d="M12 21v-6.5"/><path d="M12 14.5 6.2 8.6M12 14.5l5.8-5.9"/><path d="M6 4.5v4.6h4.6M18 4.5v4.6h-4.6"/>',
+  express: '<path d="M3 16c3-3 6 3 9 0s6-3 9 0"/><ellipse cx="12" cy="14" rx="5.5" ry="3.5"/><path d="M12 10.5V8"/><circle cx="12" cy="6.2" r="1.4"/><circle cx="15.2" cy="4.4" r="1.3"/><circle cx="18.5" cy="3.5" r="1.2"/>',
   xray: '<circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="4.6" r="1.1"/><circle cx="12" cy="19.4" r="1.1"/><circle cx="5.6" cy="8.3" r="1.1"/><circle cx="18.4" cy="8.3" r="1.1"/><circle cx="5.6" cy="15.7" r="1.1"/><circle cx="18.4" cy="15.7" r="1.1"/><circle cx="12" cy="12" r="5.2" stroke-dasharray="1.5 2.2"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><circle cx="12" cy="7.7" r=".6" fill="currentColor"/>',
   play: '<path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/>',
@@ -18,6 +19,8 @@ const P = {
   eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
   flask: '<path d="M9.5 3.5h5M10.5 3.5v6L5 19a1.5 1.5 0 0 0 1.3 2.2h11.4A1.5 1.5 0 0 0 19 19l-5.5-9.5v-6"/>',
   drop: '<path d="M12 3.5s6 6.4 6 10.3a6 6 0 0 1-12 0c0-3.900 6-10.300 6-10.300z"/>',
+  camera: '<path d="M4 8h3l1.8-2.2h6.4L17 8h3a1.5 1.5 0 0 1 1.5 1.5v8.5A1.5 1.5 0 0 1 20 19.5H4A1.5 1.5 0 0 1 2.5 18V9.5A1.5 1.5 0 0 1 4 8z"/><circle cx="12" cy="13.5" r="3.2"/>',
+  cutaway: '<circle cx="12" cy="12" r="8"/><path d="M12 4v8h8" stroke-dasharray="2 2"/>',
 };
 export function icon(name, size = 22) {
   const t = document.createElement('template');

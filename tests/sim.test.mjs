@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import * as S from '../js/science/index.js';
 import { createMeltSim } from '../js/sim/melt.js';
 import { createReplicationSim } from '../js/sim/replication.js';
+import { createExpressionSim } from '../js/sim/expression.js';
 import { orthoError, mulberry32, slerpMat, quatToMat, matToQuat, orthonormalize } from '../js/sim/util.js';
 
 const SEQ_MELT = 'GCGCGCGCATATATATGCGCGCGC';          // GC arms around an AT island, Tm ≈ 74 °C at 0.1 M Na+
@@ -473,3 +474,142 @@ test('replication: other lengths work (12-mer and 60-mer): duration scales, geom
   for (let i = 0; i <= 60; i++) { s60.seek(i / 60); assert.ok(allFinite(A.atoms.pos)); }
   assert.throws(() => createReplicationSim('AC'));
 });
+
+// ================================================================================== gene expression
+function expSnapshot(sim) {
+  const A = sim.assembly;
+  return {
+    pos: Float32Array.from(A.atoms.pos),
+    vis: A.nucleotides.map(x => x.visible),
+    op: A.nucleotides.map(x => x.opacity),
+    link: A.links.map(l => l.active),
+    str: A.pairs.map(p => p.strength),
+    resPos: A.residues.map(r => r.pos.slice()),
+    resVis: A.residues.map(r => r.visible),
+    resOp: A.residues.map(r => r.opacity),
+    resBond: A.residues.map(r => r.peptideBondActive),
+    blobs: JSON.stringify(sim.blobs),
+    caption: sim.state.caption,
+    phase: sim.state.phase,
+  };
+}
+
+test('expression: API shape, 48-bp DNA + 44-nt ribose mRNA (O2′ & U present) + 33-nt tRNA + 11 residues (fMet-A-E-F-K-G-S-D-Y-Q-A)', () => {
+  const sim = createExpressionSim({ seed: 1 });
+  const A = sim.assembly;
+
+  for (const f of ['update', 'seek', 'play', 'pause', 'dispose', 'setSpeed', 'setCutaway', 'setCameraMode', 'focusTargetFor']) {
+    assert.equal(typeof sim[f], 'function', f);
+  }
+  assert.ok(sim.duration > 35 && sim.duration < 60, `duration ${sim.duration}`);
+  assert.equal(sim.playing, false);
+  assert.ok(Array.isArray(sim.blobs));
+
+  // Strands: 0 = coding DNA (48), 1 = template DNA (48), 2 = mRNA (44), 3 = tRNA anticodons (33)
+  assert.equal(A.strands.length, 4);
+  assert.deepEqual(A.strands.map(s => s.length), [48, 48, 44, 33]);
+  assert.equal(A.nucleotides.length, 48 + 48 + 44 + 33);
+
+  // Verify DNA nucleotides use deoxyribose (no O2') and RNA nucleotides use ribose (with O2') and include Uracil (U)
+  const mrnaNucs = A.strands[2].map(id => A.nucleotides[id]);
+  const trnaNucs = A.strands[3].map(id => A.nucleotides[id]);
+  assert.ok(mrnaNucs.some(nu => nu.base === 'U'), 'mRNA contains Uracil (U)');
+  for (const nu of mrnaNucs) {
+    assert.equal(nu.sugar, 'ribose');
+    assert.equal(nu.role, 'mrna');
+    assert.ok(A.atomOf(nu.id, "O2'") >= 0, `mRNA nucleotide ${nu.id} has 2′-OH O2' atom`);
+  }
+  for (const nu of trnaNucs) {
+    assert.equal(nu.sugar, 'ribose');
+    assert.equal(nu.role, 'trna');
+    assert.ok(A.atomOf(nu.id, "O2'") >= 0, `tRNA nucleotide ${nu.id} has 2′-OH O2' atom`);
+  }
+  for (const id of A.strands[0]) {
+    assert.equal(A.nucleotides[id].sugar, 'deoxyribose');
+    assert.equal(A.atomOf(id, "O2'"), -1, 'DNA nucleotide lacks O2′');
+  }
+
+  // Verify 11 nascent polypeptide residues (fMet-A-E-F-K-G-S-D-Y-Q-A) and 12 codons (0..10 sense, 11 UAA stop)
+  assert.equal(A.residues.length, 11);
+  assert.equal(sim.state.construct.codons.length, 12);
+  assert.equal(sim.state.construct.peptideSeq, 'fMet-A-E-F-K-G-S-D-Y-Q-A');
+  assert.equal(A.residues[0].code3, 'fMet');
+  assert.equal(A.residues[0].kind, 'initiator');
+  assert.equal(sim.state.construct.codons[11].triplet, 'UAA');
+  assert.equal(sim.state.construct.codons[11].isStop, true);
+});
+
+test('expression: seek(p) is a pure deterministic function of time across forward and backward scrubbing', () => {
+  const sim = createExpressionSim({ seed: 7 });
+
+  sim.seek(0.75);
+  const snap75 = expSnapshot(sim);
+
+  sim.seek(0.25);
+  const snap25a = expSnapshot(sim);
+
+  sim.seek(0.95);
+  const snap95 = expSnapshot(sim);
+
+  sim.seek(0.25);
+  const snap25b = expSnapshot(sim);
+
+  assert.notDeepEqual(Array.from(snap25a.pos), Array.from(snap75.pos));
+  assert.notDeepEqual(Array.from(snap25a.pos), Array.from(snap95.pos));
+
+  // Bit-identical Float32Array atom coordinates and residue positions at p = 0.25
+  assert.deepEqual(Array.from(snap25a.pos), Array.from(snap25b.pos));
+  assert.deepEqual(snap25a.resPos, snap25b.resPos);
+  for (const k of ['vis', 'op', 'link', 'str', 'resVis', 'resOp', 'resBond', 'blobs', 'caption', 'phase']) {
+    assert.deepEqual(snap25a[k], snap25b[k], `field ${k} matches identically after scrubbing`);
+  }
+
+  // Also check 120 samples across [0, 1] for finite coordinates and orthonormal frames
+  for (let i = 0; i <= 120; i++) {
+    sim.seek(i / 120);
+    assert.ok(allFinite(sim.assembly.atoms.pos), `finite atoms at sample ${i}`);
+    assert.ok(maxOrtho(sim.assembly) < 1e-6, `orthonormal frames at sample ${i}`);
+    for (const r of sim.assembly.residues) assert.ok(allFinite(r.pos));
+  }
+});
+
+test('expression: biological invariants — parental DNA re-closes behind RNAP, fMet is residue 0, and UAA stop codon recruits RF1 without adding a 12th residue', () => {
+  const sim = createExpressionSim({ seed: 1 });
+  const A = sim.assembly;
+
+  // 1. Mid-transcription (progress = 0.25): local bubble is open around RNAP, while upstream promoter DNA has re-closed
+  sim.seek(0.25);
+  assert.equal(sim.state.phase, 'transcription');
+  assert.ok(sim.state.bubbleOpen >= 6 && sim.state.bubbleOpen <= 14, `local bubble open (${sim.state.bubbleOpen} bp)`);
+  assert.ok(sim.state.hybridCount >= 4 && sim.state.hybridCount <= 10, `RNA·DNA hybrid (${sim.state.hybridCount} bp)`);
+  assert.equal(A.pairs[0].strength, 1, 'upstream parental DNA pair 0 re-closed behind RNAP');
+
+  // 2. Translation initiation: initiator fMet-tRNAfMet is residue 0 at codon 0 (AUG)
+  sim.seek(0.47);
+  assert.equal(sim.state.phase, 'initiation');
+  assert.equal(sim.state.codonIndex, 0);
+  assert.equal(sim.state.codonTriplet, 'AUG');
+  assert.ok(sim.blobs.some(b => b.id === 'trna-init'), 'fMet-tRNAfMet blob present during initiation');
+  assert.equal(A.residues[0].code3, 'fMet');
+  assert.equal(A.residues[0].visible, true);
+
+  // 3. Termination at UAA (codon index 11): recruits RF1 blob and adds zero amino acid residues (total remains 11)
+  sim.seek(0.93);
+  assert.equal(sim.state.phase, 'termination');
+  assert.equal(sim.state.codonIndex, 11);
+  assert.equal(sim.state.codonTriplet, 'UAA');
+  assert.ok(sim.blobs.some(b => b.id === 'rf1'), 'Release Factor 1 (rf1) binds at UAA stop codon');
+  assert.equal(sim.state.peptideLength, 11, 'UAA adds zero amino acids; nascent peptide remains 11 residues');
+  assert.equal(A.residues.length, 11);
+
+  // 4. End state (progress = 1): parental 48-bp DNA duplex is completely re-annealed, all 44 mRNA nt transcribed, 11-aa peptide complete
+  sim.seek(1);
+  assert.equal(sim.state.phase, 'complete');
+  assert.equal(sim.state.rnaLength, 44);
+  assert.equal(sim.state.peptideLength, 11);
+  assert.equal(sim.state.peptideSeq, 'fMet-A-E-F-K-G-S-D-Y-Q-A');
+  for (let k = 0; k < 48; k++) {
+    assert.equal(A.pairs[k].strength, 1, `parental DNA pair ${k} re-annealed at end of expression`);
+  }
+});
+

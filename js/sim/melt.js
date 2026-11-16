@@ -26,7 +26,7 @@
 //   * When dissociated each strand translates away from the axis (±18 Å), unwinds to ~22° per residue
 //     and undulates (smooth bend noise), built by chaining screw steps from the strand centre.
 //   * Every nucleotide carries smooth thermal noise ∝ sqrt(T[K]).
-import { buildDuplex, helixCoil, duplexThermo, meltingCurve, stackThermo, cleanSequence } from '../science/index.js';
+import { buildDuplex, buildRnaDuplex, helixCoil, duplexThermo, meltingCurve, stackThermo, cleanSequence, cleanRnaSequence } from '../science/index.js';
 import {
   mulberry32, clamp, dampStep, createNoise, DEG,
   mulMM, mulMV, axisAngle, expMap, rotZInto, rotXInto, rotYInto, composeInto, invertInto, newFrame, copyFrame,
@@ -49,11 +49,12 @@ const BEND_MAX = 3 * DEG;         // rad per residue step, amplitude of coil ben
 const KERNEL = [1, 2, 3, 4, 3, 2, 1].map(v => v / 16);
 
 export function createMeltSim(sequence, opts = {}) {
-  const { T = 25, Na = 0.1, Ct = 1e-6, seed = 1 } = opts;
-  const seq = cleanSequence(sequence);
+  const { T = 25, Na = 0.1, Ct = 1e-6, seed = 1, nucleicAcid = 'dna' } = opts;
+  const isRna = nucleicAcid === 'rna';
+  const seq = isRna ? cleanRnaSequence(sequence) : cleanSequence(sequence);
   const n = seq.length;
   if (n < 2) throw new Error('createMeltSim: sequence needs at least 2 bases');
-  const assembly = buildDuplex(seq);
+  const assembly = isRna ? buildRnaDuplex(seq) : buildDuplex(seq);
   const N = assembly.nucleotides.length;
   // buildDuplex's partner frames share their `o` array with the strand-I frame: give every nucleotide its own.
   for (const nuc of assembly.nucleotides) nuc.frame = { o: nuc.frame.o.slice(), R: nuc.frame.R.slice() };
@@ -74,28 +75,28 @@ export function createMeltSim(sequence, opts = {}) {
   const ax = [(Oloc[0] - Ploc[0]) / axl, (Oloc[1] - Ploc[1]) / axl, (Oloc[2] - Ploc[2]) / axl];
 
   // ---- conditions & equilibrium thermodynamics ------------------------------------------------
-  let cond = { T, Na, Ct };
+  let cond = { T, Na, Ct, nucleicAcid };
   const logS = new Float64Array(Math.max(n - 1, 1));
   let dup = 1;
   const openness = new Float32Array(n);
   const state = {
-    T, Na, Ct, Tm: NaN, dH: 0, dS: 0, dG37: 0, gc: 0,
+    T, Na, Ct, nucleicAcid, Tm: NaN, dH: 0, dS: 0, dG37: 0, gc: 0,
     closed: new Float64Array(n), openness, fractionPaired: 1, duplexFraction: 1,
     curve: [], phase: 'duplex', jitter: 0, separation: 0, length: n, sequence: seq,
   };
 
   function recomputeSalt() {
-    const th = duplexThermo(seq, { Na: cond.Na, Ct: cond.Ct });
+    const th = duplexThermo(seq, { Na: cond.Na, Ct: cond.Ct, nucleicAcid: cond.nucleicAcid });
     state.Tm = th.Tm; state.dH = th.dH; state.dS = th.dS; state.dG37 = th.dG37; state.gc = th.gc;
-    state.curve = meltingCurve(seq, { Na: cond.Na, Ct: cond.Ct });
+    state.curve = meltingCurve(seq, { Na: cond.Na, Ct: cond.Ct, nucleicAcid: cond.nucleicAcid });
   }
   function recomputeTemperature() {
     const tk = cond.T + 273.15, RT = R_GAS * tk;
     for (let k = 0; k + 1 < n; k++) {
-      const { dH, dS } = stackThermo(seq, k, cond.Na);
+      const { dH, dS } = stackThermo(seq, k, cond.Na, { nucleicAcid: cond.nucleicAcid });
       logS[k] = -(dH - tk * dS / 1000) / RT;
     }
-    const hc = helixCoil(seq, cond.T, { Na: cond.Na, Ct: cond.Ct, sigma: SIGMA });
+    const hc = helixCoil(seq, cond.T, { Na: cond.Na, Ct: cond.Ct, sigma: SIGMA, nucleicAcid: cond.nucleicAcid });
     state.closed = hc.closed;
     dup = clamp(hc.duplex, 1e-300, 1);
     state.duplexFraction = hc.duplex;

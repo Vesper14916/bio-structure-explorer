@@ -6,21 +6,43 @@ import { segmented, toggleTile, stat, sectionLabel } from './components.js';
 export const MIN_BP = 4, MAX_BP = 40;
 export const PRESETS = [
   { label: 'Dickerson dodecamer', seq: 'CGCGAATTCGCG', note: 'The 12-mer crystallised as PDB 1BNA' },
+  { label: 'Shine–Dalgarno RNA', seq: 'AGGAGGUAUGGCU', note: 'Ribosome binding site + start codon' },
   { label: 'TATA box', seq: 'GGGTATAAAAGGGC', note: 'Promoter element, very AT-rich' },
   { label: 'EcoRI site', seq: 'CCGAATTCGG', note: 'GAATTC (restriction site) inside GC flanks' },
   { label: 'Human telomere', seq: 'TTAGGGTTAGGGTTAGGGTTAGGG', note: '(TTAGGG)×4 repeat' },
   { label: 'GC-rich', seq: 'GCCGCGGCGCCGCGGC', note: 'Three H-bonds per pair: melts late' },
   { label: 'AT-rich', seq: 'ATTATAATATTAATAATTAT', note: 'Two H-bonds per pair: melts early' },
 ];
-const COMP = { A: 'T', T: 'A', G: 'C', C: 'G' };
+const COMP_DNA = { A: 'T', T: 'A', U: 'A', G: 'C', C: 'G' };
+const COMP_RNA = { A: 'U', U: 'A', T: 'A', G: 'C', C: 'G' };
 
 export function createStructureView(ctx) {
   const { H } = ctx;
   let style = {};
+  let nucleicAcid = 'dna';
   let lastEmitted = '';
   let current = '';
 
-  // --- representation + colour ---------------------------------------------------------------
+  const compOf = b => (nucleicAcid === 'rna' ? COMP_RNA[b] : COMP_DNA[b]) || 'A';
+  const normalizeSeq = raw => {
+    const up = (raw || '').toUpperCase();
+    const mapped = nucleicAcid === 'rna' ? up.replace(/T/g, 'U') : up.replace(/U/g, 'T');
+    return mapped.replace(nucleicAcid === 'rna' ? /[^ACGU]/g : /[^ACGT]/g, '');
+  };
+
+  // --- nucleic acid + representation + colour ------------------------------------------------
+  const naSwitch = segmented({
+    label: 'Nucleic acid', value: 'dna', className: 'seg-sm na-switch',
+    options: [
+      { value: 'dna', label: 'B-DNA (deoxyribose)' },
+      { value: 'rna', label: 'A-RNA (ribose 2′-OH)' },
+    ],
+    onChange: v => {
+      setNucleicAcid(v);
+      H.onNucleicAcid(v);
+    },
+  });
+
   const rep = segmented({
     label: 'Representation', value: 'ballstick',
     options: [{ value: 'ballstick', label: 'Ball & stick' }, { value: 'spacefill', label: 'Space-filling' }, { value: 'cartoon', label: 'Cartoon' }],
@@ -44,7 +66,7 @@ export function createStructureView(ctx) {
   const input = h('input', {
     id: 'seq-input', class: 'seq-input', type: 'text', value: '', autocomplete: 'off', autocapitalize: 'characters',
     autocorrect: 'off', spellcheck: 'false', inputmode: 'text', enterkeyhint: 'done', maxlength: '80',
-    'aria-describedby': 'seq-msg', 'aria-label': 'DNA sequence, 5 prime to 3 prime',
+    'aria-describedby': 'seq-msg', 'aria-label': 'Nucleic acid sequence, 5 prime to 3 prime',
   });
   const count = h('span', { class: 'seq-count' }, '0 bp');
   const msg = h('div', { id: 'seq-msg', class: 'seq-msg', role: 'status', 'aria-live': 'polite' });
@@ -62,13 +84,15 @@ export function createStructureView(ctx) {
     const n = current.length;
     setText(count, `${n} bp`);
     let ok = n >= MIN_BP && n <= MAX_BP;
+    const allowedText = nucleicAcid === 'rna' ? 'A, C, G, U' : 'A, C, G, T';
     if (n < MIN_BP) {
       msg.className = 'seq-msg is-warn';
-      setText(msg, n === 0 ? `Type ${MIN_BP}–${MAX_BP} bases using A, C, G, T.` : `Add ${MIN_BP - n} more base${MIN_BP - n > 1 ? 's' : ''} (minimum ${MIN_BP}).`);
+      setText(msg, n === 0 ? `Type ${MIN_BP}–${MAX_BP} bases using ${allowedText}.` : `Add ${MIN_BP - n} more base${MIN_BP - n > 1 ? 's' : ''} (minimum ${MIN_BP}).`);
     } else {
       const gc = [...current].filter(b => b === 'G' || b === 'C').length;
+      const formTag = nucleicAcid === 'rna' ? 'A-RNA (2′-OH)' : 'B-DNA';
       msg.className = 'seq-msg';
-      setText(msg, `${n} base pairs \u00b7 GC ${Math.round(gc / n * 100)}\u202f%`);
+      setText(msg, `${n} base pairs · ${formTag} · GC ${Math.round(gc / n * 100)}\u202f%`);
     }
     input.classList.toggle('is-invalid', !ok);
     input.setAttribute('aria-invalid', String(!ok));
@@ -90,20 +114,25 @@ export function createStructureView(ctx) {
       for (let i = 0; i < k; i++) g.append(h('span', { class: 'dx-tick' }));
       g.append(h('span'));
       g.append(h('span', { class: 'dx-end' }, c === 0 ? '3′' : '…'));
-      for (const b of part) g.append(h('span', { class: 'dx-b', style: { color: ctx.col(COMP[b]) } }, COMP[b]));
+      for (const b of part) {
+        const cb = compOf(b);
+        g.append(h('span', { class: 'dx-b', style: { color: ctx.col(cb) } }, cb));
+      }
       g.append(h('span', { class: 'dx-end' }, c === chunks - 1 ? '5′' : '…'));
       duplex.append(g);
     }
-    duplex.setAttribute('aria-label', `Strand 5 to 3: ${current.split('').join(' ')}. Complement 3 to 5: ${[...current].map(b => COMP[b]).join(' ')}`);
-    chipEls.forEach((c, i) => c.classList.toggle('is-on', PRESETS[i].seq === current));
+    duplex.setAttribute('aria-label', `Strand 5 to 3: ${current.split('').join(' ')}. Complement 3 to 5: ${[...current].map(b => compOf(b)).join(' ')}`);
+    chipEls.forEach((c, i) => c.classList.toggle('is-on', normalizeSeq(PRESETS[i].seq) === current));
   }
   function refresh() { const ok = validate(); renderDuplex(); return ok; }
 
   input.addEventListener('input', () => {
     const raw = input.value.toUpperCase();
-    let cleaned = raw.replace(/[^ACGT]/g, '');
-    const removed = raw.length - cleaned.length;
-    let warn = removed > 0 ? 'Only A, C, G and T are allowed.' : '';
+    const converted = nucleicAcid === 'rna' ? raw.replace(/T/g, 'U') : raw.replace(/U/g, 'T');
+    let cleaned = converted.replace(nucleicAcid === 'rna' ? /[^ACGU]/g : /[^ACGT]/g, '');
+    const removed = converted.length - cleaned.length;
+    const allowedMsg = nucleicAcid === 'rna' ? 'Only A, C, G and U are allowed (T converts to U).' : 'Only A, C, G and T are allowed.';
+    let warn = removed > 0 ? allowedMsg : '';
     if (cleaned.length > MAX_BP) { cleaned = cleaned.slice(0, MAX_BP); warn = `Maximum length is ${MAX_BP} bases.`; }
     if (cleaned !== input.value) {
       const pos = Math.max(0, (input.selectionStart ?? cleaned.length) - removed);
@@ -118,8 +147,13 @@ export function createStructureView(ctx) {
   input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
 
   function applyPreset(seq) {
-    current = seq; input.value = seq; refresh(); emit.cancel();
-    lastEmitted = seq; H.onSequence(seq);
+    if (seq.includes('U') && nucleicAcid !== 'rna') {
+      setNucleicAcid('rna');
+      H.onNucleicAcid('rna');
+    }
+    const norm = normalizeSeq(seq).slice(0, MAX_BP);
+    current = norm; input.value = norm; refresh(); emit.cancel();
+    lastEmitted = norm; H.onSequence(norm);
   }
 
   // --- helix dimensions ------------------------------------------------------------------------
@@ -135,8 +169,26 @@ export function createStructureView(ctx) {
     icon('ruler', 18), h('span', {}, 'Show on model'));
   function setMeasureActive(v) { measureOn = !!v; measureBtn.setAttribute('aria-pressed', String(measureOn)); }
 
+  const headSub = h('p', {}, 'Every atom of an ideal B-DNA or A-RNA duplex. Drag to orbit, then change how it is drawn.');
+
+  function setNucleicAcid(na) {
+    const next = na === 'rna' ? 'rna' : 'dna';
+    nucleicAcid = next;
+    naSwitch.set(next);
+    setText(headSub, next === 'rna'
+      ? 'Every atom of an ideal A-RNA duplex (C3′-endo ribose with 2′-OH, U paired with A). Drag to orbit.'
+      : 'Every atom of an ideal B-DNA duplex (C2′-endo deoxyribose, T paired with A). Drag to orbit.');
+    if (current) {
+      current = normalizeSeq(current).slice(0, MAX_BP);
+      if (input.value !== current) input.value = current;
+      lastEmitted = current;
+    }
+    refresh();
+  }
+
   const el = h('section', { class: 'view', id: 'view-structure', 'aria-labelledby': 'tab-structure', role: 'tabpanel', hidden: true },
-    h('header', { class: 'view-head' }, h('h2', {}, 'Explore the double helix'), h('p', {}, 'Every atom of an ideal B-DNA duplex. Drag to orbit, then change how it is drawn.')),
+    h('header', { class: 'view-head' }, h('h2', {}, 'Explore the double helix'), headSub),
+    h('div', { class: 'group' }, sectionLabel('Nucleic acid'), naSwitch.el),
     h('div', { class: 'peek' }, rep.el),
     h('div', { class: 'group' }, sectionLabel('Colour by'), colour.el),
     h('div', { class: 'group' }, sectionLabel('Show'), h('div', { class: 'tiles' }, tileEls)),
@@ -151,6 +203,8 @@ export function createStructureView(ctx) {
 
   return {
     el,
+    setNucleicAcid,
+    getNucleicAcid: () => nucleicAcid,
     setStyle(st) {
       style = { ...style, ...st };
       if (st.representation) rep.set(st.representation);
@@ -158,7 +212,9 @@ export function createStructureView(ctx) {
       for (const [k] of TOGGLES) if (k in st) tiles[k].set(st[k]);
     },
     setSequence(seq) {
-      const c = (seq || '').toUpperCase().replace(/[^ACGT]/g, '').slice(0, MAX_BP);
+      const hasU = /u/i.test(seq || '');
+      if (hasU && nucleicAcid !== 'rna') setNucleicAcid('rna');
+      const c = normalizeSeq(seq).slice(0, MAX_BP);
       current = c; lastEmitted = c; emit.cancel();
       if (input.value !== c) input.value = c;
       refresh();

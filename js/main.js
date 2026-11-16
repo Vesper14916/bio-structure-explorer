@@ -1,40 +1,52 @@
 // Helix — application glue: connects the UI, the WebGL viewer, the science model and the sims.
 import {
-  buildDuplex, buildCrystal, measureDuplex, cleanSequence, applyFrame, idealPairFrame, HELIX_B,
+  buildDuplex, buildRnaDuplex, buildCrystal, measureDuplex,
+  cleanSequence, cleanRnaSequence, applyFrame, idealPairFrame, HELIX_B, HELIX_A,
 } from './science/index.js';
 import { createViewer } from './render/viewer.js';
 import { createUI, pairPayload } from './ui/ui.js';
 import { createMeltSim } from './sim/melt.js';
 import { createReplicationSim, BLOB_DEF } from './sim/replication.js';
-import { REPLICATION_HEX } from './render/colors.js';
+import { createExpressionSim, EXPRESS_BLOB_DEF } from './sim/expression.js';
+import { REPLICATION_HEX, EXPRESSION_HEX } from './render/colors.js';
 
 const DEFAULT_SEQUENCE = 'CGCGAATTCGCGATATGGCC';
 const params = new URLSearchParams(location.search);
 
+const initialNa = params.get('na') === 'rna' ? 'rna' : 'dna';
+const cleanForNa = (s, na = app.nucleicAcid) => (na === 'rna' ? cleanRnaSequence(s) : cleanSequence(s));
+
 const app = {
   mode: 'structure',
-  sequence: cleanSequence(params.get('seq') || '') .slice(0, 40) || DEFAULT_SEQUENCE,
+  nucleicAcid: initialNa,
+  sequence: (initialNa === 'rna' ? cleanRnaSequence(params.get('seq') || '') : cleanSequence(params.get('seq') || '')).slice(0, 40)
+    || (initialNa === 'rna' ? cleanRnaSequence(DEFAULT_SEQUENCE) : DEFAULT_SEQUENCE),
   style: { representation: 'ballstick', color: 'element', hbonds: true, grooves: false, axis: false, labels: false, autoRotate: true },
   crystal: { waters: true, bfactor: false },
   melt: { T: 25, Na: 0.1 },
   replSpeed: 1,
+  exprSpeed: 1,
+  exprCamera: 'overview',
+  exprCutaway: true,
+  selectedCodon: null,     // selected codon index 0..11 in Express mode
   pair: null,              // selected base-pair index (structure / pair / crystal modes)
   measure: false,
   asm: null,               // assembly currently shown
-  ideal: null, crystalAsm: null, meltSim: null, replSim: null,
+  ideal: null, crystalAsm: null, meltSim: null, replSim: null, exprSim: null,
 };
-if (app.sequence.length < 4) app.sequence = DEFAULT_SEQUENCE;
+if (app.sequence.length < 4) app.sequence = initialNa === 'rna' ? cleanRnaSequence(DEFAULT_SEQUENCE) : DEFAULT_SEQUENCE;
 
 const stage = document.getElementById('stage');
 const uiRoot = document.getElementById('ui');
 let viewer, ui;
 
 // ---------------------------------------------------------------------------------------------
-// Assemblies per mode (built lazily, invalidated when the sequence changes)
-const ideal = () => (app.ideal ||= buildDuplex(app.sequence));
+// Assemblies per mode (built lazily, invalidated when the sequence or nucleicAcid changes)
+const ideal = () => (app.ideal ||= (app.nucleicAcid === 'rna' ? buildRnaDuplex(app.sequence) : buildDuplex(app.sequence)));
 const crystal = () => (app.crystalAsm ||= buildCrystal());
-const meltSim = () => (app.meltSim ||= createMeltSim(app.sequence, { T: app.melt.T, Na: app.melt.Na, seed: 7 }));
-const replSim = () => (app.replSim ||= createReplicationSim(app.sequence, { seed: 11 }));
+const meltSim = () => (app.meltSim ||= createMeltSim(app.sequence, { T: app.melt.T, Na: app.melt.Na, seed: 7, nucleicAcid: app.nucleicAcid }));
+const replSim = () => (app.replSim ||= createReplicationSim(cleanSequence(app.sequence), { seed: 11 }));
+const exprSim = () => (app.exprSim ||= createExpressionSim({ seed: 19, cutaway: app.exprCutaway }));
 
 function invalidateSequenceModels() {
   app.meltSim?.dispose?.(); app.replSim?.dispose?.();
@@ -47,6 +59,8 @@ function styleForMode() {
     s.waters = app.crystal.waters;
     if (app.crystal.bfactor) s.color = 'bfactor';
   } else if (app.mode === 'replicate') {
+    s.color = 'strand'; s.grooves = false; s.autoRotate = false;
+  } else if (app.mode === 'express') {
     s.color = 'strand'; s.grooves = false; s.autoRotate = false;
   } else if (app.mode === 'melt') {
     s.grooves = false; s.hbonds = true;
@@ -62,16 +76,17 @@ const fmt = (v, d = 1) => v.toFixed(d);
 
 function measurementAnnotations(asm) {
   if (asm.meta.kind !== 'ideal') return [];
+  const helix = asm.meta.helix || (asm.meta.nucleicAcid === 'rna' ? HELIX_A : HELIX_B);
   const n = asm.meta.length, m = measureDuplex(asm), out = [];
-  const z = k => idealPairFrame(k, n).o[2];
+  const z = k => idealPairFrame(k, n, helix).o[2];
   const mid = Math.floor(n / 2);
   // Rise: one base-pair step, drawn just outside the helix.
   const R = m.phosphateRadius + 5;
   out.push({ id: 'rise', kind: 'distance', from: [R, 0, z(mid)], to: [R, 0, z(mid + 1 < n ? mid + 1 : mid - 1)], label: `rise ${fmt(m.rise, 2)} Å` });
-  // Pitch: one full turn (10.5 bp), if the duplex is long enough.
+  // Pitch: one full turn (10.5 bp for B-DNA, 11.0 bp for A-RNA), if the duplex is long enough.
   if ((n - 1) * m.rise >= m.pitch) {
     const z0 = -m.pitch / 2;
-    out.push({ id: 'pitch', kind: 'distance', from: [-R, 0, z0], to: [-R, 0, z0 + m.pitch], label: `pitch ${fmt(m.pitch)} Å · ${HELIX_B.bpPerTurn} bp` });
+    out.push({ id: 'pitch', kind: 'distance', from: [-R, 0, z0], to: [-R, 0, z0 + m.pitch], label: `pitch ${fmt(m.pitch)} Å · ${helix.bpPerTurn} bp` });
   }
   // Diameter: a bar just below the bottom end (so it is not hidden inside the atoms), spanning the
   // phosphate-to-phosphate width in the direction of the first phosphate; label underneath.
@@ -82,8 +97,8 @@ function measurementAnnotations(asm) {
   // need at least a full turn on each side, so short duplexes get the label without a number.
   const kg = Math.min(n - 1, mid + 3), kh = Math.max(0, mid - 3);
   const w = v => (Number.isFinite(v) ? ` · ${fmt(v)} Å` : '');
-  out.push({ id: 'major', kind: 'label', at: applyFrame(idealPairFrame(kg, n), [9.5, 0, 0]), label: `Major groove${w(m.majorGrooveWidth)}` });
-  out.push({ id: 'minor', kind: 'label', at: applyFrame(idealPairFrame(kh, n), [-8.5, 0, 0]), label: `Minor groove${w(m.minorGrooveWidth)}` });
+  out.push({ id: 'major', kind: 'label', at: applyFrame(idealPairFrame(kg, n, helix), [9.5, 0, 0]), label: `Major groove${w(m.majorGrooveWidth)}` });
+  out.push({ id: 'minor', kind: 'label', at: applyFrame(idealPairFrame(kh, n, helix), [-8.5, 0, 0]), label: `Minor groove${w(m.minorGrooveWidth)}` });
   return out;
 }
 
@@ -127,11 +142,16 @@ function showMode(mode, { keepCamera = false } = {}) {
   viewer.setHighlight(null);
   viewer.setBlobs([]);
   viewer.setAnnotations([]);
-  viewer.setFraming?.(mode === 'replicate' ? replicationFraming(replSim()) : null);
+  viewer.setFollowTarget?.(null);
+  viewer.setFraming?.(
+    mode === 'replicate' ? replicationFraming(replSim()) :
+    mode === 'express' ? expressionFraming(exprSim()) : null
+  );
 
   if (mode === 'crystal') app.asm = crystal();
   else if (mode === 'melt') { const s = meltSim(); s.setConditions({ T: app.melt.T, Na: app.melt.Na }); app.asm = s.assembly; }
   else if (mode === 'replicate') app.asm = replSim().assembly;
+  else if (mode === 'express') app.asm = exprSim().assembly;
   else app.asm = ideal();
 
   viewer.setStyle(styleForMode());
@@ -150,6 +170,15 @@ function showMode(mode, { keepCamera = false } = {}) {
     if (sim.state.progress === 0 || sim.state.finished) { sim.seek(0); sim.play(); }
     viewer.setBlobs(sim.blobs);
     pushReplication(true);
+  } else if (mode === 'express') {
+    const sim = exprSim();
+    sim.setCutaway(app.exprCutaway);
+    sim.setCameraMode(app.exprCamera);
+    if (sim.state.progress === 0 || sim.state.finished) { sim.seek(0); sim.play(); }
+    viewer.setBlobs(sim.blobs);
+    applyExpressCamera();
+    applyCodonHighlight(app.selectedCodon, { focus: false });
+    pushExpression(true);
   } else if (mode === 'crystal') {
     app.pair = null;
     ui.setCrystalInfo({ atoms: app.asm.atoms.count, waters: app.asm.waters ? app.asm.waters.count : null });
@@ -246,9 +275,126 @@ function tickReplication(dt) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Gene Expression (Transcription + Translation)
+let lastExprCaption = '';
+const EXPRESS_LEGEND = [
+  { id: 'coding', label: 'Coding DNA (5′→3′)', color: hexCss(EXPRESSION_HEX.coding), kind: 'strand' },
+  { id: 'template', label: 'Template DNA (3′→5′)', color: hexCss(EXPRESSION_HEX.template), kind: 'strand' },
+  { id: 'mrna', label: 'mRNA transcript (2′-OH)', color: hexCss(EXPRESSION_HEX.mrna), kind: 'strand' },
+  { id: 'trna', label: 'tRNA anticodon', color: hexCss(EXPRESSION_HEX.trna), kind: 'strand' },
+  { id: 'peptide', label: 'Nascent peptide', color: hexCss(EXPRESSION_HEX.peptide), kind: 'strand' },
+  { id: 'rnap', label: EXPRESS_BLOB_DEF.rnap.label, color: hexCss(EXPRESS_BLOB_DEF.rnap.color), kind: 'blob' },
+  { id: 'ribosome', label: '30S / 50S Ribosome', color: hexCss(EXPRESS_BLOB_DEF['ribosome-30s'].color), kind: 'blob' },
+  { id: 'rf1', label: EXPRESS_BLOB_DEF.rf1.label, color: hexCss(EXPRESS_BLOB_DEF.rf1.color), kind: 'blob' },
+];
+
+function expressionFraming(sim) {
+  if (sim._framing) return sim._framing;
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  const add = (x, y, z, r = 0) => {
+    lo[0] = Math.min(lo[0], x - r); hi[0] = Math.max(hi[0], x + r);
+    lo[1] = Math.min(lo[1], y - r); hi[1] = Math.max(hi[1], y + r);
+    lo[2] = Math.min(lo[2], z - r); hi[2] = Math.max(hi[2], z + r);
+  };
+  const save = sim.state.progress, asm = sim.assembly, P = asm.atoms.pos;
+  for (let i = 0; i <= 32; i++) {
+    sim.seek(i / 32);
+    for (const nu of asm.nucleotides) {
+      if (nu.visible === false || nu.opacity < 0.5) continue;
+      for (let a = 0; a < nu.atomCount; a += 4) { const g = (nu.atomStart + a) * 3; add(P[g], P[g + 1], P[g + 2]); }
+    }
+    for (const r of asm.residues || []) if (r.visible) add(r.pos[0], r.pos[1], r.pos[2], r.radius || 2);
+    for (const b of sim.blobs) if (b.visible && b.opacity > 0.08) add(b.pos[0], b.pos[1], b.pos[2], b.radius * 0.85);
+  }
+  sim.seek(save);
+  const pts = [];
+  for (const x of [lo[0], hi[0]]) for (const y of [lo[1], hi[1]]) for (const z of [lo[2], hi[2]]) pts.push([x, y, z]);
+  return (sim._framing = { points: pts, dir: [0.15, 0.88, 0.45] });
+}
+
+function applyExpressCamera() {
+  if (!viewer || app.mode !== 'express') return;
+  if (app.exprCamera === 'overview') {
+    viewer.setFollowTarget?.(null);
+    viewer.focus(null, { duration: 0.7 });
+  } else {
+    viewer.setFollowTarget?.({ mode: app.exprCamera });
+  }
+}
+
+function applyCodonHighlight(codonIdx, { focus = true } = {}) {
+  app.selectedCodon = codonIdx;
+  if (!viewer || app.mode !== 'express') return;
+  const asm = exprSim().assembly;
+  if (codonIdx === null || codonIdx === undefined || codonIdx < 0) {
+    viewer.setHighlight(null);
+    return;
+  }
+  const nucIds = [];
+  for (const nu of asm.nucleotides) {
+    if (nu.codon === codonIdx) nucIds.push(nu.id);
+  }
+  const resIds = [];
+  for (const r of asm.residues || []) {
+    if (r.codonIndex === codonIdx) resIds.push(r.id);
+  }
+  viewer.setHighlight({ nucleotides: nucIds, residues: resIds });
+  if (focus && nucIds.length) {
+    viewer.focus({ nucleotides: nucIds }, { duration: 0.65 });
+  }
+}
+
+function pushExpression(force = false) {
+  const sim = exprSim(), st = sim.state;
+  const payload = {
+    progress: st.progress,
+    playing: !!st.playing && !st.finished,
+    speed: app.exprSpeed,
+    phase: st.phase,
+    cameraMode: app.exprCamera,
+    cutaway: app.exprCutaway,
+    rnaCount: st.rnaCount,
+    hybridCount: st.hybridCount,
+    codonIndex: st.codonIndex,
+    activeCodon: st.activeCodon,
+    selectedCodon: app.selectedCodon,
+    peptideCount: st.peptideCount,
+    peptideSeq: st.peptideSeq,
+    construct: st.construct,
+  };
+  if (force || st.caption !== lastExprCaption) {
+    payload.caption = st.caption;
+    lastExprCaption = st.caption;
+  }
+  ui.setExpressState?.(payload);
+}
+
+function tickExpression(dt) {
+  const sim = exprSim();
+  sim.update(dt * app.exprSpeed);
+  viewer.sync();
+  viewer.setBlobs(sim.blobs);
+  pushExpression();
+}
+
+// ---------------------------------------------------------------------------------------------
 // UI handlers
 const handlers = {
   onMode(mode) { if (mode !== app.mode) showMode(mode); },
+
+  onNucleicAcid(na) {
+    if (na !== 'dna' && na !== 'rna') return;
+    if (na === app.nucleicAcid) return;
+    app.nucleicAcid = na;
+    app.sequence = cleanForNa(app.sequence, na);
+    app.pair = null;
+    invalidateSequenceModels();
+    ui.setNucleicAcid?.(na);
+    ui.setSequence(app.sequence);
+    if (app.mode === 'structure' || app.mode === 'pair' || app.mode === 'melt') {
+      showMode(app.mode, { keepCamera: true });
+    }
+  },
 
   onStyle(partial) {
     Object.assign(app.style, partial);
@@ -256,12 +402,12 @@ const handlers = {
   },
 
   onSequence(seq) {
-    seq = cleanSequence(seq);
+    seq = cleanForNa(seq, app.nucleicAcid);
     if (seq === app.sequence || seq.length < 4) return;
     app.sequence = seq; app.pair = null;
     invalidateSequenceModels();
     ui.setSequence(seq);
-    if (app.mode !== 'crystal') showMode(app.mode);
+    if (app.mode !== 'crystal' && app.mode !== 'express') showMode(app.mode);
   },
 
   onSelectPair(index) {
@@ -290,6 +436,19 @@ const handlers = {
     pushReplication(true);
   },
 
+  onExpression({ action, value }) {
+    const sim = exprSim();
+    if (action === 'play') { if (sim.state.finished) sim.seek(0); sim.play(); }
+    else if (action === 'pause') sim.pause();
+    else if (action === 'restart') { sim.seek(0); sim.play(); }
+    else if (action === 'seek') { sim.seek(value); viewer.sync(); viewer.setBlobs(sim.blobs); }
+    else if (action === 'speed') { app.exprSpeed = value; sim.setSpeed(value); }
+    else if (action === 'camera') { app.exprCamera = value || 'overview'; sim.setCameraMode(app.exprCamera); applyExpressCamera(); }
+    else if (action === 'cutaway') { app.exprCutaway = !!value; sim.setCutaway(app.exprCutaway); viewer.setBlobs(sim.blobs); }
+    else if (action === 'selectCodon') { applyCodonHighlight(value, { focus: true }); }
+    pushExpression(true);
+  },
+
   onCrystal(c) {
     Object.assign(app.crystal, c);
     if (app.mode === 'crystal') viewer.setStyle(styleForMode());
@@ -314,6 +473,16 @@ function boot() {
 
   viewer.on('pick', e => {
     if (app.mode === 'melt' || app.mode === 'replicate') return;
+    if (app.mode === 'express') {
+      if (!e || (e.codon === undefined || e.codon < 0)) {
+        if (app.selectedCodon !== null) { applyCodonHighlight(null, { focus: false }); pushExpression(true); }
+        return;
+      }
+      const nextCodon = app.selectedCodon === e.codon ? null : e.codon;
+      applyCodonHighlight(nextCodon, { focus: false });
+      pushExpression(true);
+      return;
+    }
     if (!e || e.pair < 0) {
       if (app.mode === 'pair') return;                 // keep the inspected pair
       if (app.pair !== null) selectPair(null, { focus: false });
@@ -333,12 +502,15 @@ function boot() {
   viewer.on('frame', dt => {
     if (app.mode === 'melt') tickMelt(dt);
     else if (app.mode === 'replicate') tickReplication(dt);
+    else if (app.mode === 'express') tickExpression(dt);
     if (params.has('debug') && (debugAcc += dt) > 0.5) { debugAcc = 0; ui.setDebug(viewer.getState()); }
   });
 
+  ui.setNucleicAcid?.(app.nucleicAcid);
   ui.setSequence(app.sequence);
   ui.setReplicationLegend?.(REPL_LEGEND);
-  const startMode = ['structure', 'pair', 'melt', 'replicate', 'crystal'].includes(params.get('mode')) ? params.get('mode') : 'structure';
+  ui.setExpressLegend?.(EXPRESS_LEGEND);
+  const startMode = ['structure', 'pair', 'melt', 'replicate', 'express', 'crystal'].includes(params.get('mode')) ? params.get('mode') : 'structure';
   ui.setMode(startMode);
   showMode(startMode);
   ui.setLoading(false);
