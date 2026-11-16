@@ -32,8 +32,7 @@ export function createAbout({ onClose }) {
         h('li', {}, 'Hydrogen atoms, bulk solvent, and counter-ions are omitted (except crystallographic waters in the X-ray view).'),
         h('li', {}, 'Melting solves an exact nearest-neighbour helix–coil model with a monovalent salt correction at 1 µM strand concentration.'),
         h('li', {}, 'In Express mode, a compact 48-bp bacterial construct (−10 TATA box, Shine–Dalgarno AGGAGG, 11 sense codons starting with fMet, and a UAA stop codon decoded by RF1) runs sequentially in one scene for visual clarity.'),
-        h('li', {}, 'Macromolecular complexes (RNAP, 30S/50S ribosomal subunits, tRNA bodies, and RF1) are shown as translucent envelopes with active-site cutaways rather than all-atom protein/rRNA structures.'))))
-  );
+        h('li', {}, 'Macromolecular complexes (RNAP, 30S/50S ribosomal subunits, tRNA bodies, and RF1) are shown as translucent envelopes with active-site cutaways rather than all-atom protein/rRNA structures.'))));
   const scrim = h('div', { class: 'scrim', hidden: true, onclick: e => { if (e.target === scrim) close(); } }, dlg);
   let opener = null;
   function open() { opener = document.activeElement; scrim.hidden = false; requestAnimationFrame(() => { scrim.classList.add('is-open'); dlg.focus(); }); }
