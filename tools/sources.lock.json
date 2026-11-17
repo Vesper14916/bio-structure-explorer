@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "note": "Raw mmCIF files are not committed. Download each url into its file path (tools/sources/ is ignored by Git); tools/build-assets.mjs refuses a file whose sha256 or size differs.",
+  "sources": [
+    {
+      "pdbId": "6ALF",
+      "url": "https://files.rcsb.org/download/6ALF.cif",
+      "file": "tools/sources/6ALF.cif",
+      "downloaded": "2026-11-17",
+      "sha256": "c6668b79c776453f963fc5e902e4a9b0279c0170cbe4ce7de473b37854978eeb",
+      "bytes": 2880310,
+      "target": "rnap-ec",
+      "role": "candidate for rnap-ec; selected"
+    },
+    {
+      "pdbId": "6ALH",
+      "url": "https://files.rcsb.org/download/6ALH.cif",
+      "file": "tools/sources/6ALH.cif",
+      "downloaded": "2026-11-17",
+      "sha256": "7f90df5611666bddfd6b84d0684c9a3cadf4ef28fd7b8334c675248e4c243f3c",
+      "bytes": 2872548,
+      "target": "rnap-ec",
+      "role": "candidate for rnap-ec; compared, not selected"
+    }
+  ]
+}
