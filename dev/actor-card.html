@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Actor card</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #03060d; color: #dfe9f7; overflow: hidden; font: 13px system-ui, sans-serif; }
+  #stage { position: fixed; inset: 0; }
+  #hud { position: fixed; left: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 5; opacity: .75; pointer-events: none; font: 11px/1.5 ui-monospace, monospace; white-space: pre; text-shadow: 0 0 3px #000, 0 0 6px #000; }
+  #hud b { color: #9fd0ff; font-weight: 600; }
+  #err { position: fixed; left: 10px; top: 10px; z-index: 6; color: #ff8a8a; font: 12px ui-monospace, monospace; white-space: pre-wrap; }
+</style>
+<script type="importmap">{"imports":{"three":"../js/vendor/three.module.min.js","three/addons/":"../js/vendor/addons/"}}</script>
+</head>
+<body>
+<div id="stage"></div>
+<div id="hud"></div>
+<div id="err"></div>
+<script type="module">
+import { Assembly, nucleotideTemplate, applyFrame, dist } from '../js/science/index.js';
+import { decodeAsset } from '../js/assets/format.js';
+import { createViewer } from '../js/render/viewer.js';
+
+// Machine actor card: shows one helix-asset v1 file (docs/CONTRACTS.md 6.2) with an identity transform.
+// URL params:
+//   asset    file name in assets/ (default fixture-machine.asset.json)
+//   lod      auto | l0 | l1 | l2            (default auto)
+//   cutaway  0 | 1                          clip the near half at the active site (default 0)
+//   tracks   0 | 1                          procedural nucleotides for every slot-track register (default 0)
+//   anchors  0 | 1                          one label per anchor (default 0)
+//   quality  auto | low | medium | high     (default auto)
+//   zoom     framing radius as a multiple of bounds.radius (default 1; smaller = closer)
+//   focus    anchor name to frame instead of the whole machine (for example activeSite); focusRadius in angstroms (default 20)
+//   rotate   0 | 1                          auto-rotate (default 0)
+const q = new URLSearchParams(location.search);
+const flag = (k, d = false) => (q.has(k) ? q.get(k) !== '0' && q.get(k) !== 'false' : d);
+const hud = document.getElementById('hud'), errBox = document.getElementById('err');
+const showError = e => { errBox.textContent += `${e && e.message || e}\n`; console.error(e); };
+addEventListener('error', e => showError(e.error || e.message));
+addEventListener('unhandledrejection', e => showError(e.reason));
+
+const assetFile = (q.get('asset') || 'fixture-machine.asset.json').replace(/[^A-Za-z0-9._-]/g, '');
+const lod = ['auto', 'l0', 'l1', 'l2'].includes(q.get('lod')) ? q.get('lod') : 'auto';
+const cutaway = flag('cutaway'), withTracks = flag('tracks'), withAnchors = flag('anchors');
+const zoom = q.has('zoom') ? Math.max(0.05, +q.get('zoom') || 1) : 1;
+
+/** One nucleotide per track slot (RNA tracks: ribose + U, DNA tracks: deoxyribose + T). Strand index = track order. */
+function buildTrackAssembly(asset) {
+  const asm = new Assembly();
+  let strand = 0, zlo = Infinity, zhi = -Infinity;
+  for (const track of Object.values(asset.tracks)) {
+    const rna = track.kind === 'rna', ids = [];
+    for (let i = 0; i < track.frames.length; i++) {
+      const f = track.frames[i];
+      let base = (track.bases[i] || 'A').toUpperCase();
+      base = rna ? (base === 'T' ? 'U' : base) : (base === 'U' ? 'T' : base);
+      ids.push(asm.addNucleotide({ base, strand, sugar: rna ? 'ribose' : 'deoxyribose', frame: { o: f.o.slice(), R: f.R.slice() } }));
+      zlo = Math.min(zlo, f.o[2]); zhi = Math.max(zhi, f.o[2]);
+    }
+    // backbone links: join neighbours in the direction whose O3'->P distance is the covalent one (< 3 A)
+    const site = (nu, name) => {
+      const t = nucleotideTemplate(nu.base, nu.sugar), k = t.index[name] * 3;
+      return applyFrame(nu.frame, [t.local[k], t.local[k + 1], t.local[k + 2]]);
+    };
+    for (let i = 0; i + 1 < ids.length; i++) {
+      const a = ids[i], b = ids[i + 1], fwd = dist(site(a, "O3'"), site(b, 'P')), rev = dist(site(b, "O3'"), site(a, 'P'));
+      if (Math.min(fwd, rev) < 3) { if (fwd <= rev) asm.addLink(a, b); else asm.addLink(b, a); }
+    }
+    strand++;
+  }
+  const h = Number.isFinite(zlo) ? Math.max(1, (zhi - zlo) / 2) : 1;
+  asm.meta = { kind: 'actor-tracks', nucleicAcid: 'dna', sequence: '', length: asm.nucleotides.length, axis: [[0, 0, -h], [0, 0, h]] };
+  return asm.finalize();
+}
+
+let viewer = null, asset = null;
+try {
+  const res = await fetch(`../assets/${assetFile}`);
+  if (!res.ok) throw new Error(`cannot load assets/${assetFile}: HTTP ${res.status}`);
+  asset = decodeAsset(await res.json());
+  window.asset = asset;
+
+  viewer = createViewer(document.getElementById('stage'), { quality: q.get('quality') || 'auto' });
+  window.viewer = viewer;
+  viewer.setStyle({ representation: 'ballstick', color: 'element', hbonds: true, autoRotate: flag('rotate', false) });
+
+  // an assembly with zero nucleotides is a valid "empty scene" for the viewer
+  const asm = withTracks ? buildTrackAssembly(asset) : new Assembly().finalize();
+  window.asm = asm;
+  viewer.setAssembly(asm);
+  viewer.setActors([{ id: asset.id, asset, transform: { o: [0, 0, 0], R: [1, 0, 0, 0, 1, 0, 0, 0, 1] }, lod, cutaway, label: asset.name }]);
+  const focusAnchor = q.get('focus') && asset.anchors[q.get('focus')];
+  if (focusAnchor) viewer.focus({ center: focusAnchor.o, radius: Math.max(1, +q.get('focusRadius') || 20) }, { duration: 0 });
+  else viewer.focus({ center: asset.bounds.center, radius: asset.bounds.radius * zoom }, { duration: 0 });
+
+  if (withAnchors) {
+    viewer.setAnnotations(Object.entries(asset.anchors).map(([name, f]) => ({ id: `anchor-${name}`, kind: 'label', at: f.o, label: name, size: 'sm' })));
+  }
+
+  const s = asset.source;
+  const sourceLine = s.type === 'pdb'
+    ? `PDB ${s.pdbId}, ${s.method}, ${s.resolutionA ?? 'n/a'} Å, ${s.organism}`
+    : 'Synthetic';
+  const tris = asset.lod0.reduce((n, m) => n + m.indices.length / 3, 0);
+  const l2 = asset.lod2 ? asset.lod2.count : 0;
+  let acc = 1;
+  viewer.on('frame', dt => {
+    if ((acc += dt) < 0.25) return;
+    acc = 0;
+    const st = viewer.getState(), a = viewer.getActorState()[0];
+    hud.innerHTML =
+      `<b>${asset.name}</b>\n${sourceLine}\n` +
+      `level <b>${a ? a.level : '-'}</b> (${lod === 'auto' ? 'auto' : 'forced'}) · ratio ${a ? a.ratio.toFixed(2) : '-'}\n` +
+      `beads ${asset.lod1.count} · triangles ${tris} · L2 atoms ${l2} · track atoms ${st.atoms}\n` +
+      `${st.fps} fps · ${st.quality}${cutaway ? ' · cutaway' : ''}`;
+  });
+  viewer.on('pick', e => { window.lastPick = e; console.log('pick', JSON.stringify(e)); });
+} catch (e) {
+  showError(e);
+}
+</script>
+</body>
+</html>
