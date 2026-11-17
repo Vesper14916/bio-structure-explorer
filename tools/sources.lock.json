@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "note": "Raw mmCIF files are not committed. Download each url into its file path (tools/sources/ is ignored by Git); tools/build-assets.mjs refuses a file whose sha256 or size differs.",
+  "sources": [
+    {
+      "pdbId": "6ALF",
+      "url": "https://files.rcsb.org/download/6ALF.cif",
+      "file": "tools/sources/6ALF.cif",
+      "downloaded": "2026-11-17",
+      "sha256": "c6668b79c776453f963fc5e902e4a9b0279c0170cbe4ce7de473b37854978eeb",
+      "bytes": 2880310,
+      "target": "rnap-ec",
+      "role": "candidate for rnap-ec; selected"
+    },
+    {
+      "pdbId": "6ALH",
+      "url": "https://files.rcsb.org/download/6ALH.cif",
+      "file": "tools/sources/6ALH.cif",
+      "downloaded": "2026-11-17",
+      "sha256": "7f90df5611666bddfd6b84d0684c9a3cadf4ef28fd7b8334c675248e4c243f3c",
+      "bytes": 2872548,
+      "target": "rnap-ec",
+      "role": "candidate for rnap-ec; compared, not selected"
+    },
+    {
+      "pdbId": "6C9Y",
+      "url": "https://files.rcsb.org/download/6C9Y.cif",
+      "file": "tools/sources/6C9Y.cif",
+      "downloaded": "2026-11-17",
+      "sha256": "433f98096f519736b7ad6f98eb6b989c02eb0c6df7968116e252cad93b72a142",
+      "bytes": 3073713,
+      "target": "rnap-holo",
+      "role": "candidate for rnap-holo; selected"
+    },
+    {
+      "pdbId": "6CA0",
+      "url": "https://files.rcsb.org/download/6CA0.cif",
+      "file": "tools/sources/6CA0.cif",
+      "downloaded": "2026-11-17",
+      "sha256": "664fd9fa55ecc41799ac0887011e566b8f757d432ed1c7a30f9e9586c6609229",
+      "bytes": 3450268,
+      "target": "rnap-holo",
+      "role": "candidate for rnap-holo; compared, not selected"
+    }
+  ]
+}
