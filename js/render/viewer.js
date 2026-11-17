@@ -6,6 +6,7 @@ import { ELEMENTS, ELEMENT_INFO } from '../science/index.js';
 import { ColorModel } from './colors.js';
 import { MoleculeLayer, BALL_SCALE } from './molecule.js';
 import { CartoonLayer } from './cartoon.js';
+import { ActorLayer } from './actors.js';
 import { GuideLayer } from './guides.js';
 import { OverlayLayer } from './overlay.js';
 import { buildEnvironment, buildBackground, buildLightRig, Particles, Post, FOG_COLOR } from './stage.js';
@@ -83,6 +84,7 @@ class Viewer {
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = 1.05;
     r.setPixelRatio(this.pixelRatio());
+    r.localClippingEnabled = true;       // per-material clipping planes (machine actor cutaway)
 
     const scene = this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 5000);
@@ -101,6 +103,7 @@ class Viewer {
     scene.add(this.particles.points);
     this.molecule = new MoleculeLayer(this.root, this.tier);
     this.cartoon = new CartoonLayer(this.root, this.tier);
+    this.actors = new ActorLayer(this.root, this.tier);
     this.guides = new GuideLayer(this.root);
     this.overlay = new OverlayLayer(this.container, this.root, (x, y, z, out) => this.project(x, y, z, out));
     this.post = new Post(r, scene, this.camera, this.tier);
@@ -134,6 +137,7 @@ class Viewer {
     this.post.rebuild(tier);
     this.molecule.setTier(tier);
     this.cartoon.setTier(tier);
+    this.actors.setTier(tier);
     this.applyTierSettings();
     this.resize();
     this.dirty = true;
@@ -245,6 +249,12 @@ class Viewer {
     if (!keepCamera) { this.anim = null; this.hasFramed = false; this.faceView = false; this.frameAll(0); this.autoFramed = true; }
   }
 
+  /** Machine actors need room to zoom out to the L0 band (ratio > 6); never lowers the range, no-op without actors. */
+  ensureActorRange() {
+    const r = this.actors.maxRadius;
+    if (r > 0 && this.controls.maxDistance < r * 10) this.controls.maxDistance = r * 10;
+  }
+
   /** Root transform: helix axis -> screen vertical (+Y), centred on the origin. */
   computeOrientation(asm) {
     const A = asm.atoms, pos = A.pos;
@@ -253,7 +263,7 @@ class Viewer {
       const [a, b] = asm.meta.axis;
       center.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
       dir.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]).normalize();
-    } else {
+    } else if (A.count > 0) {
       // principal axis of the phosphorus atoms (all atoms as fallback)
       let idx = [];
       for (let g = 0; g < A.count; g++) if (ELEMENTS[A.el[g]] === 'P') idx.push(g);
@@ -290,6 +300,7 @@ class Viewer {
       const s = (pos[g * 3] - center.x) * dir.x + (pos[g * 3 + 1] - center.y) * dir.y + (pos[g * 3 + 2] - center.z) * dir.z;
       if (s < lo) lo = s; if (s > hi) hi = s;
     }
+    if (!(lo <= hi)) lo = hi = 0;      // zero-atom assembly (machine actors only): keep the axis guide finite
     const pad = 6;
     this.guides.setAxis(center.clone().addScaledVector(dir, lo - pad).toArray(), center.clone().addScaledVector(dir, hi + pad).toArray());
   }
@@ -716,7 +727,11 @@ class Viewer {
         clientY,
       };
     }
-    if (best < 0) return null;
+    if (best < 0) {
+      // no atom or residue hit: report a machine actor (bead or envelope) when there is one
+      const ah = this.actors.records.size ? this.actors.pick(this.raycaster, minR) : null;
+      return ah ? { actor: ah.actor, part: ah.part, chain: ah.chain, nucleotide: -1, atom: -1, pair: -1, residue: -1, clientX, clientY } : null;
+    }
     const nu = asm.nucleotides[A.nuc[best]];
     return {
       nucleotide: nu.id,
@@ -768,6 +783,7 @@ class Viewer {
     this.stepCut(dt);
     const wantRotate = this.style.autoRotate && !this.reducedMotion && !this.interacting && !this.anim && !this.followTarget && now >= this.resumeAt;
     this.controls.autoRotate = wantRotate;
+    this.ensureActorRange();
     this.controls.update(dt);
 
     if (this.asm && (this.dirty || this.style.jitter > 0)) this.updateGeometry();
@@ -781,7 +797,7 @@ class Viewer {
     pu.uDrift.value = motion;
     pu.uFocus.value = dist;
     pu.uCenter.value.copy(this.controls.target);
-    const R = Math.max(this.fit.r, 10), box = Math.max(70, 2.2 * Math.max(this.fit.h / 2, R), dist * 1.2);
+    const R = Math.max(this.fit.r, 10, this.actors.maxRadius), box = Math.max(70, 2.2 * Math.max(this.fit.h / 2, R), dist * 1.2);
     pu.uBox.value.set(box, box, box);
     this.scene.fog.near = Math.max(1, dist - R * 0.6);
     this.scene.fog.far = dist + R * 4.5 + 25;
@@ -789,6 +805,7 @@ class Viewer {
     // DOM overlays
     this.camera.updateMatrixWorld();
     this.root.updateMatrixWorld();
+    this.actors.update(this.camera, dt, this.tier);
     const ctx = this.labelCtx || (this.labelCtx = { pxPerAAt: d => this.pxPerA(d) });
     ctx.pxPerA = this.pxPerA(dist);
     ctx.centerDepth = dist;
@@ -843,6 +860,9 @@ class Viewer {
       setFollowTarget: spec => v.setFollowTarget(spec),
       setAnnotations: list => v.overlay.setAnnotations(list || []),
       setBlobs: list => v.overlay.setBlobs(list || []),
+      /** Machine actors (helix-asset v1, see actors.js): [{ id, asset, transform, visible, opacity, parts, cutaway, lod, label }]. */
+      setActors: list => { v.actors.setActors(list || []); v.ensureActorRange(); v.dirty = true; },
+      getActorState: () => v.actors.getState(),
       /** Persistent framing hints for focus(null)/auto-framing: extra science-space points that must stay
        *  in view (e.g. the bounding box of a whole animation) and a fixed science-space view direction. */
       setFraming(f) { v.framing = f && (f.points || f.dir) ? { points: f.points || null, dir: f.dir || null } : null; },
@@ -863,6 +883,7 @@ class Viewer {
         fps: Math.round(v.fpsEma * 10) / 10, quality: v.tier, qualityMode: v.qualityMode,
         atoms: v.asm ? v.asm.atoms.count : 0, representation: v.style.representation,
         pixelRatio: v.renderer.getPixelRatio(), style: { ...v.style },
+        memory: { geometries: v.renderer.info.memory.geometries, textures: v.renderer.info.memory.textures },
       }),
       get canvas() { return v.canvas; },
       get camera() { return v.camera; },
@@ -891,6 +912,7 @@ class Viewer {
     this.overlay.dispose();
     this.molecule.dispose();
     this.cartoon.dispose();
+    this.actors.dispose();
     this.guides.dispose();
     this.particles.dispose();
     disposeTree(this.scene);
