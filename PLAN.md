@@ -1,7 +1,9 @@
 # Bio Structure Explorer: Gene Expression Demo Plan
 
-Status: Planning complete; implementation not started.
-Updated: 2026-11-13
+Status: Round 1 delivered a complete placeholder loop (audit in §13). Round 2 is planned in Part II (§13–§21) and not started.
+Updated: 2026-11-17
+
+Part I (§1–§12) is the Round 1 plan, kept as the record of original scope and conventions. Where Part I and Part II disagree on forward work (milestones, backlog, construct, scale), Part II wins.
 
 ## 1. Objective and project conventions
 
@@ -250,3 +252,214 @@ The first concrete development objective is T01–T07: a complete working skelet
 - Check repeated mode changes for resource growth. Lower detail before sacrificing essential labels or biological clarity.
 
 Primary risks are incompatible component interfaces, misleading chemistry, untraceable mixed-species assets, unreadable active sites, and excessive structure size. Address them with early contracts, a small complete-loop fixture, provenance records, cutaways, and detail levels. Expand scope only after the first end-to-end demo meets its exit gates.
+
+---
+
+# Part II: Round 2 plan (true-scale molecular machines and final integration)
+
+Status: Proposed 2026-11-17; not started. Items marked *proposed* or *unverified* must be confirmed in R2-M0 before they are treated as decisions.
+
+## 13. Round 1 audit and re-baseline
+
+Evidence was gathered on 2026-11-17 at `72d888b` (`main`) with Node 22 and headless Chromium (software WebGL, 1440×900). This was a load-and-inspect pass, not a full visual acceptance review.
+
+| # | Finding | Evidence | Consequence for Round 2 |
+| --- | --- | --- | --- |
+| 1 | The merged application did not load. `js/ui/about.js` contained one unbalanced `)`, so `index.html` and `dist/helix-standalone.html` both rendered a blank page. | Browser reported `SyntaxError: Unexpected token ')'` at `about.js:36`. Fixed on `claude/admiring-cray-fdre6q`; afterwards all six modes load with zero console errors and zero external requests. | A browser load check becomes a required gate for every merge. |
+| 2 | The syntax check used in Round 1 gives false passes. | `node --check js/ui/about.js` exited 0 on the broken file; the same content checked as `.mjs` failed. The repository has no `package.json` declaring `"type": "module"` (root cause not investigated further). | Add `package.json` with `"type": "module"` and check every module as ESM. |
+| 3 | 37/37 tests pass, but no test imports `js/ui`, `js/render`, or `js/main.js`. `docs/TASKS.md` marks T13 `DONE` and `docs/VALIDATION.md` contains no browser evidence. | Test files and records as merged. | Correct the records; add a headless smoke test. |
+| 4 | RNAP, both ribosomal subunits, tRNA bodies, and RF1 are anonymous translucent ellipsoids drawn about 4–6× smaller (linear) than life next to true-scale atomic DNA. | `EXPRESS_BLOB_DEF`: the RNAP envelope is about 35 × 29 × 41 Å against the ~150 × 115 × 110 Å quoted in `docs/ASSETS.md`; the 50S envelope is about 40 Å across against a 70S particle of roughly 200–250 Å; the tRNA body is about 10 × 18 Å against a ~70 Å L-shape. | Building blocks B03, B05, B06, B08 are still placeholders. This is the main work of Round 2. |
+| 5 | The construct cannot host true-scale machines and its signals are abbreviated. | 48 bp ≈ 162 Å of DNA, about the length of one RNAP. A 4-bp `TATA` stands in for the −10 element, there is no −35 element, the transcript starts immediately after it, the Shine–Dalgarno-to-`AUG` spacer is 2 nt, and there is no transcription terminator. | A longer, annotated construct is required (§17.1). |
+| 6 | Records disagree with code. | `docs/SCIENCE.md` §3.1 and `docs/CONTRACTS.md` §3 describe a 5-bp `TATAA`, `AGGAGGU`, a 43-nt mRNA, and region lengths that sum to 49; code and handoffs use a 4-bp `TATA`, `AGGAGGUA`, and a 44-nt mRNA. | Reconcile in R2-M0; code is the reference until the new construct replaces it. |
+| 7 | `js/sim/expression.js` (1,215 lines) mixes sequence fallbacks, layout, transcription, translation, and captions, and carries fallback copies of science constants. | Source inspection. | Split before adding machines (§17.4). |
+| 8 | The free mRNA is drawn as a rigid helical strand; the peptide is a straight row of Cα beads. | Screenshots at 30 %, 70 %, 100 % progress. | Upgrades U2 and N5 in §15. |
+| 9 | Not verified in this pass: camera-follow presets, cutaway readability, mobile layout, frame rate on a hardware GPU, reduced motion, repeated mode switching. | — | Verify in R2-M0 and record in `docs/VALIDATION.md`. |
+
+Milestone status after audit: **M0 and M1 are met** (complete loop with placeholder actors, deterministic seek). **M2–M4 are partially met**: sequence logic, RNA chemistry, UI, and timeline exist, but §8 does not allow these milestones to close while final assets are placeholders. **M5 is not met**: the published build did not load, and no visual acceptance is recorded.
+
+## 14. Round 2 objective and principles
+
+Objective: replace every placeholder with a structure-derived model at true scale, and integrate them into one continuous, inspectable scene in which the procedurally built DNA, mRNA, tRNA anticodons, and peptide pass through the real channels of the machines.
+
+1. **One world, one scale.** Everything is in angstroms in one frame. No per-actor shrink factor. If something does not fit, lengthen the construct or move the camera.
+2. **One experimental source per machine, one species.** Prefer *Escherichia coli* entries that already contain the nucleic acids we animate, so anchors come from data rather than hand placement. Record every exception.
+3. **Machines are rigid bodies with anchors and slot tracks** (§17.2). No molecular dynamics; conformational changes are discrete, labelled states.
+4. **Atoms only where they teach.** Large complexes use coarse levels of detail; atomic detail is limited to active sites and to the procedural nucleic acids and peptide.
+5. **Vertical slices.** Integrate RNAP end to end before starting the ribosome. A rough true-scale slice exposes the hard problems (path threading, occlusion, camera) earliest.
+6. **Evidence gates include a browser.** No task is `DONE` on Node tests alone.
+
+## 15. Model inventory: what exists and what is still needed
+
+Summary: **7 required new models, 3 recommended, 2 upgrades of existing models, 1 optional context group.** Five of the required models are large structure-derived assets, but they come from only about three PDB entries through one shared pipeline, so the effort is closer to three asset jobs plus three small procedural models.
+
+### Existing models
+
+| ID | Model | State | Round 2 action |
+| --- | --- | --- | --- |
+| B01 | B-DNA duplex, atomic | Release quality | **U1:** longer construct with real promoter elements; follow a curved path through RNAP |
+| B02 | RNA strand and A-RNA duplex, atomic, with 2′-OH and U | Release quality as chemistry; rigid as a free chain | **U2:** flexible, length-preserving free-chain path between machines |
+| B07 | Nascent peptide, Cα beads | Placeholder | Replaced by N5 |
+| B03/B05/B06/B08 | RNAP, ribosome, tRNA, RF1 | Placeholder ellipsoids | Replaced by N1–N4, N6 |
+
+### Required new models
+
+| ID | Model | Target representation | Candidate source (*unverified until asset review*) | Notes |
+| --- | --- | --- | --- | --- |
+| N1 | RNA polymerase core (α₂ββ′ω) with σ⁷⁰ as a separable part | Surface, per-chain coarse beads, atomic active-site subset; σ⁷⁰ leaves after promoter escape | Elongation complex PDB 6ALF (4.1 Å) or 6ALH (4.4 Å), *E. coli*; holoenzyme/open complex PDB 6C9Y (4.25 Å) / 6CA0 (5.75 Å), *E. coli* | The elongation complex supplies template, RNA·DNA hybrid, and RNA exit paths. Two source entries means two documented states of one machine. |
+| N2 | 30S subunit (16S rRNA + proteins) | Same three levels; decoding centre atomic | PDB 7K00 (*E. coli* 70S, 1.98 Å, with A-, P-, and E-site tRNAs) | One entry yields N2, N3, and N4. |
+| N3 | 50S subunit (23S + 5S rRNA + proteins) | Same; peptidyl-transferase centre atomic; exit tunnel visible in cutaway | PDB 7K00 | Tunnel centreline is computed offline and recorded as an approximation. |
+| N4 | Full-length tRNA (~76 nt L-shape) with aminoacyl end | Atomic or backbone trace; one initiator and one elongator fold | P-site tRNA^fMet and A-site tRNA from PDB 7K00 | The elongator fold is reused for all ten amino acids with only the anticodon rebuilt; label this simplification. |
+| N5 | Amino-acid residue library and atomic nascent peptide | Heavy-atom backbone and side chains for the residues in the fixture (fMet, A, E, F, K, G, S, D, Y, Q), extended conformation | Standard residue geometry from the literature (for example Engh & Huber parameters); no PDB asset | Procedural, like the nucleotide templates. No folding is claimed. |
+| N6 | Release factor RF1 | Surface and coarse beads, with the stop-codon-reading and peptide-release regions marked | *Open:* an *E. coli* 70S·RF1 entry must be selected in asset review | Do not reuse a *Thermus thermophilus* entry silently. |
+| N7 | NTP substrates and pyrophosphate | Atomic templates extending the ribonucleotide with β- and γ-phosphates; PPi leaves on bond formation | Procedural from standard geometry | Small, but removes the "nucleotide appears" simplification. |
+
+### Recommended models (include if Round 2 scope allows)
+
+| ID | Model | Why | Candidate source (*unverified*) |
+| --- | --- | --- | --- |
+| N8 | EF-Tu, delivering each aminoacyl-tRNA | Without it tRNAs "fly in" unaided | PDB 5WDT (70S with EF-Tu ternary complex, 3.0 Å) |
+| N9 | EF-G, driving translocation | Gives the A→P→E step a visible cause | *Open:* candidates include the 3J5T/3J5U/3J5W/3J5X family; state mapping not checked |
+| N10 | RNA hairpin (intrinsic terminator) | Gives transcription a real end and adds the first RNA secondary structure | Procedural from the existing A-RNA duplex builder plus a loop |
+
+### Optional context
+
+Initiation factors IF1–IF3, aminoacyl-tRNA synthetase, and generic cytoplasm crowders (E01). These are context, not mechanism; build them only after R2-M4 passes.
+
+## 16. Asset pipeline and levels of detail
+
+All large models come through one offline tool so provenance and format are uniform.
+
+1. `tools/build-assets.mjs` reads mmCIF files listed in `tools/sources.lock.json` (identifier, URL, download date, SHA-256, chains used). Raw mmCIF files are not committed; derived assets and the lock file are.
+2. For each machine the tool emits into `assets/`:
+   - **L0 envelope:** a low-resolution surface mesh for overview and mobile.
+   - **L1 architecture:** one bead per residue (P for RNA, Cα for protein), grouped by chain and class (rRNA, r-protein, σ, and so on).
+   - **L2 active site:** heavy atoms within a fixed radius of named anchors only.
+   - **Anchors and slot tracks** (§17.2) and a provenance block for `docs/ASSETS.md`.
+3. Coordinates are quantised integers in a binary buffer plus a JSON manifest. `tools/build-standalone.mjs` must inline these assets.
+4. Provisional budgets, to be measured in R2-M1: all derived assets ≤ 1.5 MB compressed; ≤ 40k triangles per L0 mesh; ≤ 15k L1 beads per machine; ≤ 3k L2 atoms per machine.
+5. The simulation must run in Node without WebGL, so anchors and slot tracks are plain JSON that tests can load.
+
+Build-time prerequisite: the pipeline needs `files.rcsb.org` (and `data.rcsb.org` for metadata). Both are blocked by the current cloud environment's network policy. Either allow them for the assets agent or download the selected entries manually into an ignored `tools/sources/` folder. Runtime still makes no external requests.
+
+## 17. Integration design
+
+### 17.1 True-scale construct (*proposed*)
+
+Replace the 48-bp construct with a scenario-defined construct of roughly 150 bp so that true-size RNAP (about 35 bp of contact) and ribosome (about 30 nt of mRNA) fit with visible free DNA and mRNA on both sides:
+
+- upstream DNA with −35 and −10 elements at standard spacing and a discriminator before +1;
+- a 5′ UTR long enough for 30S binding, with the Shine–Dalgarno sequence 5–9 nt upstream of `AUG`;
+- the existing 11-codon ORF and `UAA` stop, unchanged, so Round 1 sequence tests remain valid;
+- a 3′ region with an intrinsic terminator (N10) or, if N10 is deferred, a documented run-off end.
+
+Estimated size is about 6k DNA atoms plus 2k mRNA atoms, compared with 3.6k atoms today. Exact sequence, lengths, and literature references are fixed in `docs/SCIENCE.md` during R2-M0.
+
+Known consequence to decide (§21): at true scale the 50S exit tunnel (reported as roughly 80–100 Å long) is longer than an extended 11-residue peptide (about 40 Å). The peptide stays inside the ribosome until release and is visible only in cutaway. Either accept this as an honest teaching point or lengthen the ORF to 30–40 codons.
+
+### 17.2 Machines as rigid bodies with anchors and slot tracks
+
+This is the central integration idea. Each machine asset carries:
+
+- **Anchors:** named frames taken from the experimental structure (active site, A/P/E sites, entry and exit points, tunnel exit).
+- **Slot tracks:** ordered lists of per-nucleotide frames extracted from the nucleic acids present in the structure. Examples: template-strand registers through RNAP, the RNA·DNA hybrid and RNA exit channel, mRNA registers through the 30S channel relative to the P-site codon, and whole-tRNA frames for A, P, and E.
+
+The simulation assigns each procedural nucleotide either an ideal-helix position, a slot index (fractional while translocating), or a free-chain parameter. A pure kinematics layer turns that assignment into atom frames, blending over about one helical turn between ideal geometry outside a machine and slot frames inside it. Procedural atoms therefore sit where the experimental atoms sat, and motion through a machine is interpolation along data-defined slots rather than hand-tuned offsets.
+
+Where a structure lacks a segment (for example a disordered non-template strand in the bubble), the track is completed synthetically and flagged in the manifest. Motion between slots is an interpolation, not an observed trajectory.
+
+Hardest open problem: real elongation complexes bend DNA, so upstream and downstream duplex axes are not collinear. Prototype in R2-M1 a duplex builder that follows a local curved axis travelling with RNAP. Fallback if it stalls: keep the duplex straight outside the enzyme, use slot tracks only for the bubble, hybrid, and RNA exit, and document the relaxed bend.
+
+### 17.3 Free chains
+
+The mRNA between the RNAP exit and the ribosome, and the mRNA tails, follow a deterministic, seeded smooth curve through control points (machine exit anchors and rest positions), re-parameterised so nucleotide spacing stays constant. The same component draws the released peptide. This is a visual model of flexibility, not polymer physics.
+
+### 17.4 Layers and ownership
+
+| Layer | Location (*proposed*) | Responsibility |
+| --- | --- | --- |
+| Scenario | `js/scenario/` | Construct sequence, annotations, which assets are used |
+| Asset manifest | `assets/`, `js/assets/` | Levels of detail, anchors, slot tracks, provenance; loader with a Node path |
+| Simulation | `js/sim/expression/` (`timeline`, `transcription`, `translation`) | Event list and, for any time, machine transforms, slot assignments, bond states, captions |
+| Kinematics | `js/sim/expression/kinematics.js` | Slot assignment → atom and residue frames |
+| Scene | `js/scene/` | Actor registry, level-of-detail selection, cutaway, labels, camera rails |
+| UI | `js/ui/` | Controls and inspection cards |
+
+One event list is the single source of truth for order and duration (bind, bond, translocate, release). Seeking evaluates the state directly from time, as today. Renderers never change biological state. `js/main.js` and `docs/CONTRACTS.md` keep a single integration owner.
+
+### 17.5 Integration order
+
+1. **RNAP slice:** new construct, pipeline, N1 and N7, transcription on slot tracks, σ⁷⁰ release, true-scale camera.
+2. **Ribosome slice:** N2–N5, translation on slot tracks, peptide in the tunnel.
+3. **Factors:** N6, then N8–N10 if in scope.
+4. **Scene:** chapters, camera rails, inspection with provenance, level-of-detail tuning, mobile, context.
+5. **Stretch, coupled mode:** start translation on the nascent mRNA while RNAP is still transcribing. PDB 8FIZ and its related entries describe an *E. coli* transcription–translation complex and can ground the relative arrangement. Keep the sequential timeline as the default teaching mode.
+
+Each model first passes an isolated "actor card" page under `dev/` (all levels of detail, anchors drawn, provenance shown), then enters the scene. If a structure-derived model fails a size or readability gate, fall back to its own L0 envelope at true scale, never to an anonymous ellipsoid.
+
+## 18. Contract changes to freeze in R2-M0
+
+- Asset manifest schema: units, quantisation, chain classes, levels of detail, anchors, slot tracks, provenance, synthetic-segment flags.
+- Actor descriptor: replaces `sim.blobs` entries with `{ id, assetId, state, transform, lod hints, cutaway }`; keep a compatibility shim until the Copy mode is migrated or explicitly left on blobs.
+- Slot assignment per nucleotide and residue, and the kinematics function signature.
+- Event list schema and chapter markers.
+- Scenario schema for the construct, replacing hard-coded indices and the fallback constants in the simulation.
+- Rule: display scale is 1 for all actors; any exception is listed in `docs/SCIENCE.md`.
+
+## 19. Milestones and exit gates
+
+| Milestone | Work | Required evidence |
+| --- | --- | --- |
+| R2-M0: Stabilise and re-baseline | Hotfix merged; `package.json` and ESM checks; headless smoke test for all six modes; records corrected (§13 items 3, 6); unverified items in §13 item 9 inspected; construct, asset selection, and contracts frozen; build-time data access arranged | Smoke test fails on the pre-fix commit and passes after; updated `docs/` records; signed-off asset list with chains and licences |
+| R2-M1: Pipeline and RNAP slice | `tools/build-assets.mjs`; loader; level-of-detail renderer; new construct; N1, N7; transcription on slot tracks | RNAP at true scale; RNA sequence and direction tests pass on the new construct; DNA re-closes; actor card and scene screenshots reviewed; asset sizes recorded |
+| R2-M2: Ribosome slice | N2–N5; translation on slot tracks | Codon–anticodon pairing sits in the decoding centre of the asset; initiator in P site; residue order correct; peptide path through the tunnel visible in cutaway |
+| R2-M3: Factors and termination | N6; N8–N10 if in scope | Stop adds no residue; RF1 occupies the A site of the asset; transcription end state documented |
+| R2-M4: Scene integration | Chapters, camera rails, inspection with provenance, level-of-detail and mobile tuning, optional context and coupled mode | Whole story readable from overview and close-up; frame times recorded on a hardware GPU and a phone; no blocking occlusion |
+| R2-M5: Release | Standalone bundle with assets; network audit; final validation and release notes | Page and bundle load with zero errors and zero external requests; visual acceptance recorded by a human reviewer |
+
+## 20. Work packages and allocation
+
+Model tiers follow the allocation policy in `AGENTS.md`: the integration owner uses the top available tier (Gemini 4 Argon or Claude Opus 5.5), implementation agents use the workhorse tier (Gemini 4 Hydrogen or Claude Sonnet 5.5), and smoke runs, log parsing, and record checks use the utility tier.
+
+| Task | Milestone | Deliverable | Owner role | Depends on |
+| --- | --- | --- | --- | --- |
+| R2-T01 | M0 | `package.json`, ESM syntax check, headless smoke test (`tests/smoke.browser.mjs`) | Review / utility | — |
+| R2-T02 | M0 | Records reconciled: `TASKS.md`, `VALIDATION.md`, `SCIENCE.md`, `CONTRACTS.md`, `ASSETS.md` | Integration owner | R2-T01 |
+| R2-T03 | M0 | True-scale construct and scenario schema; literature references | Science | — |
+| R2-T04 | M0 | Asset selection: entries, chains, species, licences, missing regions | Assets | data access |
+| R2-T05 | M0 | Contracts in §18 frozen, plus a tiny synthetic asset fixture so lanes can start in parallel | Integration owner | R2-T03, R2-T04 |
+| R2-T06 | M1 | `tools/build-assets.mjs`, lock file, asset format, loader | Assets | R2-T05 |
+| R2-T07 | M1 | Simulation split; event list; kinematics with slot tracks; removal of fallback constants | Science | R2-T05 |
+| R2-T08 | M1 | Actor registry and level-of-detail renderer; actor card page | Rendering | R2-T05 |
+| R2-T09 | M1 | N1 and N7 assets; curved-path duplex prototype | Assets + Science | R2-T06, R2-T07 |
+| R2-T10 | M1 | RNAP slice integrated in `js/main.js`; gate review | Integration owner | R2-T07–R2-T09 |
+| R2-T11 | M2 | N2, N3, N4 assets with A/P/E and mRNA tracks, tunnel centreline | Assets | R2-T06 |
+| R2-T12 | M2 | N5 residue library and atomic peptide builder with tests | Science | R2-T05 |
+| R2-T13 | M2 | Translation on slot tracks; free-chain mRNA (U2) | Science | R2-T07, R2-T11 |
+| R2-T14 | M2 | Ribosome slice integrated; gate review | Integration owner | R2-T11–R2-T13 |
+| R2-T15 | M3 | N6, and N8–N10 if approved | Assets + Science | R2-T14 |
+| R2-T16 | M4 | Chapters, camera rails, inspection cards, cutaway tuning, mobile | Rendering | R2-T14 |
+| R2-T17 | M4 | Optional context (E01) and coupled mode | Integration owner decides | R2-T15, R2-T16 |
+| R2-T18 | M5 | Bundle, audits, validation evidence, release notes | Review + Integration owner | R2-T16 |
+
+After R2-T05, lanes R2-T06, R2-T07, R2-T08, and R2-T12 run in parallel against the synthetic fixture. Integration tasks (R2-T10, R2-T14) are serial and owned by one agent.
+
+## 21. Decisions needed and risks
+
+Decisions for the project owner before R2-M0 closes:
+
+1. **True scale with a longer construct** (recommended) or keep the 48-bp scene with a disclosed shrink factor.
+2. **Scope tier:** required models only (N1–N7), or also the recommended N8–N10.
+3. **Peptide visibility:** keep 11 residues and rely on cutaway, or lengthen the ORF.
+4. **Coupled transcription–translation** as a final optional mode, or defer.
+5. **Build-time access to RCSB** for the assets agent, or manual download of the selected entries.
+
+Risks and mitigations:
+
+| Risk | Mitigation |
+| --- | --- |
+| Large machines hide the events being taught | Cutaway and L2 active-site detail are gate criteria in M1 and M2, not polish |
+| Curved DNA through RNAP is harder than expected | Time-boxed prototype with the documented straight-DNA fallback in §17.2 |
+| Asset size or frame rate on phones | L0-only mobile profile; budgets measured in M1 before the ribosome is built |
+| Mixed sources described as one complex | One entry per machine where possible; every exception listed in `docs/ASSETS.md` and shown in the inspection card |
+| Candidate entries turn out unsuitable (missing chains, low resolution, wrong state) | Asset review (R2-T04) happens before any pipeline work depends on a specific entry |
+| Records drift from code again | Smoke test and record reconciliation are part of every integration task's acceptance |

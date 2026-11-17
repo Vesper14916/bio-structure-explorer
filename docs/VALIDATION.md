@@ -25,3 +25,17 @@ Duration: `6.87 s` (`0` failures)
 
 - **Zero External Runtime Requests:** All modules use local ES module imports (`./js/vendor/three.module.min.js`, `./js/vendor/addons/...`, local `CRYSTAL_1BNA`, and procedural macromolecular envelopes). No CDN, font, analytics, or remote PDB API calls are made at startup or during playback.
 - **Resource & Memory Hygiene:** `MoleculeLayer`, `CartoonLayer`, `OverlayLayer`, and `Viewer` release all GPU geometries, materials, instanced buffers (`atoms`, `bonds`, `beads`, `residuesMesh`, `peptideBonds`), and DOM overlays on `clear()` and `dispose()`.
+
+---
+
+## 3. Post-merge browser check (2026-11-17)
+
+Scope: load-and-inspect pass at `72d888b` with Node 22 and headless Chromium (software WebGL, 1440×900). This is not a visual acceptance review.
+
+- **Blocking defect found:** `js/ui/about.js` had one unbalanced `)`. `index.html` and `dist/helix-standalone.html` rendered a blank page (`SyntaxError: Unexpected token ')'` at `about.js:36`). The `node --check` runs cited in the handoffs did not catch it: `node --check js/ui/about.js` exits 0 on the broken file, while the same content checked as `.mjs` fails.
+- **Fix:** removed the stray parenthesis and rebuilt `dist/helix-standalone.html` with `tools/build-standalone.mjs`.
+- **After the fix:** page and standalone bundle load; all six modes switch with zero console errors and zero external requests; `node --test tests/science.test.mjs tests/sim.test.mjs` passes 37/37.
+- **Observed in Express mode:** atomic DNA and mRNA render correctly; RNAP, 30S/50S, tRNA bodies, and RF1 are translucent ellipsoids about 4–6× smaller (linear) than life; the free mRNA is a rigid helical strand; the peptide is a row of Cα beads.
+- **Still unverified:** camera-follow presets, cutaway readability, mobile layout, hardware-GPU frame rate, reduced motion, repeated mode switching.
+
+Sections 1–2 above predate this check; their "zero syntax errors" and release-readiness statements should be read with this correction. See `PLAN.md` §13 for the full audit and the Round 2 plan.
