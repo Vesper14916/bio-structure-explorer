@@ -15,3 +15,18 @@ Integration Owner: Agent 0 (**Gemini 4 Argon** — High effort)
 | **T10 & T12a** | M2–M4 | `DONE` | Agent 3 (`Gemini 4 Hydrogen`, Medium–High) | `js/render/colors.js`, `js/render/molecule.js`, `js/render/cartoon.js`, `js/render/overlay.js`, `js/render/viewer.js` | Uracil (`U`) palette, RNA/peptide strand colors, nascent peptide chain 3D sphere-and-tube rendering in `MoleculeLayer`, macromolecular cutaway shader (`uCutaway`), and guided camera focus (`docs/handoffs/T10-T12a-render.md`). |
 | **T07 & T12b** | M1–M4 | `DONE` | Agent 4 (`Gemini 4 Hydrogen`, Medium) + Agent 0 (`Gemini 4 Argon`, High) | `js/ui/ui.js`, `js/ui/view-structure.js`, `js/ui/view-pair.js`, `js/ui/view-melt.js`, `js/ui/view-express.js`, `js/sim/melt.js`, `js/main.js`, `css/style.css` | DNA/RNA mode toggle in Explore/Pairs/Melt, new `Express` tab (`view-express.js`) with multi-track DNA/mRNA/Codon/Peptide strip, camera & cutaway controls, and full application wiring in `js/main.js` (`docs/handoffs/T07-T12b-ui.md`). |
 | **T13** | M5 | `DONE` | Agent 4 (`Gemini 3.8 Flash`, Low) + Agent 0 (`Gemini 4 Argon`, High) | `docs/VALIDATION.md`, `README.md` | Full test suite execution (`37/37 PASS`), static packaging & zero-external-network audit (`docs/VALIDATION.md`). |
+
+---
+
+## Round 2, Wave 1 (opened 2026-11-17)
+
+Base branch: `claude/admiring-cray-fdre6q`. Team plan: `docs/tasks/R2-W1-README.md`. Round 1 statuses above are superseded by the audit in `PLAN.md` section 13.
+
+| Task ID | Status | Owner (model, effort) | Deliverable | Brief |
+| :--- | :--- | :--- | :--- | :--- |
+| **R2-W0** | `DONE` | Integration Owner (top tier, high) | Hotfix for the blank page; Wave 1 contracts (`docs/CONTRACTS.md` section 6); `js/assets/format.js`; synthetic fixture asset; 40/40 tests | — |
+| **R2-W1-A** | `TODO` | Opus, medium | Asset pipeline; RNA polymerase asset (N1) | `docs/tasks/R2-W1-A-asset-pipeline-rnap.md` |
+| **R2-W1-B** | `TODO` | Sonnet, high | Machine actor renderer; actor card | `docs/tasks/R2-W1-B-actor-renderer.md` |
+| **R2-W1-C** | `TODO` | Sonnet, medium | Residue library and peptide (N5); NTP and PPi (N7) | `docs/tasks/R2-W1-C-residues-ntp.md` |
+| **R2-W1-D** | `TODO` | Haiku, high | `package.json`, syntax check, smoke gate, record reconciliation, 150-bp construct | `docs/tasks/R2-W1-D-hygiene-construct.md` |
+| **R2-W1-INT** | `TODO` | Integration Owner | Merge D → C → A → B; gate review; evidence in `docs/VALIDATION.md` | `docs/tasks/R2-W1-README.md` |

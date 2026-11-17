@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "id": "fixture-machine",
+      "file": "fixture-machine.asset.json",
+      "synthetic": true
+    }
+  ]
+}
