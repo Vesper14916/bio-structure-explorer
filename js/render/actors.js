@@ -36,6 +36,9 @@ const OTHER_COLOR = 0xb0b8c8;
 export function chainColor(chain, partId) {
   const n = String(chain && chain.name || '').toLowerCase();
   const T = ACTOR_TOKENS.chainTint, P = ACTOR_TOKENS.partColor;
+  const sub = chain && chain.subunit;
+  if (sub && T[sub] !== undefined) return T[sub];               // explicit subunit tag from the asset pipeline
+  if (sub === 'sigma70' || sub === 'sigma') return P.sigma;
   if (/beta[\s_-]*(prime|'|′)|β\s*['′]/.test(n)) return T.betaPrime;   // test beta' before beta
   if (n.includes('beta') || n.includes('β')) return T.beta;
   if (n.includes('alpha') || n.includes('α')) return T.alpha;

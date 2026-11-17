@@ -39,3 +39,22 @@ Scope: load-and-inspect pass at `72d888b` with Node 22 and headless Chromium (so
 - **Still unverified:** camera-follow presets, cutaway readability, mobile layout, hardware-GPU frame rate, reduced motion, repeated mode switching.
 
 Sections 1–2 above predate this check; their "zero syntax errors" and release-readiness statements should be read with this correction. See `PLAN.md` §13 for the full audit and the Round 2 plan.
+
+---
+
+## 4. Round 2 Wave 1 exit gate (2026-11-17)
+
+Integration branch `claude/admiring-cray-fdre6q` after merging tasks D, C, A, B (in that order).
+
+- `npm test`: syntax check 39 files, 0 failed; `# tests 80`, `# pass 80`, `# fail 0`.
+- `npm run smoke`: `SMOKE PASS` (index and standalone bundle, all six modes, Express scrub). The gate was proven to fail (`SMOKE FAIL`, exit 1) when the original `about.js` defect was reintroduced.
+- `node tools/build-assets.mjs --check`: `rnap-ec`, `rnap-holo`, and the manifest rebuild byte-identically from the pinned sources in `tools/sources.lock.json`.
+- Residue templates: chirality and bond lengths cross-checked against the protein chains of PDB 6ALF (2,930/2,930 positive chiral volumes; bonds within 0.020 Å of observed means).
+- Actor card with real assets (headless Chromium, software WebGL, 1440×900; zero console errors), images in `docs/evidence/r2-w1/`:
+  - `rnap-ec-l0.png`: closed translucent envelope of the core enzyme.
+  - `rnap-ec-l1-cutaway-tracks.png`: per-residue beads tinted by subunit; the procedurally built template, non-template, and RNA nucleotides placed on the slot tracks run through the enzyme's DNA channel; anchors labelled.
+  - `rnap-ec-l2.png`: active-site atoms around the catalytic Mg²⁺.
+  - `rnap-holo-l1.png`: holoenzyme with σ⁷⁰ in violet on the core.
+- Integration change: `chainColor` in `js/render/actors.js` now prefers the asset's explicit `chains[].subunit` tag before falling back to name matching.
+
+Not verified in Wave 1: hardware-GPU frame rate, phone layout, real-time cross-fade timing, comparison of the measured 63.8° DNA bend with published values. The Express scene still uses the 48-bp construct and placeholder envelopes; migrating it is Wave 2.
