@@ -316,9 +316,13 @@ export class ActorLayer {
   }
 
   // ------------------------------------------------------------ picking
-  /** Nearest L1 bead or L0 triangle hit by a world-space raycaster: { actor, part, chain } or null. */
-  pick(raycaster) {
-    let best = null, bestT = Infinity;
+  /**
+   * World-space raycaster -> { actor, part, chain } or null.
+   * L1 beads win over the L0 envelope that encloses them (the envelope is only a fallback when no bead is hit,
+   * or while L1 is not shown). `minRadius` (angstroms) enlarges small beads so they stay clickable when zoomed out.
+   */
+  pick(raycaster, minRadius = 0) {
+    let bead = null, beadT = Infinity, env = null, envT = Infinity;
     const ray = raycaster.ray;
     for (const rec of this.records.values()) {
       if (!rec.visible || !rec.group.visible) continue;
@@ -328,32 +332,31 @@ export class ActorLayer {
         const lr = this._ray.copy(ray).applyMatrix4(this._inv.copy(M).invert());
         const L1 = rec.asset.lod1, mA = rec.l1.instanceMatrix.array, o = lr.origin, d = lr.direction;
         for (let i = 0; i < L1.count; i++) {
-          const s = mA[i * 16];                                  // uniform scale = bead radius (0 when hidden)
-          if (s <= 0.001) continue;
+          if (mA[i * 16] <= 0.001) continue;                       // hidden instance (part switched off)
+          const s = Math.max(mA[i * 16], minRadius);               // uniform scale = bead radius
           const wx = L1.positions[i * 3] - o.x, wy = L1.positions[i * 3 + 1] - o.y, wz = L1.positions[i * 3 + 2] - o.z;
           const tc = wx * d.x + wy * d.y + wz * d.z;
           if (tc <= 0) continue;
           const d2 = wx * wx + wy * wy + wz * wz - tc * tc;
           if (d2 > s * s) continue;
           const t = tc - Math.sqrt(s * s - d2);
-          if (t >= bestT) continue;
+          if (t >= beadT) continue;
           if (clip && clip.distanceToPoint(this._v.copy(d).multiplyScalar(t).add(o).applyMatrix4(M)) < 0) continue;
           const ch = L1.chain[i];
-          bestT = t; best = { actor: rec.id, part: rec.chainPart[ch], chain: rec.asset.chains[ch].id };
+          beadT = t; bead = { actor: rec.id, part: rec.chainPart[ch], chain: rec.asset.chains[ch].id };
         }
       }
       // L0 envelope triangles
-      rec.l0.forEach(mesh => {
-        if (!mesh.visible) return;
-        const hits = raycaster.intersectObject(mesh, false);
-        for (const h of hits) {
+      for (const mesh of rec.l0) {
+        if (!mesh.visible) continue;
+        for (const h of raycaster.intersectObject(mesh, false)) {
           if (clip && clip.distanceToPoint(h.point) < 0) continue;
-          if (h.distance < bestT) { bestT = h.distance; best = { actor: rec.id, part: mesh.userData.part, chain: null }; }
+          if (h.distance < envT) { envT = h.distance; env = { actor: rec.id, part: mesh.userData.part, chain: null }; }
           break;
         }
-      });
+      }
     }
-    return best;
+    return bead || env;
   }
 
   // ------------------------------------------------------------ disposal

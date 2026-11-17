@@ -729,7 +729,7 @@ class Viewer {
     }
     if (best < 0) {
       // no atom or residue hit: report a machine actor (bead or envelope) when there is one
-      const ah = this.actors.records.size ? this.actors.pick(this.raycaster) : null;
+      const ah = this.actors.records.size ? this.actors.pick(this.raycaster, minR) : null;
       return ah ? { actor: ah.actor, part: ah.part, chain: ah.chain, nucleotide: -1, atom: -1, pair: -1, residue: -1, clientX, clientY } : null;
     }
     const nu = asm.nucleotides[A.nuc[best]];
