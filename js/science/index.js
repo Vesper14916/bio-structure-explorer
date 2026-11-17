@@ -7,3 +7,4 @@ export { HELIX_B, HELIX_A, BACKBONE, BACKBONE_RNA, BACKBONE_TORSIONS, BACKBONE_R
 export * from './residues.js';
 export * from './peptide.js';
 export * from './ntp.js';
+export * from './scenario.js';
