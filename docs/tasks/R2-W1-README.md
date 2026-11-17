@@ -72,9 +72,9 @@ Merge order: D, then C, then A, then B. After each merge run all tests and the s
 - A peptide built for `fMet-A-E-F-K-G-S-D-Y-Q-A` passes geometry tests; NTP templates pass geometry tests.
 - The 150-bp construct passes its tests and the 48-bp construct is unchanged.
 
-## Known external prerequisite
+## Source data access
 
-Task A needs the mmCIF files for the chosen PDB entries. `files.rcsb.org` is blocked in the current cloud environment. Either allow that host, or place the files in `tools/sources/` (ignored by Git) before task A reaches step 4. Steps 1–3 of task A do not need the network.
+Checked 2026-11-17: `files.rcsb.org` is reachable from the cloud environment (an earlier failure was transient). `tools/sources/6ALF.cif` and `tools/sources/6ALH.cif` were downloaded for inspection; the folder is ignored by Git, so each worktree must download its own copy (task A, step 4). Both entries contain two DNA chains (21 and 28 modelled residues), one RNA chain (12 residues in 6ALF, 10 in 6ALH), and the five core chains α, α, β, β′, ω (about 3,170 modelled residues in total).
 
 ## Outlook
 

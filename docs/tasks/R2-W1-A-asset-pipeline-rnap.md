@@ -14,7 +14,7 @@ A deterministic offline tool that turns a PDB mmCIF file into a Helix asset (for
 
 ### Step 1: mmCIF reader (`tools/lib/mmcif.mjs`), no network needed
 - Export `parseMmcif(text)` returning `{ title, method, resolutionA, entities, atoms }`.
-- Read the `_atom_site` loop by column name: `group_PDB`, `type_symbol`, `label_atom_id`, `label_alt_id`, `label_comp_id`, `label_asym_id`, `auth_asym_id`, `label_entity_id`, `label_seq_id`, `auth_seq_id`, `Cartn_x`, `Cartn_y`, `Cartn_z`, `pdbx_PDB_model_num`. Handle quoted values such as `"O5'"`.
+- Read the `_atom_site` loop by column name: `group_PDB`, `type_symbol`, `label_atom_id`, `label_alt_id`, `label_comp_id`, `label_asym_id`, `auth_asym_id`, `label_entity_id`, `label_seq_id`, `auth_seq_id`, `Cartn_x`, `Cartn_y`, `Cartn_z`, `pdbx_PDB_model_num`. Handle quoted values such as `"O5'"`. Handle multi-line text values delimited by lines starting with `;` (both candidate entries use them for entity descriptions).
 - Keep model 1 only, alternate location `.` or `A` only, and drop hydrogen and deuterium.
 - Read `_entity.pdbx_description`, `_entity_poly.type`, `_struct.title`, `_exptl.method`, the resolution (`_em_3d_reconstruction.resolution` or `_refine.ls_d_res_high`), and the source organism (`_entity_src_gen.pdbx_gene_src_scientific_name`, `_entity_src_nat.pdbx_organism_scientific`, or `_pdbx_entity_src_syn.organism_scientific`). Both loop and single-row category layouts must work.
 - Chain class from `_entity_poly.type`: `polypeptide(L)` → `protein`; `polyribonucleotide` → `rna`; `polydeoxyribonucleotide` → `dna`. Hybrid or other types: stop and report.
@@ -34,7 +34,7 @@ A deterministic offline tool that turns a PDB mmCIF file into a Helix asset (for
 - Add a dry-run target that builds an asset from `tools/1bna.cif` into a temporary directory (not committed) and validate it with `validateAsset`. For this dry run only, export DNA `P` beads to L1 so the mesh code is exercised.
 
 ### Step 4: obtain the source entry (network or manual file)
-- Candidates: PDB `6ALF` (4.1 Å) and `6ALH` (4.4 Å), *E. coli* RNA polymerase elongation complexes. Look for `tools/sources/6ALF.cif` and `tools/sources/6ALH.cif` first. If absent, download `https://files.rcsb.org/download/<ID>.cif`. Add `tools/sources/` to `.gitignore`; never commit raw mmCIF.
+- Candidates: PDB `6ALF` (4.1 Å) and `6ALH` (4.4 Å), *E. coli* RNA polymerase elongation complexes. A pre-check on 2026-11-17 found in both: DNA chains `A` (21 residues) and `B` (28), RNA chain `R` (12 in 6ALF, 10 in 6ALH), α chains `G` and `H`, β `I`, β′ `J`, ω `K`. Confirm this yourself from the files; which DNA chain is the template was not checked. Look for `tools/sources/6ALF.cif` and `tools/sources/6ALH.cif` first. If absent, download `https://files.rcsb.org/download/<ID>.cif`. Add `tools/sources/` to `.gitignore`; never commit raw mmCIF.
 - If neither file can be obtained, stop here, mark step 4 onward `BLOCKED` in the handoff with the exact error, and hand off steps 1–3. Do not substitute another structure and do not generate coordinates.
 - Record in `tools/sources.lock.json` for each file used: `pdbId`, `url`, `downloaded` (ISO date), `sha256`, `bytes`.
 - Print and record a chain inventory: chain id, entity description, class, residue count. Identify α (two chains), β, β′, ω, template DNA, non-template DNA, and RNA from the entity descriptions. List any other chain and exclude it from the asset.
