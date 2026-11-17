@@ -46,12 +46,22 @@ served over HTTP (ES modules do not load from `file://`).
 ```
 index.html, css/          page shell and styles
 js/science/               geometry, crystal data, thermodynamics (no DOM, runs in Node)
-js/sim/                   melting and replication simulations (no DOM, runs in Node)
+js/sim/                   melting, replication and gene-expression simulations (no DOM, runs in Node)
 js/render/                three.js viewer
 js/ui/                    controls
 js/main.js                glue
+js/vendor/                vendored three.js r160 (MIT)
 tests/                    node --test tests/science.test.mjs tests/sim.test.mjs
+tools/                    build scripts (templates, standalone bundle) and the 1BNA source CIF
+dist/                     generated single-file build (node tools/build-standalone.mjs)
 dev/                      standalone demo pages for the viewer and the UI
+docs/                     project records: index in docs/README.md
+```
+
+To rebuild the single-file version after changing sources:
+
+```sh
+node tools/build-standalone.mjs     # writes dist/helix-standalone.html
 ```
 
 three.js r160 is vendored under `js/vendor/` (MIT, see `js/vendor/THREE-LICENSE`).

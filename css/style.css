@@ -508,6 +508,9 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 7px; text-align: cent
   .snap-peek .panel-scroll { overflow: hidden; }
   .view > :not(.peek) { transition: opacity 0.2s; }
   .snap-peek .view > :not(.peek) { opacity: 0; }
+  /* In peek, the quick-access row (.peek) must be the first thing visible, whatever its DOM position. */
+  .snap-peek .view { display: flex; flex-direction: column; }
+  .snap-peek .view > .peek { order: -1; }
   .panel-scroll { touch-action: pan-y; }
   .view-head { display: none; }
   .peek { margin-bottom: 14px; }

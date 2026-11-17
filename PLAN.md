@@ -1,7 +1,9 @@
 # Bio Structure Explorer: Gene Expression Demo Plan
 
-Status: Planning complete; implementation not started.
-Updated: 2026-11-13
+Status: First release implemented (DNA, RNA, bacterial gene expression, static single-file build). Visual and mobile acceptance pass recorded 2026-11-17 in `docs/VALIDATION.md`; known limitations are listed there and in section 12.
+Updated: 2026-11-17
+
+Note on history: this file was written as the pre-implementation plan. Section 2 ("Existing foundation") and section 11 ("Initial backlog") describe the starting point. Current task status lives in `docs/TASKS.md`, not here.
 
 ## 1. Objective and project conventions
 
