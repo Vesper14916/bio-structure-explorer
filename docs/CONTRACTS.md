@@ -59,13 +59,14 @@ This document defines the shared data structures, coordinate conventions, sequen
 - **Strand storage:** Every strand in `asm.strands[s]` is stored in its own $5'\to 3'$ chemical order.
 - **Standard Bacterial Teaching Construct (`DEFAULT_GENE_CONSTRUCT`):**
   - Total duplex length: **48 bp** (compact enough for 60 fps atom-level rendering while containing every functional bacterial signal):
-    - `0..4` (`5 bp`): Upstream promoter / $-10$ Pribnow box (`5'-TATAAT-3'` consensus shortened to `5'-TATAA-3'`)
-    - `5..12` (`8 bp`): $5'\text{ UTR}$ containing the **Shine–Dalgarno** ribosome-binding site (`5'-AGGAGGU-3'` / `AGGAGG`)
-    - `13..45` (`33 bp`, 11 sense codons): Coding region (`ORF`):
+    - `[0, 4)` (4 bp) abbreviated −10 element `TATA`
+    - `[4, 12)` (8 bp) 5′ UTR `AGGAGGTA` with Shine–Dalgarno `AGGAGG` at `[4, 10)`
+    - `[12, 45)` (33 bp, 11 sense codons) coding region (`ORF`):
       - Coding DNA ($5'\to 3'$): `ATG GCT GAA TTT AAA GGT TCT GAC TAC CAA GCT`
       - mRNA ($5'\to 3'$): `AUG GCU GAA UUU AAA GGU UCU GAC UAC CAA GCU`
       - Amino acids ($N\to C$): `fMet (M) - Ala (A) - Glu (E) - Phe (F) - Lys (K) - Gly (G) - Ser (S) - Asp (D) - Tyr (Y) - Gln (Q) - Ala (A)`
-    - `46..48` (`3 bp`, stop codon `c = 11`): `TAA` (`mRNA: UAA`) — recognized by Release Factor **RF1** (adds **no** amino acid).
+    - `[45, 48)` (3 bp, codon index 11) stop `TAA` / `UAA`, recognised by RF1, adds no amino acid.
+    - mRNA: DNA `[4, 48)`, 44 nt.
 
 ---
 
