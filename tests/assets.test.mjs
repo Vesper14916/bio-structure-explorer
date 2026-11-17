@@ -212,3 +212,17 @@ test('rnap-ec: tracks, hybrid pairing, register origin, and downstream axis', ()
   for (const r of [-12, 5, 10]) assert.ok(dist(trackFrame(nt, r).o, trackFrame(tpl, r).o) < 3, `duplex register ${r}`);
   assert.ok(dist(sub(a.anchors.activeSite.o, [0, 0, 0]), [0, 0, 0]) < 15);
 });
+
+test('rnap-holo: core and sigma parts in the rnap-ec frame', () => {
+  const h = load('rnap-holo'), ec = load('rnap-ec');
+  assert.match(h.source.organism, /Escherichia coli/);
+  assert.deepEqual(h.parts.map(p => p.id), ['core', 'sigma']);
+  assert.deepEqual(h.lod0.parts.map(p => p.part), ['core', 'sigma']);
+  for (const m of h.lod0.parts) assert.ok(m.triangleCount <= 12000);
+  assert.ok(h.chains.some(c => c.part === 'sigma' && c.subunit === 'sigma70'));
+  assert.ok(h.source.superposition.rmsdA <= 6 && h.source.superposition.atoms > 1000);
+  for (const s of h.bounds.size) assert.ok(s >= 80 && s <= 200, `size ${s}`);
+  assert.ok(dist(h.anchors.activeSite.o, ec.anchors.activeSite.o) < 5);
+  assert.ok(h.lod2.count <= 3000);
+  assert.equal(h.tracks, undefined);
+});

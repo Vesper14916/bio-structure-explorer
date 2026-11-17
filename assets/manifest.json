@@ -10,6 +10,11 @@
       "id": "rnap-ec",
       "file": "rnap-ec.asset.json",
       "synthetic": false
+    },
+    {
+      "id": "rnap-holo",
+      "file": "rnap-holo.asset.json",
+      "synthetic": false
     }
   ]
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Offline asset pipeline: PDB mmCIF -> Helix asset format v1 (docs/CONTRACTS.md section 6).
 //
-//   node tools/build-assets.mjs            build assets/rnap-ec.asset.json and assets/manifest.json
+//   node tools/build-assets.mjs            build assets/rnap-ec.asset.json, assets/rnap-holo.asset.json, assets/manifest.json
 //   node tools/build-assets.mjs --check    rebuild in memory and compare byte-for-byte with the committed files
 //   node tools/build-assets.mjs --dry-run  build a test asset from tools/1bna.cif into a temporary directory
 //
@@ -15,7 +15,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { ASSET_FORMAT, ASSET_VERSION, QUANT_STEP, encodeArray, encodePositions, validateAsset } from '../js/assets/format.js';
-import { dist, invApplyFrame, mulMM, cross, dot, norm, sub, scale, add } from '../js/science/math.js';
+import { dist, invApplyFrame, applyFrame, kabsch, mulMM, cross, dot, norm, sub, scale, add } from '../js/science/math.js';
 import { parseMmcif, polymerChains } from './lib/mmcif.mjs';
 import { fitBaseFrame, residueBase, interpolateFrames, fitLine } from './lib/frames.mjs';
 import { envelope, meshStats } from './lib/surface.mjs';
@@ -423,6 +423,86 @@ function machineLods(parsed, groups, P, activeSite, centre) {
   };
 }
 
+// ---------------------------------------------------------------------------------------------
+// rnap-holo (stretch): sigma70 holoenzyme superposed onto the rnap-ec frame via beta' Calpha atoms
+
+const HOLO_MAX_RMSD = 6;
+
+function buildRnapHolo(lock, ecBuild) {
+  const cands = lock.sources.filter(s => s.target === 'rnap-holo').map(s => {
+    const parsed = loadSource(s);
+    const rows = inventory(parsed);
+    const keys = rows.map(r => r.subunit);
+    const complete = CORE_KEYS.every(k => keys.includes(k)) && keys.filter(k => k === 'alpha').length === 2 && keys.includes('sigma70');
+    log(`\n${s.pdbId}: ${parsed.title}; ${parsed.method}; ${parsed.resolutionA} A; core + sigma70 present: ${complete}`);
+    for (const r of rows) log(`  ${r.id.padEnd(5)}  ${r.entity.padEnd(6)}  ${r.class.padEnd(7)}  ${String(r.residues).padStart(8)}  ${(r.subunit || 'EXCLUDED').padEnd(9)}  ${r.description}`);
+    return { s, parsed, rows, complete };
+  }).filter(c => c.complete);
+  if (!cands.length) throw new Error('no rnap-holo candidate with core and sigma70');
+  cands.sort((p, q) => p.parsed.resolutionA - q.parsed.resolutionA);
+  const { s, parsed, rows } = cands[0];
+  log(`\nselected ${s.pdbId} for rnap-holo (rule: complete core + sigma70, then better resolution)`);
+  const core = rows.filter(r => CORE_KEYS.includes(r.subunit)), sigma = rows.filter(r => r.subunit === 'sigma70');
+  const excluded = rows.filter(r => !CORE_KEYS.includes(r.subunit) && r.subunit !== 'sigma70');
+
+  // Superposition on beta' Calpha atoms matched by label_seq_id (requires identical entity sequences).
+  const ecBp = ecBuild.core.find(r => r.subunit === 'betaPrime'), hoBp = core.find(r => r.subunit === 'betaPrime');
+  if (ecBuild.parsed.entityPolySeq[ecBp.entity] !== parsed.entityPolySeq[hoBp.entity]) throw new Error('beta\' entity sequences differ; label_seq_id matching invalid');
+  const ecRes = new Map(ecBp.chain.residues.map(r => [r.seq, r]));
+  const Pm = [], Qm = [];
+  let nameMismatch = 0;
+  for (const r of hoBp.chain.residues) {
+    const q = ecRes.get(r.seq);
+    if (!q || !q.atoms.CA || !r.atoms.CA) continue;
+    if (q.comp !== r.comp) nameMismatch++;
+    Pm.push(r.atoms.CA); Qm.push(q.atoms.CA);
+  }
+  if (nameMismatch) throw new Error(`beta' residue names differ at ${nameMismatch} matched positions`);
+  const sup = kabsch(Pm, Qm);
+  const rmsd = Math.sqrt(Pm.reduce((acc, p, i) => acc + dist(applyFrame(sup, p), Qm[i]) ** 2, 0) / Pm.length);
+  log(`beta' superposition ${s.pdbId} chain ${hoBp.id} -> ${ecBuild.sourceEntry.pdbId} chain ${ecBp.id}: ${Pm.length} Calpha, RMSD ${rmsd.toFixed(3)} A`);
+  if (rmsd > HOLO_MAX_RMSD) throw new Error(`beta' RMSD ${rmsd.toFixed(2)} A exceeds ${HOLO_MAX_RMSD} A; stop and report`);
+  const P = p => ecBuild.P(applyFrame(sup, p));
+
+  // Anchors: Calpha centroid of all used chains; catalytic MG of the holoenzyme nearest to the rnap-ec active site.
+  const ca = [];
+  for (const r of [...core, ...sigma]) for (const res of r.chain.residues) if (res.atoms.CA) ca.push(res.atoms.CA);
+  const centre = [0, 1, 2].map(k => ca.reduce((acc, p) => acc + p[k], 0) / ca.length);
+  const ecSite = ecBuild.asset.anchors.activeSite.o;
+  const mgs = parsed.atoms.filter(a => a.comp === 'MG').map(a => ({ a, d: dist(P([a.x, a.y, a.z]), ecSite) })).sort((p, q) => p.d - q.d);
+  if (!mgs.length) throw new Error(`${s.pdbId}: no MG ion for the activeSite anchor`);
+  const site = [mgs[0].a.x, mgs[0].a.y, mgs[0].a.z];
+  const siteSource = `MG ion (label_asym ${mgs[0].a.labelAsym}, auth ${mgs[0].a.authAsym} ${mgs[0].a.authSeq}); ${mgs[0].d.toFixed(2)} A from the rnap-ec activeSite after superposition`;
+  const lods = machineLods(parsed, [{ part: 'core', rows: core }, { part: 'sigma', rows: sigma }], P, site, centre);
+
+  const asset = {
+    format: ASSET_FORMAT, version: ASSET_VERSION, id: 'rnap-holo',
+    name: 'E. coli RNA polymerase σ70 holoenzyme (α2ββ′ωσ70)', kind: 'machine', units: 'angstrom', quantStep: QUANT_STEP,
+    source: {
+      type: 'pdb', pdbId: s.pdbId, url: s.url, title: parsed.title, method: parsed.method, resolutionA: parsed.resolutionA,
+      organism: core[0].organism, downloaded: s.downloaded, revisionDate: parsed.revisionDate, sha256: s.sha256, license: LICENSE,
+      chainsUsed: [...core, ...sigma].map(r => `${r.id} (${SUBS[r.subunit].label})`),
+      frameSource: `rnap-ec asset frame (${ecBuild.sourceEntry.pdbId})`,
+      superposition: { method: 'least-squares (quaternion) on beta\' Calpha atoms matched by label_seq_id', reference: `${ecBuild.sourceEntry.pdbId} chain ${ecBp.id}`, mobile: `${s.pdbId} chain ${hoBp.id}`, atoms: Pm.length, rmsdA: r3(rmsd) },
+      notes: [
+        'Generated by tools/build-assets.mjs from the mmCIF file pinned in tools/sources.lock.json (model 1, altloc . or A, no hydrogens).',
+        `Coordinates are placed in the rnap-ec frame by one rigid superposition on beta' Calpha atoms (${Pm.length} atoms, RMSD ${rmsd.toFixed(2)} A). The holoenzyme is a different structure: domains that move between holoenzyme and elongation complex (for example the clamp) do not coincide with rnap-ec.`,
+        `activeSite anchor: ${siteSource}.`,
+        `L0: one envelope per part (Gaussian density of Calpha beads, sigma 5 A, marching cubes); L2 radius ${lods.lod2.radius} A around activeSite.`,
+        'No DNA or RNA in this entry, so there are no tracks; dnaEntry, dnaExit and rnaExit anchors are not defined for this asset.',
+        ...(excluded.length ? [`Excluded chains: ${excluded.map(r => r.id + ' ' + r.description).join('; ')}.`] : []),
+      ],
+    },
+    bounds: lods.bounds,
+    parts: [{ id: 'core', name: 'RNA polymerase core (α2ββ′ω)' }, { id: 'sigma', name: 'σ70 (RpoD)' }],
+    chains: lods.chains, lod0: lods.lod0, lod1: lods.lod1, lod2: lods.lod2,
+    anchors: { center: { o: P(centre).map(r3), R: I3 }, activeSite: { o: P(site).map(r3), R: I3 } },
+  };
+  const problems = validateAsset(asset);
+  if (problems.length) throw new Error('rnap-holo invalid:\n' + problems.join('\n'));
+  return { asset, report: { pdbId: s.pdbId, superpositionAtoms: Pm.length, rmsd, siteSource, ...lods.report, bounds: asset.bounds } };
+}
+
 function entitySequence(parsed, entityId) {
   // Rebuilt from residue names would miss unmodelled residues, so use the canonical one-letter sequence.
   const seq = parsed.entityPolySeq && parsed.entityPolySeq[entityId];
@@ -484,6 +564,7 @@ function manifest() {
   return JSON.stringify({ version: 1, assets: [
     { id: 'fixture-machine', file: 'fixture-machine.asset.json', synthetic: true },
     { id: 'rnap-ec', file: 'rnap-ec.asset.json', synthetic: false },
+    { id: 'rnap-holo', file: 'rnap-holo.asset.json', synthetic: false },
   ] }, null, 2) + '\n';
 }
 
@@ -493,9 +574,13 @@ function main() {
   const check = args.includes('--check');
   QUIET = args.includes('--quiet');
   const lock = readLock();
-  const { asset, report } = buildRnapEc(lock);
-  const outputs = { 'assets/rnap-ec.asset.json': JSON.stringify(asset), 'assets/manifest.json': manifest() };
-  log('\nreport ' + JSON.stringify(report, null, 1));
+  const ec = buildRnapEc(lock);
+  log('\nrnap-ec report ' + JSON.stringify(ec.report, null, 1));
+  const holo = buildRnapHolo(lock, ec);
+  log('\nrnap-holo report ' + JSON.stringify(holo.report, null, 1));
+  const outputs = {
+    'assets/rnap-ec.asset.json': JSON.stringify(ec.asset), 'assets/rnap-holo.asset.json': JSON.stringify(holo.asset), 'assets/manifest.json': manifest(),
+  };
   if (check) {
     let bad = 0;
     for (const [rel, text] of Object.entries(outputs)) {
