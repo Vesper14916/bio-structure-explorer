@@ -31,27 +31,28 @@ Owner: Science & Simulation Agent (Agent 1) / Integration Owner (Agent 0)
 To ensure smooth 60 fps atom-level rendering while preserving all essential biological signals in *Escherichia coli*, the construct is structured as:
 
 ```text
-Region:       [ Promoter ] [   5' UTR (SD)  ] [                  Coding ORF (11 aa)                   ] [Stop]
-Indices (0b): 0..4 (5 nt)  5..12 (8 nt)       13..45 (33 nt = 11 codons)                                46..48
-Coding DNA:   5'-TATAA     AGGAGGU            ATG GCT GAA TTT AAA GGT TCT GAC TAC CAA GCT               TAA-3'
-Template DNA: 3'-ATATT     TCCTCCA            TAC CGA CTT AAA TTT CCA AGA CTG ATG GTT CGA               ATT-5'
-mRNA (43 nt):              5'-AGGAGGU         AUG GCU GAA UUU AAA GGU UCU GAC UAC CAA GCU               UAA-3'
-Peptide:                                      fMet-Ala-Glu-Phe-Lys-Gly-Ser-Asp-Tyr-Gln-Ala              (RF1)
+Region:       [Promoter] [  5' UTR (SD)  ] [                Coding ORF (11 aa)                 ] [Stop]
+Indices (0b): [0, 4)     [4, 12)           [12, 45)                                              [45, 48)
+Coding DNA:   5'-TATA    AGGAGGTA          ATG GCT GAA TTT AAA GGT TCT GAC TAC CAA GCT           TAA-3'
+Template DNA: 3'-ATAT    TCCTCCAT          TAC CGA CTT AAA TTT CCA AGA CTG ATG GTT CGA           ATT-5'
+mRNA (44 nt):            5'-AGGAGGUA       AUG GCU GAA UUU AAA GGU UCU GAC UAC CAA GCU           UAA-3'
+Peptide:                                   fMet-Ala-Glu-Phe-Lys-Gly-Ser-Asp-Tyr-Gln-Ala          (RF1)
 ```
 
 ### 3.2 Biological Invariants Enforced
 1. **Transcription (`5' → 3'`):**
-   - Transcription initiates at position `+1` (index `5`, immediately downstream of the `-10` Pribnow element `TATAA`).
+   - Transcription initiates at position `+1` (index `4`, immediately downstream of the abbreviated `-10` element `TATA`).
    - RNA Polymerase (`RNAP`) opens a local transcription bubble of ~12 bp, pairs incoming ribonucleoside triphosphates (`rATP`, `rUTP`, `rGTP`, `rCTP` carrying $2'\text{-OH}$) antiparallel to the **template strand** ($3'\to 5'$), maintains an internal ~8–9 bp RNA·DNA hybrid, and re-anneals the parental DNA duplex behind the enzyme.
 2. **Translation Initiation (`fMet` vs `Met`):**
    - The 30S ribosomal subunit recognizes the **Shine–Dalgarno (`AGGAGG`)** sequence in the $5'\text{ UTR}$ (which remains untranslated).
-   - Bacterial translation initiates at `AUG` (codon 1, nucleotide index `13..16`) using **initiator formylmethionyl-tRNA ($\text{fMet-tRNA}^{\text{fMet}}$)** placed directly into the **P-site**, distinct from elongator tRNAs that enter via the **A-site**.
+   - Bacterial translation initiates at `AUG` (codon 1, mRNA index `[8, 11)`) using **initiator formylmethionyl-tRNA ($\text{fMet-tRNA}^{\text{fMet}}$)** placed directly into the **P-site**, distinct from elongator tRNAs that enter via the **A-site**.
 3. **Elongation (`A → P → E` Translocation):**
    - Sense codons 2..11 (`GCU` → `Ala` through `GCU` → `Ala`) recruit cognate aminoacyl-tRNAs to the **A-site**, form peptide bonds in the 50S peptidyl transferase center, and translocate by exactly 3 nucleotides per step ($5'\to 3'$ along mRNA) as deacylated tRNAs exit from the **E-site**.
 4. **Termination (`UAA` + `RF1`):**
-   - The `UAA` ochre stop codon (nucleotide index `46..48`) is recognized by protein **Release Factor 1 (`RF1`)** in the A-site. No tRNA or amino acid is added for `UAA`. Hydrolysis releases the 11-residue nascent polypeptide.
+   - The `UAA` ochre stop codon (mRNA index `[41, 44)`) is recognized by protein **Release Factor 1 (`RF1`)** in the A-site. No tRNA or amino acid is added for `UAA`. Hydrolysis releases the 11-residue nascent polypeptide.
 
 ### 3.3 Explicit Pedagogical Simplifications
 - **Sequential vs Co-transcriptional Coupling:** Although transcription and translation frequently couple on the same nascent mRNA in bacteria, the timeline presents transcription advancing into immediate translation with clear phase transitions so students can inspect RNAP and the ribosome without mutual visual occlusion.
 - **Macromolecular Envelopes:** RNAP, 30S/50S ribosomal subunits, tRNAs, and RF1 are rendered as smooth translucent volumetric envelopes with active-site cutaways rather than 100,000+ all-atom protein/rRNA coordinates, keeping the download under 200 KB and frame rates at 60 fps.
 - **Precharged tRNAs:** Aminoacyl-tRNA synthetases, initiation/elongation factors (`IF1–3`, `EF-Tu`, `EF-G`), and GTP hydrolysis are described in the UI notes rather than animated as separate molecular collisions.
+- **Abbreviated signals:** the 48-bp construct has a 4-bp stand-in for the −10 element, no −35 element, a 2-nt Shine–Dalgarno-to-start spacer, and no terminator. It is replaced by the 150-bp true-scale construct (`docs/CONTRACTS.md` 6.5) when the simulation migrates.
