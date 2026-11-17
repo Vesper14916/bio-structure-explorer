@@ -4,3 +4,6 @@ export * from './assembly.js';
 export * from './thermo.js';
 export * from './genetic-code.js';
 export { HELIX_B, HELIX_A, BACKBONE, BACKBONE_RNA, BACKBONE_TORSIONS, BACKBONE_RNA_TORSIONS, CRYSTAL_1BNA } from './templates.js';
+export * from './residues.js';
+export * from './peptide.js';
+export * from './ntp.js';
