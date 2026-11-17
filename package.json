@@ -1,0 +1,11 @@
+{
+  "name": "bio-structure-explorer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node tools/check-syntax.mjs",
+    "test": "node tools/check-syntax.mjs && node --test tests/*.test.mjs",
+    "smoke": "node tests/smoke.browser.mjs",
+    "build:standalone": "node tools/build-standalone.mjs"
+  }
+}
