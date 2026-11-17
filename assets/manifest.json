@@ -5,6 +5,11 @@
       "id": "fixture-machine",
       "file": "fixture-machine.asset.json",
       "synthetic": true
+    },
+    {
+      "id": "rnap-ec",
+      "file": "rnap-ec.asset.json",
+      "synthetic": false
     }
   ]
 }
