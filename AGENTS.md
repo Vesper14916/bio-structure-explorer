@@ -42,9 +42,10 @@ Model selection across multi-agent workflows follows a structured 4-tier matrix 
 
 ### Operational allocation policy
 
-Because developer access does not currently include Gemini 4 Carbon:
+Current access (2026-11-19): the highest available model is **Gemini 4 Neon** at high effort. Gemini 4 Carbon and Argon are not used. The agent tool (Antigravity) cannot choose a model or effort per subagent.
 
-1. **Architectural Ceiling (Argon)**: **Gemini 4 Argon** (or Claude Opus 5.5) serves as the highest-tier model for this repository. It acts as the **Integration Owner**, responsible for milestone planning, architectural design, shared contract freezing (`CONTRACTS.md`), and difficult root-cause analysis.
-2. **Primary Workhorse (Hydrogen)**: The vast majority of development tasks are assigned to **Gemini 4 Hydrogen** (or Claude Sonnet 5.5). This includes the **Science & Simulation Agent**, **Molecular Assets Agent**, and **Rendering & Interaction Agent** executing bounded, well-specified implementation tasks.
-3. **Utility & Support (Flash / Flash-Lite)**: Use **Gemini 3.8 Flash** or **Flash-Lite** for quick lookups, test log parsing, repetitive file checks, and routine sentinel/subagent tasks to minimize latency and token overhead.
+1. **Chief (Neon, high)**: the main conversation runs on Gemini 4 Neon at high effort and is the **Integration Owner**: stage planning, contract freezing (`docs/CONTRACTS.md`), merges, gates, root-cause analysis, and every task the plan marks Carbon or Argon that the Chief chooses to keep.
+2. **Subagents (Hydrogen, or Neon if the tool cannot select)**: every subagent runs on **Gemini 4 Hydrogen** where the tool allows it; otherwise subagents inherit Neon. Subagents execute bounded, well-specified tasks with explicit file ownership.
+3. **Tier labels in `PLAN.md` §10** map as follows: Carbon and Argon → Chief or a Neon subagent; Hydrogen and Flash → a Hydrogen subagent. Flash-Lite sentinel work (re-running gates, parsing logs) is done by any subagent.
+4. **Rhythm**: one stage per working session. Stages run strictly in series; tasks inside one stage may run in parallel, with at most five subagents at once (`PLAN.md` §11).
 

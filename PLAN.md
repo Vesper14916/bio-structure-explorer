@@ -1,6 +1,6 @@
 # Helix Gene Expression: Completion Plan (Round 3)
 
-Status: Approved scope, not started. Written 2026-11-18 by the Round 2 integration owner.
+Status: Approved scope, not started. Written 2026-11-18 by the Round 2 integration owner. Team and schedule revised 2026-11-19 (D10, §9.1, §11): serial stages, Neon Chief.
 Base commit: `main` after it is fast-forwarded to `claude/admiring-cray-fdre6q` (`481d681`, Round 2 Wave 1 closed).
 History: the Round 1 and Round 2 plans are archived in `docs/history/PLAN-round1-2.md`. That file is a record only; this plan replaces it for all forward work.
 
@@ -45,7 +45,7 @@ Helix is a static website, with a single-file offline build, that shows one bact
 | D7 | **tRNA bodies:** one initiator body (tRNA^fMet) and one elongator body reused for all 19 elongator amino acids. Only the anticodon nucleotides 34–36 are rebuilt for each codon, as the exact Watson–Crick complement. Wobble pairing and modified nucleosides are disclosed, not modelled. |
 | D8 | **Motion model:** deterministic, a pure function of story time. No physics, no random numbers at run time except those seeded from the scenario. Conformational changes are discrete labelled poses with interpolation. |
 | D9 | **The new scene is developed at `index.html?mode=express&scene=v2`.** The Round 1 Express scene stays the default until gate G4. At G4 the new scene becomes Express and the Round 1 Express code is removed, with its tests ported. Other modes (Explore, Pairs, Melt, Copy, X-ray) are not changed except where a task says so. |
-| D10 | **Team:** Gemini models. Gemini 4 Carbon (high) is the Chief and integration owner. Gemini 4 Argon takes the critical science, kinematics and asset tasks. Gemini 4 Hydrogen takes the bulk of implementation. Gemini 3.8 Flash and Flash-Lite take mechanical and checking work. |
+| D10 | **Team (revised 2026-11-19):** Gemini 4 Neon (high) is the Chief and integration owner; it is the highest model available. Subagents run on Gemini 4 Hydrogen where the agent tool allows a model choice, otherwise on Neon. Tier labels in §10 are mapped by `AGENTS.md` (Operational allocation policy). |
 | D11 | **Branches:** `main` is the integration branch. Each task works on its own branch `r3/<task-id>`, in its own clone or worktree, and pushes only that branch. Only the Chief merges into `main` (§9.3). |
 | D12 | **Ribosome colours change** from the Round 1 teal and mint (`0x38d9a9`, `0x63e6be`) to warm neutrals (§4.3). The old 30S teal is almost identical to the mRNA colour `0x2fd9b9`, and at true scale the mRNA runs through the 30S. |
 | D13 | **Story length** at 1× is about 164 s in Step by step mode and about 123 s in Coupled mode (for D = 48). Speeds: 0.5×, 1×, 2×, 4×. |
@@ -655,13 +655,13 @@ Viewer additions (owned by R1 and R2, wired by the Chief): `viewer.setDetailFocu
 
 | Role | Model (thinking level) | Responsibility |
 | --- | --- | --- |
-| Chief (integration owner) | Gemini 4 Carbon (high) | W0 setup and contracts; owns `js/main.js`, `docs/CONTRACTS.md`, `docs/TASKS.md`, `docs/VALIDATION.md`, `docs/ASSETS.md`, `PLAN.md`, `AGENTS.md`, `dist/`; merges; runs gates; tunes values marked "initial"; decides design gaps |
-| Critical lanes | Gemini 4 Argon (high) | A1, S2, K1, S3, S4, S5, V1 |
-| Workhorse lanes | Gemini 4 Hydrogen (high or medium as listed) | A2, A3, A4, S1, K2, K3, R1, R2, R3, R4, U1, U2, U3, P1 |
-| Utility | Gemini 3.8 Flash (high) | Q1, Q2, Q3, V2, D1 |
-| Sentinel | Gemini 3.5 Flash-Lite (low) | Re-run gates on request, parse logs, check handoffs for the required sections |
+| Chief (integration owner) | Gemini 4 Neon (high) | W0 setup and contracts; owns `js/main.js`, `docs/CONTRACTS.md`, `docs/TASKS.md`, `docs/VALIDATION.md`, `docs/ASSETS.md`, `PLAN.md`, `AGENTS.md`, `dist/`; merges; runs gates; tunes values marked "initial"; decides design gaps |
+| Critical lanes | Neon subagent if selectable, else Hydrogen (high); the Chief reviews these first | A1, S2, K1, S3, S4, S5, V1 |
+| Workhorse lanes | Gemini 4 Hydrogen subagent | A2, A3, A4, S1, K2, K3, R1, R2, R3, R4, U1, U2, U3, P1 |
+| Utility | Gemini 4 Hydrogen subagent | Q1, Q2, Q3, V2, D1 |
+| Sentinel | Any subagent | Re-run gates on request, parse logs, check handoffs for the required sections |
 
-At most **8** implementation agents run at once. There is no quota constraint on concurrency beyond that.
+At most **5** subagents run at once, and only inside one stage. Stages run in series (§11). Where §10 says "Wave", read the stage that contains the task in §11.
 
 ### 9.2 Rules for every agent (repeat at the top of every brief)
 
@@ -696,7 +696,7 @@ Each task lists **Tier**, **Base**, **Depends**, **Owns**, **Steps**, and **Acce
 - **Tier:** Carbon, high. **Base:** `claude/admiring-cray-fdre6q` at `481d681`.
 - **Steps:**
   1. Already done when this plan landed: `main` was fast-forwarded to the base commit and this plan committed on top. Branch from that commit.
-  2. Update `AGENTS.md` "Operational allocation policy": Carbon is now available and is the Chief.
+  2. Done on 2026-11-19: `AGENTS.md` "Operational allocation policy" names Gemini 4 Neon (high) as the Chief and Hydrogen as the subagent model. Check it and continue.
   3. Refactor `tools/build-assets.mjs` into the driver and recipes (§7.1). Move the RNAP logic into `tools/assets/rnap.mjs`. `--check` MUST still print identical output for `rnap-ec` and `rnap-holo`.
   4. Add `tools/lib/superpose.mjs`, `tools/lib/match.mjs`, `tools/fetch-sources.mjs` and the `npm run fetch-sources` script; add the §7.2 entries to `tools/sources.lock.json` with SHA-256 values.
   5. Asset format v2 in `js/assets/format.js`, with tests; regenerate the fixture as v2 with one `path` and two `lod2.sites`.
@@ -921,27 +921,25 @@ Each task lists **Tier**, **Base**, **Depends**, **Owns**, **Steps**, and **Acce
 
 ---
 
-## 11. Schedule and parallelism
+## 11. Schedule: serial stages (revised 2026-11-19)
 
-```
-Wave   Lane:   Assets          Science/Story       Kinematics      Render            UI              QA/Docs
-W0     Chief ─ setup, contracts, stubs, fixtures, format v2, recipes, sources, palette ─────────────────────────────
-W1             A1 (Argon)      S1 (Hydrogen)        K1 (Argon)      R1 (Hydrogen)     U1 (Hydrogen)   Q1 (Flash)
-               A2 (Hydrogen)   S2 (Argon)
-       Chief ─ merge S1 R1 Q1 A2 A1 K1 S2 U1 ─ G1 ─────────────────────────────────────────────────────────────────
-W2             A3, A4 (Hydr.)  S3 (Argon)           K2 (Hydrogen)   R2, R3 (Hydrogen) U2 (Hydrogen)
-       Chief ─ merge A4 A3 K2 R2 R3 U2 S3 ─ INT2: transcription slice ─ G2 ────────────────────────────────────────
-W3                             S4 (Argon)           K3 (Hydrogen)   R4 (Hydrogen)     U3 (Hydrogen)   Q2, V2 (Flash)
-       Chief ─ merge K3 R4 Q2 U3 S4 V2 ─ INT3: full sequential story ─ G3 ──────────────────────────────────────────
-W4                             S5 (Argon)                                              P1 (Hydrogen)   V1 (Argon), D1 (Flash)
-       Chief ─ fixes, cutover ─ G4 ──────────────────────────────────────────────────────────────────────────────
-W5                                                                                                    Q3 (Flash)
-       Chief ─ dist, G5, human acceptance, v1.0.0 ──────────────────────────────────────────────────────────────
-```
+The waves in §10 are re-sliced into nine stages. **Stages run strictly in series**, one stage per working session (about five hours; two or three stages per session only if a stage closes early). Inside a stage, tasks run in parallel with at most five subagents; the Chief merges them in the listed order, then runs the exit check. The next stage starts only from the tag of the previous one: every task branches from the previous stage's tag, which replaces the "Base" line in §10.
 
-Concurrency: W1 runs 8 agents, W2 runs 7, W3 runs 6, W4 runs 4, W5 runs 1. Inside a wave, every task depends only on earlier waves, except S3 (soft dependency on A4 and K2) and S4 (soft dependency on K3). Each codes against the W0 stub and merges after the task it depends on. V2 starts in W3 because INT2 is merged by then.
+| Stage | Tasks (§10 ids), merge order | Subagents | Exit check | Tag |
+| --- | --- | --- | --- | --- |
+| ST1 | W0 by the Chief. Helpers: step 4 (`fetch-sources`, lock SHA-256), step 7 (module stubs), step 8 (fixtures) | 3 | W0 acceptance | `r3-w0` |
+| ST2 | S1 → Q1 → A2 → A1 | 4 | Tests pass; `ribosome-70s`, `trna-init`, `trna-aa` validate and meet budgets | `r3-st2` |
+| ST3 | R1 → K1 → S2 → U1 | 4 | **G1** | `r3-w1` |
+| ST4 | A4 → A3 → K2 → R2 | 4 | Tests pass; factor and RNAP assets validate | `r3-st4` |
+| ST5 | R3 → U2 → S3, then INT2 by the Chief | 3 | **G2** (first playable new scene: chapters 1–7) | `r3-w2` |
+| ST6 | K3 → R4 → Q2 → S4 | 4 | Tests pass | `r3-st6` |
+| ST7 | U3 → V2, then INT3 by the Chief | 2 | **G3** (full Step by step story) | `r3-w3` |
+| ST8 | P1 → D1 → S5 → V1, then INT4 by the Chief | 4 | **G4** (cutover) | `r3-w4` |
+| ST9 | Q3, then INT5 by the Chief and a human | 1 | **G5**; tag `v1.0.0` | `v1.0.0` |
 
-Critical path: W0 → A1 → A3 → S4 → INT3 → S5 → INT4 → G5. If A1 slips, S3, K2, R2, R3 and U2 continue unaffected; S4 waits.
+Soft dependencies inside a stage: S2 and U1 in ST3 use the W0 fixtures; S3 in ST5 codes against the W0 stubs of `js/kin/chain.js` and `js/kin/hairpin.js` (K2 merged in ST4); S4 in ST6 codes against the stub of `js/kin/trna.js` and merges after K3.
+
+Critical path: ST1 → A1 (ST2) → A3 (ST4) → S4 (ST6) → INT3 → S5 → INT4 → G5. A1 starts first in ST2 because it is the largest single risk.
 
 ---
 
