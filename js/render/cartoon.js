@@ -2,6 +2,7 @@
 // (C4'/C1' fallback), broken at inactive links / hidden nucleotides, plus a flat slab per
 // base from C1' to its Watson-Crick edge. Rebuilt in place on every sync (no allocations).
 import * as THREE from 'three';
+import { computeDetailWeight } from './molecule.js';
 import { writeCylinder, writeHidden, cylinderGeometry } from './util.js';
 
 const S = 7;          // tube subdivisions per control-point span
@@ -44,7 +45,21 @@ export class CartoonLayer {
     this.boxGeo = new THREE.BoxGeometry(1, 1, 1);
     this.cylGeo = cylinderGeometry(tier);
     this.tubes = [];
+    this.detailFocus = null;
+    this.cartoonScale = null;
     this._c = new Float64Array(3); this._d = new Float64Array(3);
+  }
+
+  setDetailFocus(focus) {
+    if (!focus || !focus.center) {
+      this.detailFocus = null;
+      return;
+    }
+    const c = focus.center;
+    this.detailFocus = {
+      center: [c[0] ?? c.x ?? 0, c[1] ?? c.y ?? 0, c[2] ?? c.z ?? 0],
+      radius: Math.max(0, Number(focus.radius) || 0),
+    };
   }
 
   setTier(tier) {
@@ -58,12 +73,14 @@ export class CartoonLayer {
     this.tubes = [];
     for (const m of [this.slabs, this.conn]) if (m) { this.group.remove(m); m.dispose(); }
     this.slabs = this.conn = null;
+    this.cartoonScale = null;
   }
 
   setAssembly(asm) {
     this.clear();
     this.asm = asm;
     const n = asm.nucleotides.length;
+    this.cartoonScale = new Float32Array(n);
     for (const s of asm.strands) {
       const t = new StrandTube(s ? s.length : 0, this.tubeMat);
       this.tubes.push(t); this.group.add(t.mesh);
@@ -124,11 +141,37 @@ export class CartoonLayer {
     this.group.visible = visible;
     if (!visible || !this.asm) return;
     const asm = this.asm;
-    for (let s = 0; s < asm.strands.length; s++) this.updateTube(this.tubes[s], asm.strands[s] || [], pos, nucScale);
+    let effScale = nucScale;
+    const df = this.detailFocus;
+    if (df !== null) {
+      effScale = this.cartoonScale;
+      const cx = df.center[0], cy = df.center[1], cz = df.center[2], rad = df.radius;
+      if (!(rad > 0)) {
+        effScale.set(nucScale);
+      } else {
+        for (const nu of asm.nucleotides) {
+          const id = nu.id, c1 = this.c1Atom[id];
+          let rx, ry, rz;
+          if (c1 >= 0) {
+            rx = pos[c1 * 3]; ry = pos[c1 * 3 + 1]; rz = pos[c1 * 3 + 2];
+          } else if (nu.frame && nu.frame.o) {
+            rx = nu.frame.o[0] + nucOff[id * 3]; ry = nu.frame.o[1] + nucOff[id * 3 + 1]; rz = nu.frame.o[2] + nucOff[id * 3 + 2];
+          } else if (nu.atomCount > 0) {
+            const a0 = nu.atomStart * 3;
+            rx = pos[a0]; ry = pos[a0 + 1]; rz = pos[a0 + 2];
+          } else {
+            effScale[id] = nucScale[id]; continue;
+          }
+          const w = computeDetailWeight(rx - cx, ry - cy, rz - cz, rad);
+          effScale[id] = nucScale[id] * (1 - w);
+        }
+      }
+    }
+    for (let s = 0; s < asm.strands.length; s++) this.updateTube(this.tubes[s], asm.strands[s] || [], pos, effScale);
     // slabs + connectors
     const sm = this.slabs.instanceMatrix.array, cm = this.conn.instanceMatrix.array, Lm = this.local;
     for (const nu of asm.nucleotides) {
-      const i = nu.id, s = nucScale[i];
+      const i = nu.id, s = effScale[i];
       if (s <= 0.001) { writeHidden(sm, i); writeHidden(cm, i); continue; }
       const R = nu.frame.R, F = nu.frame.o, o = i * 16;
       const ox = F[0] + nucOff[i * 3], oy = F[1] + nucOff[i * 3 + 1], oz = F[2] + nucOff[i * 3 + 2];
@@ -151,7 +194,7 @@ export class CartoonLayer {
       let tx = pos[a * 3], ty = pos[a * 3 + 1], tz = pos[a * 3 + 2];
       const strand = asm.strands[nu.strand] || [], nextId = strand[nu.index + 1];
       const nl = nextId !== undefined ? this.prevLink[nextId] : null;
-      const b = nl && nl.active && nucScale[nextId] > 0.001 ? this.cpAtom[nextId] : this.o3Atom[i];
+      const b = nl && nl.active && effScale[nextId] > 0.001 ? this.cpAtom[nextId] : this.o3Atom[i];
       if (b >= 0) { tx = (tx + pos[b * 3]) * 0.5; ty = (ty + pos[b * 3 + 1]) * 0.5; tz = (tz + pos[b * 3 + 2]) * 0.5; }
       writeCylinder(cm, i, pos[c1 * 3], pos[c1 * 3 + 1], pos[c1 * 3 + 2], tx, ty, tz, 0.42 * s);
     }

@@ -6,6 +6,7 @@ import { ELEMENTS, ELEMENT_INFO } from '../science/index.js';
 import { ColorModel } from './colors.js';
 import { MoleculeLayer, BALL_SCALE } from './molecule.js';
 import { CartoonLayer } from './cartoon.js';
+import { AtomGroupLayer } from './atom-groups.js';
 import { ActorLayer } from './actors.js';
 import { GuideLayer } from './guides.js';
 import { OverlayLayer } from './overlay.js';
@@ -61,6 +62,7 @@ class Viewer {
     this.anim = null;
     this.framing = null;          // {points:[[x,y,z]...] science coords, dir:[x,y,z] science view direction}
     this.cutCur = null; this.cutTgt = null; this.cutActive = false; this.tagSig = 0;
+    this.detailFocus = null;
 
     if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
     const canvas = this.canvas = document.createElement('canvas');
@@ -103,6 +105,7 @@ class Viewer {
     scene.add(this.particles.points);
     this.molecule = new MoleculeLayer(this.root, this.tier);
     this.cartoon = new CartoonLayer(this.root, this.tier);
+    this.atomGroups = null;
     this.actors = new ActorLayer(this.root, this.tier);
     this.guides = new GuideLayer(this.root);
     this.overlay = new OverlayLayer(this.container, this.root, (x, y, z, out) => this.project(x, y, z, out));
@@ -137,6 +140,7 @@ class Viewer {
     this.post.rebuild(tier);
     this.molecule.setTier(tier);
     this.cartoon.setTier(tier);
+    if (this.atomGroups) this.atomGroups.setTier(tier);
     this.actors.setTier(tier);
     this.applyTierSettings();
     this.resize();
@@ -306,6 +310,7 @@ class Viewer {
   }
 
   recolor() {
+    if (this.atomGroups) this.atomGroups.setStyle(this.style);
     if (!this.asm) return;
     this.colors.compute(this.style.color, this.highlight);
     this.molecule.recolor(this.colors);
@@ -348,7 +353,8 @@ class Viewer {
     this.updateDisplayPositions(this.t);
     const st = this.style, hl = this.colors.highlightActive;
     this.molecule.update(this.dpos, sc, st, hl);
-    this.cartoon.update(this.dpos, sc, this.nucOff, st.representation === 'cartoon');
+    this.cartoon.update(this.dpos, sc, this.nucOff, this.detailFocus !== null || st.representation === 'cartoon');
+    if (this.atomGroups) this.atomGroups.update();
     this.guides.update(sc, st);
     this.dirty = false;
   }
@@ -383,6 +389,33 @@ class Viewer {
     if (!this.asm) return;
     for (const nu of this.asm.nucleotides) this.cutTgt[nu.id] = maskFn ? maskFn(nu) : 0;
     this.cutActive = true;
+  }
+
+  setDetailFocus(focus) {
+    if (!focus || !focus.center) {
+      this.detailFocus = null;
+    } else {
+      const c = focus.center;
+      this.detailFocus = {
+        center: [c[0] ?? c.x ?? 0, c[1] ?? c.y ?? 0, c[2] ?? c.z ?? 0],
+        radius: Math.max(0, Number(focus.radius) || 0),
+      };
+    }
+    this.molecule.setDetailFocus(this.detailFocus);
+    this.cartoon.setDetailFocus(this.detailFocus);
+    if (this.atomGroups) this.atomGroups.setDetailFocus(this.detailFocus);
+    this.dirty = true;
+  }
+
+  setAtomGroups(groups) {
+    const list = groups || [];
+    if (!this.atomGroups) {
+      if (!list.length) return;
+      this.atomGroups = new AtomGroupLayer(this.root, this.tier);
+      this.atomGroups.setDetailFocus(this.detailFocus);
+    }
+    this.atomGroups.setGroups(list, this.style);
+    this.dirty = true;
   }
 
   // ------------------------------------------------------------ camera
@@ -787,6 +820,7 @@ class Viewer {
     this.controls.update(dt);
 
     if (this.asm && (this.dirty || this.style.jitter > 0)) this.updateGeometry();
+    else if (this.dirty) { if (this.atomGroups) this.atomGroups.update(); this.dirty = false; }
 
     // per-frame uniforms
     const motion = this.reducedMotion ? 0 : 1;
@@ -844,6 +878,7 @@ class Viewer {
         const prev = v.style;
         v.style = { ...prev, ...partial };
         if (partial.color !== undefined && partial.color !== prev.color) v.recolor();
+        else if (partial.representation !== undefined && partial.representation !== prev.representation && v.atomGroups) v.atomGroups.setStyle(v.style);
         if (partial.effects !== undefined && partial.effects !== prev.effects) v.applyTierSettings();
         if (partial.autoRotate === false) v.controls.autoRotate = false;
         v.dirty = true;
@@ -858,6 +893,8 @@ class Viewer {
       },
       focus: (sel, o) => v.focus(sel, o),
       setFollowTarget: spec => v.setFollowTarget(spec),
+      setDetailFocus: focus => v.setDetailFocus(focus),
+      setAtomGroups: groups => v.setAtomGroups(groups),
       setAnnotations: list => v.overlay.setAnnotations(list || []),
       setBlobs: list => v.overlay.setBlobs(list || []),
       /** Machine actors (helix-asset v1, see actors.js): [{ id, asset, transform, visible, opacity, parts, cutaway, lod, label }]. */
@@ -912,6 +949,7 @@ class Viewer {
     this.overlay.dispose();
     this.molecule.dispose();
     this.cartoon.dispose();
+    if (this.atomGroups) this.atomGroups.dispose();
     this.actors.dispose();
     this.guides.dispose();
     this.particles.dispose();

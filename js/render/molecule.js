@@ -8,6 +8,20 @@ import { writeSphere, writeCylinder, writeHidden, smoothstep, clamp, sphereGeome
 const BEADS = 7;
 const VDW = ELEMENTS.map(e => ELEMENT_INFO[e].vdw);
 export const BALL_SCALE = 0.3, BOND_RADIUS = 0.17, PEPTIDE_BOND_RADIUS = 0.42;
+export const DETAIL_FADE_BAND = 12;
+
+/**
+ * Detail-sphere weight for a reference point at offset (dx, dy, dz) from focus center.
+ * Returns 1 inside `radius`, smoothly fades to 0 across `[radius, radius + 12]` angstroms,
+ * and returns 0 everywhere when `radius <= 0` (cartoon only).
+ */
+export function computeDetailWeight(dx, dy, dz, radius) {
+  if (!(radius > 0)) return 0;
+  const d = Math.hypot(dx, dy, dz);
+  if (d <= radius) return 1;
+  if (d >= radius + DETAIL_FADE_BAND) return 0;
+  return 1 - smoothstep(radius, radius + DETAIL_FADE_BAND, d);
+}
 
 const beadVertex = /* glsl */`
 #include <common>
@@ -66,7 +80,22 @@ export class MoleculeLayer {
     this.sphereGeo = sphereGeometry(tier);
     this.cylGeo = cylinderGeometry(tier);
     this.asm = null;
+    this.detailFocus = null;
+    this.c1Atom = null;
+    this.detailWeight = null;
     this._tmpColor = new THREE.Color();
+  }
+
+  setDetailFocus(focus) {
+    if (!focus || !focus.center) {
+      this.detailFocus = null;
+      return;
+    }
+    const c = focus.center;
+    this.detailFocus = {
+      center: [c[0] ?? c.x ?? 0, c[1] ?? c.y ?? 0, c[2] ?? c.z ?? 0],
+      radius: Math.max(0, Number(focus.radius) || 0),
+    };
   }
 
   setTier(tier) {
@@ -90,12 +119,17 @@ export class MoleculeLayer {
       m.dispose();
     }
     this.atoms = this.bonds = this.beads = this.waters = this.residuesMesh = this.peptideBonds = null;
+    this.c1Atom = this.detailWeight = null;
   }
 
   setAssembly(asm) {
     this.clear();
     this.asm = asm;
     const N = asm.atoms.count, nb = asm.bonds.length / 2, nl = asm.links.length;
+    const nNuc = asm.nucleotides.length;
+    this.c1Atom = new Int32Array(nNuc);
+    this.detailWeight = new Float32Array(nNuc);
+    for (const nu of asm.nucleotides) this.c1Atom[nu.id] = asm.atomOf(nu.id, "C1'");
     const mk = (geo, mat, count) => {
       const m = new THREE.InstancedMesh(geo, mat, Math.max(1, count));
       m.count = count;
@@ -185,13 +219,41 @@ export class MoleculeLayer {
   update(pos, nucScale, style, highlightActive) {
     const asm = this.asm; if (!asm) return;
     const A = asm.atoms, N = A.count, rep = style.representation;
-    const atomsOn = rep !== 'cartoon', bondsOn = rep === 'ballstick';
+    const df = this.detailFocus;
+    const hasDetail = df !== null;
+    let dw = null;
+    if (hasDetail) {
+      dw = this.detailWeight;
+      const cx = df.center[0], cy = df.center[1], cz = df.center[2], rad = df.radius;
+      if (!(rad > 0)) {
+        dw.fill(0);
+      } else {
+        for (const nu of asm.nucleotides) {
+          const id = nu.id, c1 = this.c1Atom[id];
+          let rx, ry, rz;
+          if (c1 >= 0) {
+            rx = pos[c1 * 3]; ry = pos[c1 * 3 + 1]; rz = pos[c1 * 3 + 2];
+          } else if (nu.frame && nu.frame.o) {
+            rx = nu.frame.o[0]; ry = nu.frame.o[1]; rz = nu.frame.o[2];
+          } else if (nu.atomCount > 0) {
+            const a0 = nu.atomStart * 3;
+            rx = pos[a0]; ry = pos[a0 + 1]; rz = pos[a0 + 2];
+          } else {
+            dw[id] = 0; continue;
+          }
+          dw[id] = computeDetailWeight(rx - cx, ry - cy, rz - cz, rad);
+        }
+      }
+    }
+    const atomsOn = hasDetail ? df.radius > 0 : rep !== 'cartoon';
+    const bondsOn = hasDetail ? (df.radius > 0 && rep !== 'spacefill') : rep === 'ballstick';
     this.atoms.visible = atomsOn;
     this.bonds.visible = bondsOn;
     if (atomsOn) {
       const m = this.atoms.instanceMatrix.array, f = rep === 'spacefill' ? 1 : BALL_SCALE;
       for (let g = 0; g < N; g++) {
-        const s = nucScale[A.nuc[g]];
+        const nid = A.nuc[g];
+        const s = hasDetail ? nucScale[nid] * dw[nid] : nucScale[nid];
         if (s <= 0.001) writeHidden(m, g);
         else writeSphere(m, g, pos[g * 3], pos[g * 3 + 1], pos[g * 3 + 2], VDW[A.el[g]] * f * s);
       }
@@ -200,12 +262,20 @@ export class MoleculeLayer {
     if (bondsOn) {
       const m = this.bonds.instanceMatrix.array, B = asm.bonds, nb = B.length / 2;
       for (let i = 0; i < nb; i++) {
-        const a = B[2 * i], b = B[2 * i + 1], s = Math.min(nucScale[A.nuc[a]], nucScale[A.nuc[b]]);
-        this.halfBond(m, i, pos, a, b, s);
+        const a = B[2 * i], b = B[2 * i + 1];
+        const na = A.nuc[a], nbN = A.nuc[b];
+        const sa = hasDetail ? nucScale[na] * dw[na] : nucScale[na];
+        const sb = hasDetail ? nucScale[nbN] * dw[nbN] : nucScale[nbN];
+        this.halfBond(m, i, pos, a, b, Math.min(sa, sb));
       }
       for (let l = 0; l < asm.links.length; l++) {
         const L = asm.links[l];
-        const s = L.active && L.a >= 0 && L.b >= 0 ? Math.min(nucScale[L.from], nucScale[L.to]) : 0;
+        let s = 0;
+        if (L.active && L.a >= 0 && L.b >= 0) {
+          const sf = hasDetail ? nucScale[L.from] * dw[L.from] : nucScale[L.from];
+          const st = hasDetail ? nucScale[L.to] * dw[L.to] : nucScale[L.to];
+          s = Math.min(sf, st);
+        }
         this.halfBond(m, nb + l, pos, L.a, L.b, s);
       }
       this.bonds.instanceMatrix.needsUpdate = true;
@@ -243,17 +313,20 @@ export class MoleculeLayer {
       this.recolorResidues(highlightActive);
     }
     // Hydrogen bonds
-    this.beads.visible = !!style.hbonds && this.nHb > 0;
+    this.beads.visible = !!style.hbonds && this.nHb > 0 && (!hasDetail || df.radius > 0);
     if (this.beads.visible) {
       const m = this.beads.instanceMatrix.array, I = this.beads.geometry.attributes.aI.array, H = this.hbFlat;
       for (let h = 0; h < this.nHb; h++) {
         const p = asm.pairs[H[h * 3]], a = H[h * 3 + 1], b = H[h * 3 + 2];
         let inten = 0;
         if (a >= 0 && b >= 0 && p.strength > 0.01) {
-          const dx = pos[b * 3] - pos[a * 3], dy = pos[b * 3 + 1] - pos[a * 3 + 1], dz = pos[b * 3 + 2] - pos[a * 3 + 2];
-          const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          inten = p.strength * (1 - smoothstep(3.3, 4.5, d)) * Math.min(nucScale[p.a], nucScale[p.b]);
-          if (highlightActive && this.pairEmph && !this.pairEmph[p.id]) inten *= 0.18;
+          const hw = hasDetail ? Math.max(dw[p.a], dw[p.b]) : 1;
+          if (!hasDetail || hw > 0.05) {
+            const dx = pos[b * 3] - pos[a * 3], dy = pos[b * 3 + 1] - pos[a * 3 + 1], dz = pos[b * 3 + 2] - pos[a * 3 + 2];
+            const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            inten = p.strength * (1 - smoothstep(3.3, 4.5, d)) * Math.min(nucScale[p.a], nucScale[p.b]) * hw;
+            if (highlightActive && this.pairEmph && !this.pairEmph[p.id]) inten *= 0.18;
+          }
         }
         for (let j = 0; j < BEADS; j++) {
           const slot = h * BEADS + j;
