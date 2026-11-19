@@ -45,6 +45,21 @@ function mul(a, b, out) {
   return out;
 }
 
+/** `out = inverse(a) . b`; `out` may alias `a` or `b`. */
+function invMul(a, b, out) {
+  const A = a.R, B = b.R;
+  const d0 = b.o[0] - a.o[0], d1 = b.o[1] - a.o[1], d2 = b.o[2] - a.o[2];
+  const o0 = A[0] * d0 + A[3] * d1 + A[6] * d2, o1 = A[1] * d0 + A[4] * d1 + A[7] * d2, o2 = A[2] * d0 + A[5] * d1 + A[8] * d2;
+  const a0 = A[0], a1 = A[1], a2 = A[2], a3 = A[3], a4 = A[4], a5 = A[5], a6 = A[6], a7 = A[7], a8 = A[8];
+  const b0 = B[0], b1 = B[1], b2 = B[2], b3 = B[3], b4 = B[4], b5 = B[5], b6 = B[6], b7 = B[7], b8 = B[8];
+  const R = out.R;
+  R[0] = a0 * b0 + a3 * b3 + a6 * b6; R[1] = a0 * b1 + a3 * b4 + a6 * b7; R[2] = a0 * b2 + a3 * b5 + a6 * b8;
+  R[3] = a1 * b0 + a4 * b3 + a7 * b6; R[4] = a1 * b1 + a4 * b4 + a7 * b7; R[5] = a1 * b2 + a4 * b5 + a7 * b8;
+  R[6] = a2 * b0 + a5 * b3 + a8 * b6; R[7] = a2 * b1 + a5 * b4 + a8 * b7; R[8] = a2 * b2 + a5 * b5 + a8 * b8;
+  out.o[0] = o0; out.o[1] = o1; out.o[2] = o2;
+  return out;
+}
+
 function copyFrame(a, out) {
   for (let i = 0; i < 9; i++) out.R[i] = a.R[i];
   out.o[0] = a.o[0]; out.o[1] = a.o[1]; out.o[2] = a.o[2];
@@ -155,6 +170,7 @@ function makeScratch(N) {
     bez: [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]], v: [0, 0, 0], v2: [0, 0, 0], tL: [0, 0, 0],
     tNow: [0, 0, 0], tPrev: [0, 0, 0], pPrev: [0, 0, 0], pNow: [0, 0, 0], pu: [0, 0, 0],
     Rm: new Float64Array(9),
+    bubLo: 0, bubHi: -1, chain: null, s0: f(), s1: f(), Ya: f(), Yb: f(), Fk: f(), E: f(), Ei: f(), Id: f(), closure: { trans: 0, angleDeg: 0 },
     cum: new Float64Array(TABLE + 1),
     blendKey: null, blendC: null, blendN: null, blendSet: { r0: 0, r1: -1, C: null, n0: 0, n1: -1, N: null },
   };
@@ -308,6 +324,88 @@ function poseUpstream(S, M, A, t0p, tE, k0, gmax, out, N) {
   }
 }
 
+
+
+/** Local position of the backbone P atom (identical for all bases of the rigid templates). */
+const PHOSPHATE = (() => { const t = nucleotideTemplate('A'), k = t.index.P * 3; return [t.local[k], t.local[k + 1], t.local[k + 2]]; })();
+
+/**
+ * Blend of two relative steps: rotation by quaternion slerp, translation chosen so that the image of the point `p`
+ * (the next nucleotide's P atom, expressed in the previous nucleotide's frame) is the linear blend of its two images.
+ * The O3'-P gap of the blended step is then at most the blend of the two end gaps (convexity of the distance), unlike
+ * an origin-linear blend, whose rotation lever arm can exceed both. `out` may alias `s0` or `s1`.
+ */
+function blendStep(s0, s1, t, p, out, qa, qb, qo) {
+  const A = s0.R, B = s1.R;
+  const ax = A[0] * p[0] + A[1] * p[1] + A[2] * p[2] + s0.o[0], ay = A[3] * p[0] + A[4] * p[1] + A[5] * p[2] + s0.o[1], az = A[6] * p[0] + A[7] * p[1] + A[8] * p[2] + s0.o[2];
+  const bx = B[0] * p[0] + B[1] * p[1] + B[2] * p[2] + s1.o[0], by = B[3] * p[0] + B[4] * p[1] + B[5] * p[2] + s1.o[1], bz = B[6] * p[0] + B[7] * p[1] + B[8] * p[2] + s1.o[2];
+  matToQuat(A, qa); matToQuat(B, qb); slerpQuat(qa, qb, t, qo);
+  const R = quatToMat(qo, out.R);
+  out.o[0] = (1 - t) * ax + t * bx - (R[0] * p[0] + R[1] * p[1] + R[2] * p[2]);
+  out.o[1] = (1 - t) * ay + t * by - (R[3] * p[0] + R[4] * p[1] + R[5] * p[2]);
+  out.o[2] = (1 - t) * az + t * bz - (R[6] * p[0] + R[7] * p[1] + R[8] * p[2]);
+  return out;
+}
+
+// ---- bubble chain (partial bend) --------------------------------------------------------------------------------
+
+/**
+ * Coding strand inside the bubble for 0 < beta < 1. Blending each frame independently between the ideal and the
+ * non-template-track frame lets neighbours take unrelated interpolation paths (backbone gaps of 10-16 A). Instead the
+ * *steps* between neighbouring frames are blended (`slerp(s0, s1, beta)`, `s0 = S(1)` the ideal step, `s1` the step of
+ * the beta = 1 frames) and chained from the left anchor (gene `gA - 1`, the blended frame outside the bubble); the
+ * closure error against the right anchor (gene `gB + 1`) is spread as `slerp(identity, E, k / n)` so the last frame
+ * lands exactly on it. beta = 0 and beta = 1 do not use this path and are unchanged.
+ */
+function poseBubbleChain(S, set, M, C1, r1, r0, reg, beta, gA, gB, out, N) {
+  const n = gB - gA + 2; // steps from gene gA - 1 to gene gB + 1
+  if (!S.chain || S.chain.length < N + 2) S.chain = Array.from({ length: N + 2 }, newFrame);
+  const chain = S.chain, { s0, s1, Ya, Yb, Fk, E, Ei, Id, I, B, qa, qb, qo } = S;
+  const bLo = Math.max(S.bubLo, set.n0), bHi = Math.min(S.bubHi, set.n1);
+  // beta = 1 coding frame: non-template track inside the bubble, template-track coding frame outside
+  const Y = (r, dst) => ((r >= bLo && r <= bHi) ? sampleList(S, set.N, set.n0, set.n1, r, dst) : sampleList(S, set.C, r0, r1, r, dst));
+  const blendAt = (g, dst) => { // blended coding frame outside the bubble, machine frame
+    const r = g - reg;
+    screwStep(r - r1, S.S); mul(C1, S.S, I);
+    sampleList(S, set.C, r0, r1, r, S.Ct);
+    return slerpInto(I, S.Ct, beta, dst, qa, qb, qo);
+  };
+  const PB = PHOSPHATE; // backbone P in the nucleotide frame (base independent)
+  blendAt(gA - 1, chain[0]);
+  blendAt(gB + 1, B);
+  screwStep(1, s0);
+  Y(gA - 1 - reg, Ya);
+  for (let k = 1; k <= n; k++) {
+    Y(gA - 1 + k - reg, Yb);
+    invMul(Ya, Yb, s1);
+    blendStep(s0, s1, beta, PB, s1, qa, qb, qo);
+    mul(chain[k - 1], s1, chain[k]);
+    copyFrame(Yb, Ya);
+  }
+  invMul(chain[n], B, E); // closure error E = inverse(F_end) . B (reported by lastBubbleClosure)
+  matToQuat(E.R, qa);
+  S.closure.trans = Math.hypot(E.o[0], E.o[1], E.o[2]);
+  S.closure.angleDeg = 2 * Math.acos(Math.min(1, qa[3])) / DEG;
+  Id.R[0] = Id.R[4] = Id.R[8] = 1; Id.R[1] = Id.R[2] = Id.R[3] = Id.R[5] = Id.R[6] = Id.R[7] = 0;
+  Id.o[0] = Id.o[1] = Id.o[2] = 0;
+  // Spread the error in the left anchor's frame, P_k = inverse(F_0) . F_k, with D = P_B . inverse(P_n) and
+  // P'_k = slerp(identity, D, k / n) . P_k, so that neighbouring steps are perturbed only slightly (a right-multiplied
+  // slerp(identity, E, k / n) conjugates every step by a large rotation).
+  const F0 = chain[0], Fg = S.Fg;
+  invMul(F0, chain[n], Fk);          // P_n
+  invMul(Fk, Id, Ei);                // inverse(P_n)
+  invMul(F0, B, E);                  // P_B
+  mul(E, Ei, E);                     // D
+  for (let k = 1; k < n; k++) {
+    slerpInto(Id, E, k / n, Ei, qa, qb, qo);
+    invMul(F0, chain[k], Fk);        // P_k
+    mul(Ei, Fk, Fk);
+    mul(F0, Fk, Fk);                 // F'_k
+    mul(M, Fk, Fg);
+    writeFrame16(out, gA - 1 + k, Fg);
+  }
+}
+
 // ---- poseDuplex ------------------------------------------------------------------------------------------------
 
 /**
@@ -356,6 +454,7 @@ export function poseDuplex(construct, dnaState, assets, outFrames, opts = {}) {
   const reg = dnaState.register;
   const beta = clamp01(dnaState.bend) * (1 - clamp01(dnaState.relax));
   const bub = dnaState.bubble, bLo = bub ? bub[0] : 0, bHi = bub ? bub[1] : -1;
+  S.bubLo = bLo; S.bubHi = bHi;
   const useBubble = !!bub && bHi > bLo && set.N !== null; // [0, 0] is the closed default
   copyFrame(machine.transform, S.M);
   const M = S.M, C1 = C[C.length - 1];
@@ -374,6 +473,13 @@ export function poseDuplex(construct, dnaState, assets, outFrames, opts = {}) {
   if (gmax > N - 1) gmax = N - 1;
   const gUp = gmax; // gene indices 0..gUp are upstream of the track (none when gUp < 0)
   const gLow = gUp < 0 ? -1 : gUp;
+  // Partial bend with an open bubble: the bubble coding strand is chained from relative steps (poseBubbleChain)
+  let gA = 0, gB = -1;
+  if (useBubble && beta > 0 && beta < 1) {
+    gA = Math.ceil(reg + Math.max(bLo, set.n0)); gB = Math.floor(reg + Math.min(bHi, set.n1));
+    if (gA < 1 || gB > N - 2 || gB < gA || gA - 1 - reg < r0 || gB + 1 - reg > r1) gB = -1;
+  }
+  const chained = gB >= gA;
 
   for (let g = N - 1; g > gLow; g--) {
     const r = g - reg;
@@ -386,7 +492,7 @@ export function poseDuplex(construct, dnaState, assets, outFrames, opts = {}) {
       sampleList(S, C, r0, r1, r, S.Ct);                  // track frame C_r
       slerpInto(S.I, S.Ct, beta, S.B, S.qa, S.qb, S.qo);   // blended in the machine frame
       mul(M, S.B, Fg);
-      if (useBubble && r >= bLo && r <= bHi && r >= set.n0 && r <= set.n1) {
+      if (useBubble && !chained && r >= bLo && r <= bHi && r >= set.n0 && r <= set.n1) {
         // template strand stays partnerFrame of the blended template-track frame; the coding strand follows the
         // non-template track (blended toward the ideal frame by beta)
         writeFrame16(outFrames, g, Fg);
@@ -403,6 +509,8 @@ export function poseDuplex(construct, dnaState, assets, outFrames, opts = {}) {
     partnerInto(Fg, Fg);
     writeFrame16(outFrames, N + g, Fg);
   }
+
+  if (chained) poseBubbleChain(S, set, M, C1, r1, r0, reg, beta, gA, gB, outFrames, N);
 
   if (gUp >= 0) {
     // seed A = slerp(I_{r0}, C_{r0}, beta)
@@ -447,4 +555,16 @@ export function duplexBackboneGaps(construct, outFrames, out) {
     res[N - 1 + g] = Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
   }
   return res;
+}
+
+/**
+ * Closure error of the last partial-bend bubble chain computed for a construct (translation in angstrom, rotation in
+ * degrees), before it was distributed over the steps. For diagnostics and tests; `null` before any chained pose.
+ *
+ * @param {object} construct - Gene construct.
+ * @returns {{ trans: number, angleDeg: number } | null} Closure error.
+ */
+export function lastBubbleClosure(construct) {
+  const S = scratchCache.get(construct);
+  return S && S.chain ? { trans: S.closure.trans, angleDeg: S.closure.angleDeg } : null;
 }

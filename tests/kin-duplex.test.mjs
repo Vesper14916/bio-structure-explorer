@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { poseDuplex, downstreamAxis, machinePoseForRegister, duplexBackboneGaps } from '../js/kin/duplex.js';
+import { poseDuplex, downstreamAxis, machinePoseForRegister, duplexBackboneGaps, lastBubbleClosure } from '../js/kin/duplex.js';
 import { screwStep, composeFrame, readFrame16, slerpFrame } from '../js/kin/frames.js';
 import { nucleotideTemplate, buildDuplex } from '../js/science/assembly.js';
 import { HELIX_B } from '../js/science/templates.js';
@@ -273,6 +273,77 @@ test('bubble: the coding strand follows the non-template track at beta = 1 and t
   const gaps = gapsOf(buf);
   let w = 0; for (let r = bub[0]; r < bub[1]; r++) w = Math.max(w, gaps[reg + r]);
   console.log(`bubble [-11, 2] at beta 1: coding strand on non-template track (max frame error ${worst.toExponential(1)}), max coding O3'-P inside the bubble ${f2(w)} A`);
+});
+
+const BUB = [-11, 2];
+/** Per beta: worst coding O3'-P over the bubble steps (r -12 ... 2) and worst excess over max(gap at 0, gap at 1) per step. */
+function bubbleStats(reg) {
+  const g0 = gapsOf(pose(reg, 0, { bubble: BUB })), g1 = gapsOf(pose(reg, 1, { bubble: BUB })), out = [];
+  for (let k = 1; k <= 9; k++) {
+    const beta = k / 10, g = gapsOf(pose(reg, beta, { bubble: BUB })), cl = lastBubbleClosure(C);
+    let worst = 0, margin = -Infinity, at = 0;
+    for (let r = BUB[0] - 1; r <= BUB[1]; r++) {
+      worst = Math.max(worst, g[reg + r]);
+      const m = g[reg + r] - Math.max(g0[reg + r], g1[reg + r]);
+      if (m > margin) { margin = m; at = r; }
+    }
+    out.push({ beta, worst, margin, at, cl });
+  }
+  return out;
+}
+
+test('bubble chain: beta = 0 and beta = 1 are the reference frames; the partial-bend path is continuous with both', () => {
+  for (const reg of [45, 105]) {
+    const M = machinePoseForRegister(EC, reg), b0 = pose(reg, 0, { bubble: BUB }), b1 = pose(reg, 1, { bubble: BUB });
+    const closed0 = pose(reg, 0), closed1 = pose(reg, 1);
+    for (let i = 0; i < b0.length; i++) assert.ok(Math.abs(b0[i] - closed0[i]) < 1e-4);
+    for (let g = 0; g < N; g++) {
+      const r = g - reg, f = readFrame16(b1, g);
+      const want = r >= BUB[0] && r <= BUB[1] ? composeFrame(M, NT.frames[r - NT.registers[0]]) : readFrame16(closed1, g);
+      assert.ok(dist(f.o, want.o) < 1e-3 && Math.max(...f.R.map((v, i) => Math.abs(v - want.R[i]))) < 1e-5, `beta 1 frame g ${g}`);
+    }
+    for (const [beta, ref] of [[1e-6, b0], [1 - 1e-6, b1]]) {
+      const o = pose(reg, beta, { bubble: BUB });
+      let w = 0; for (let g = 0; g < N; g++) w = Math.max(w, dist(originOf(o, g), originOf(ref, g)));
+      assert.ok(w < 1e-2, `beta ${beta}: frames differ from the reference by ${w} A`);
+    }
+    // the last bubble frame joins its right anchor exactly: nothing outside the bubble changes with the chain
+    const half = pose(reg, 0.5, { bubble: BUB }), halfClosed = pose(reg, 0.5);
+    for (let g = 0; g < N; g++) {
+      const r = g - reg;
+      if (r >= BUB[0] && r <= BUB[1]) continue;
+      for (let k = 0; k < 16; k++) assert.ok(Math.abs(half[16 * g + k] - halfClosed[16 * g + k]) < 1e-5);
+    }
+  }
+});
+
+test('bubble chain: partial-bend coding gaps stay near the end-point gaps (regression guard)', () => {
+  const rows = [];
+  for (const reg of [45, 105]) {
+    for (const s of bubbleStats(reg)) {
+      rows.push(`register ${reg} beta ${s.beta.toFixed(1)}: worst bubble coding gap ${f2(s.worst)} A, worst excess over max(gap0, gap1) ${f2(s.margin)} A (r ${s.at}), closure error before distribution ${f2(s.cl.trans)} A / ${f2(s.cl.angleDeg)} deg`);
+      assert.ok(s.worst <= 6.0, `register ${reg} beta ${s.beta}: worst bubble gap ${s.worst}`); // was up to 16.1 A with independent slerps
+    }
+  }
+  console.log(rows.join('\n'));
+});
+
+// Stage-lead gate decision (ST3): the per-step "max(gap0, gap1) + 1.0 A" gate is not met by the step-chained bubble
+// interpolation (worst excess about 2.0 A at single edge steps near beta 0.4, from distributing a closure error of up
+// to 175 degrees). The accepted gates are: (a) at every partial beta the worst bubble gap does not exceed the worst
+// bubble gap of the asset itself at beta = 1, and (b) no single step exceeds max(gap0, gap1) + 2.5 A. Both measured
+// values are recorded in docs/handoffs/R3-K1.md.
+test('gate: bubble coding gaps at partial bend never exceed the beta = 1 worst gap; per step <= max(gap0, gap1) + 2.5 A', () => {
+  for (const reg of [45, 105]) {
+    const g1 = gapsOf(pose(reg, 1, { bubble: BUB }));
+    let atOne = 0;
+    for (let r = BUB[0] - 1; r <= BUB[1]; r++) atOne = Math.max(atOne, g1[reg + r]);
+    assert.ok(atOne > 6 && atOne < 7, `beta-1 worst bubble gap ${atOne}`);
+    for (const s of bubbleStats(reg)) {
+      assert.ok(s.worst <= atOne + 1e-6, `register ${reg} beta ${s.beta}: worst ${s.worst} > beta-1 worst ${atOne}`);
+      assert.ok(s.margin <= 2.5, `register ${reg} beta ${s.beta}: excess ${s.margin} at r ${s.at}`);
+    }
+  }
 });
 
 test('trackBlend: holo and ec tracks are slerped per register (synthetic holo copy); without holo tracks the ec tracks are used', () => {
