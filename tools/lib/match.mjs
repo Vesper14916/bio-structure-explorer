@@ -18,24 +18,27 @@ function getChain(chains, id, label) {
 }
 
 /**
- * Match residues present in both chains with the same `seq` (label_seq_id) where both carry `atoms[atomName]`.
+ * Match residues present in both chains with the same sequence key (`seq` / label_seq_id by default,
+ * or `authSeq` / auth_seq_id per DEC-011) where both carry `atoms[atomName]`.
+ * When `opts.matchComp` is true, mismatched residue names (`comp`) are excluded and counted in `mismatches`.
  * Accepts chain objects from `polymerChains(parsed)` or arrays of residue objects.
- * Returns { mobilePts, targetPts, pairs: [{ seq, mobileComp, targetComp, mobileAtom, targetAtom }], n }.
+ * Returns { mobilePts, targetPts, pairs: [{ seq, mobileComp, targetComp, mobileAtom, targetAtom }], n, mismatches }.
  */
-export function matchResidueAtoms(mobileChain, targetChain, atomName = 'CA') {
+export function matchResidueAtoms(mobileChain, targetChain, atomName = 'CA', opts = {}) {
+  const { key = 'seq', matchComp = false } = opts || {};
   const mobileRes = toResidues(mobileChain, 'matchResidueAtoms(mobileChain)');
   const targetRes = toResidues(targetChain, 'matchResidueAtoms(targetChain)');
 
   const mobileBySeq = new Map();
   for (const r of mobileRes) {
-    if (r && r.seq != null && r.atoms && r.atoms[atomName]) {
-      mobileBySeq.set(r.seq, r);
+    if (r && r[key] != null && r.atoms && r.atoms[atomName] && !mobileBySeq.has(r[key])) {
+      mobileBySeq.set(r[key], r);
     }
   }
   const targetBySeq = new Map();
   for (const r of targetRes) {
-    if (r && r.seq != null && r.atoms && r.atoms[atomName]) {
-      targetBySeq.set(r.seq, r);
+    if (r && r[key] != null && r.atoms && r.atoms[atomName] && !targetBySeq.has(r[key])) {
+      targetBySeq.set(r[key], r);
     }
   }
 
@@ -43,9 +46,14 @@ export function matchResidueAtoms(mobileChain, targetChain, atomName = 'CA') {
   const mobilePts = [];
   const targetPts = [];
   const pairs = [];
+  let mismatches = 0;
   for (const seq of seqs) {
     const m = mobileBySeq.get(seq);
     const t = targetBySeq.get(seq);
+    if (matchComp && m.comp !== t.comp) {
+      mismatches++;
+      continue;
+    }
     const mobileAtom = m.atoms[atomName];
     const targetAtom = t.atoms[atomName];
     mobilePts.push(mobileAtom);
@@ -59,15 +67,16 @@ export function matchResidueAtoms(mobileChain, targetChain, atomName = 'CA') {
     });
   }
 
-  return { mobilePts, targetPts, pairs, n: pairs.length };
+  return { mobilePts, targetPts, pairs, n: pairs.length, mismatches };
 }
 
 /**
  * Match atoms across multiple [mobileChainId, targetChainId] chain pairs in deterministic order.
  * mobileChains and targetChains are Maps returned by `polymerChains(parsed)`.
- * Returns { mobilePts, targetPts, pairs, byChain, n }.
+ * Optional `opts` (`{ key = 'seq', matchComp = false }`) is forwarded to `matchResidueAtoms`.
+ * Returns { mobilePts, targetPts, pairs, byChain, n, mismatches }.
  */
-export function matchChains(mobileChains, targetChains, chainPairs, atomName = 'P') {
+export function matchChains(mobileChains, targetChains, chainPairs, atomName = 'P', opts = {}) {
   if (!Array.isArray(chainPairs)) {
     throw new Error('matchChains: chainPairs must be an array of [mobileChainId, targetChainId] tuples');
   }
@@ -76,6 +85,7 @@ export function matchChains(mobileChains, targetChains, chainPairs, atomName = '
   const targetPts = [];
   const pairs = [];
   const byChain = [];
+  let mismatches = 0;
 
   for (const tuple of chainPairs) {
     if (!Array.isArray(tuple) || tuple.length !== 2) {
@@ -84,7 +94,8 @@ export function matchChains(mobileChains, targetChains, chainPairs, atomName = '
     const [mobileChainId, targetChainId] = tuple;
     const mChain = getChain(mobileChains, mobileChainId, 'matchChains(mobile)');
     const tChain = getChain(targetChains, targetChainId, 'matchChains(target)');
-    const res = matchResidueAtoms(mChain, tChain, atomName);
+    const res = matchResidueAtoms(mChain, tChain, atomName, opts);
+    mismatches += res.mismatches;
 
     for (let i = 0; i < res.n; i++) {
       mobilePts.push(res.mobilePts[i]);
@@ -99,9 +110,10 @@ export function matchChains(mobileChains, targetChains, chainPairs, atomName = '
       mobileChain: mobileChainId,
       targetChain: targetChainId,
       n: res.n,
+      mismatches: res.mismatches,
       pairs: res.pairs,
     });
   }
 
-  return { mobilePts, targetPts, pairs, byChain, n: pairs.length };
+  return { mobilePts, targetPts, pairs, byChain, n: pairs.length, mismatches };
 }

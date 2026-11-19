@@ -222,7 +222,7 @@ Asset format v2 extends v1 (`docs/CONTRACTS.md` §6.2). Both `version: 1` and `v
 - Running `--only <id>` (without `--check`) merges the targeted asset IDs into the existing `assets/manifest.json` while preserving all other entries.
 - `tools/fetch-sources.mjs` (`npm run fetch-sources`) downloads all entries from `tools/sources.lock.json` into `tools/sources/` (gitignored), decompresses `.cif.gz`, and verifies SHA-256 and byte length.
 - `tools/lib/superpose.mjs` exports `superpose(mobilePts, targetPts)` (`{ R, t, o, rmsd, n }`) and `superposeIterative(mobilePts, targetPts, { cutoff = 2.0, passes = 2 })`.
-- `tools/lib/match.mjs` exports `matchResidueAtoms(mobileChain, targetChain, atomName)` and `matchChains(mobileChains, targetChains, chainPairs, atomName)`.
+- `tools/lib/match.mjs` exports `matchResidueAtoms(mobileChain, targetChain, atomName = 'CA', opts = {})` and `matchChains(mobileChains, targetChains, chainPairs, atomName = 'P', opts = {})`, where `opts = { key = 'seq', matchComp = false }` (`key: 'authSeq', matchComp: true` for rRNA superpositions per `DEC-011`).
 
 **Asset registry (`js/assets/registry.js`):**
 - `loadManifest(opts)` -> `Promise<{ version, assets: [{ id, file, synthetic }] }>`

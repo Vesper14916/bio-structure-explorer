@@ -231,3 +231,32 @@ test('matchChains concatenates multiple chain pairs deterministically and feeds 
 
   assert.throws(() => matchChains(mobileChains, targetChains, [['NOPE', '16S']]), /not found/);
 });
+
+test('matchResidueAtoms and matchChains support authSeq and matchComp (DEC-011)', () => {
+  const mobileChain = {
+    id: 'a',
+    residues: [
+      { seq: 10, authSeq: 11, comp: 'A', atoms: { P: [1, 0, 0] } },
+      { seq: 11, authSeq: 12, comp: 'G', atoms: { P: [2, 0, 0] } },
+      { seq: 12, authSeq: 13, comp: 'U', atoms: { P: [3, 0, 0] } }, // comp mismatch vs target C
+    ],
+  };
+  const targetChain = {
+    id: '16S',
+    residues: [
+      { seq: 11, authSeq: 11, comp: 'A', atoms: { P: [11, 0, 0] } },
+      { seq: 12, authSeq: 12, comp: 'G', atoms: { P: [12, 0, 0] } },
+      { seq: 13, authSeq: 13, comp: 'C', atoms: { P: [13, 0, 0] } },
+    ],
+  };
+
+  const res = matchResidueAtoms(mobileChain, targetChain, 'P', { key: 'authSeq', matchComp: true });
+  assert.equal(res.n, 2);
+  assert.equal(res.mismatches, 1);
+  assert.deepEqual(res.pairs.map(p => p.seq), [11, 12]);
+
+  const mc = matchChains(new Map([['a', mobileChain]]), new Map([['16S', targetChain]]), [['a', '16S']], 'P', { key: 'authSeq', matchComp: true });
+  assert.equal(mc.n, 2);
+  assert.equal(mc.mismatches, 1);
+  assert.equal(mc.byChain[0].mismatches, 1);
+});

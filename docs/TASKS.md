@@ -91,11 +91,21 @@ Model note (`PLAN.md` §9.1): Antigravity `invoke_subagent` inherits the parent 
 - **Report:** `docs/reviews/R3-ST4-argon.md`
 - **Outcome:** `PASS WITH MINOR NOTES` (0 High, 0 Medium, 3 Low) — recommended Gate G1 PASS. Recorded `DEC-019` clarifying Gate G1 colour sampling on resolved albedo / unlit renders or ACES-matched reference swatches (L1), flagging the `js/render/actors.js:chainColor()` RNAP substring watch item for ST5 factors (L3), and noting optional test-hardening items (L2).
 
-### Upcoming Stages (ST5–ST10)
+### Stage ST5 — RNAP v2 & NusG, Factors, Free Chains/Hairpin/Peptide Path, and Actor/FX Extensions (Gemini; target tag `r3-st5`)
+
+Base: `r3-w1` + Chief `DEC-011` `tools/lib/match.mjs` update. Merge order (`PLAN.md` §11): `R3-A4 → R3-A3 → R3-K2 → R3-R2`.
+
+| Task ID | Status | Owner / Executor | Branch | Deliverable & Handoff |
+| :--- | :--- | :--- | :--- | :--- |
+| **R3-A4** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/a4` | `tools/assets/rnap.mjs` (additions only), `tools/assets/nusg.mjs`, `assets/rnap-ec.asset.json` (`ntpEntry`, `hairpin`, `expressome`, `coupledMrna`), `assets/rnap-holo.asset.json` (`ntpEntry`, 6C9Y RPo tracks), `assets/nusg.asset.json`, `tests/assets-rnap-v2.test.mjs`, `docs/assets/rnap.md` (with `D` & counting method), `docs/evidence/r3/A4/`. |
+| **R3-A3** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/a3` | `tools/assets/factors.mjs`, 6 factor assets (`rf1`, `ef-tu`, `ef-g`, `if1`, `if2`, `if3`), `tests/assets-factors.test.mjs`, `docs/assets/factors.md` (superposition RMSDs, kept fractions, clash report), `docs/evidence/r3/A3/`. |
+| **R3-K2** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/k2` | `js/kin/chain.js`, `js/kin/hairpin.js`, `js/kin/peptide-path.js`, `tests/kin-chain.test.mjs`, `docs/evidence/r3/K2/`. |
+| **R3-R2** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/r2` | `js/render/actors.js` (per-part transforms/opacity, `pickable`, multi-site L2, crowders, `DEC-019` L3 `chainColor` guard), `js/render/fx.js`, `js/render/viewer.js` (`setFx`, `setFar`, `setCrowd`, `setActors` updates), `dev/actor-card.html` (v2 paths), `tests/render-actors.browser.mjs`, `docs/evidence/r3/R2/`. |
+
+### Upcoming Stages (ST6–ST10)
 
 | Stage | Executor | Tasks (merge order) | Base Tag | Target Tag | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ST5** | Gemini | `R3-A4` → `R3-A3` → `R3-K2` → `R3-R2` | `r3-w1` | `r3-st5` | `READY` |
 | **ST6** | Gemini | `R3-R3` → `R3-U2` → `R3-S3` → `R3-INT2`; Gate **G2** | `r3-st5` | `r3-w2` | `PENDING` |
 | **ST7** | **Claude (C3)** | `R3-K3` → `R3-S4` (translation choreography) | `r3-w2` | `r3-st7` | `PENDING` |
 | **ST8** | Gemini | Intake ST7; `R3-R4` → `R3-Q2` → `R3-U3` → `R3-V2` → `R3-INT3`; Gate **G3** | `r3-st7` | `r3-w3` | `PENDING` |
