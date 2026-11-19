@@ -35,6 +35,8 @@ for (const info of Object.values(AMINO_ACID_INFO)) {
   }
 }
 
+export const AMINO_ACIDS = AMINO_ACID_INFO;
+
 const AA = k => ({ ...AMINO_ACID_INFO[k] });
 
 /** Standard genetic code table (all 64 RNA triplets 5'->3'). */

@@ -4,14 +4,24 @@ import assert from 'node:assert/strict';
 import * as S from '../js/science/index.js';
 
 const { dist, angle, dihedral } = S;
-const ALL = ['GLY', 'ALA', 'SER', 'ASP', 'GLU', 'GLN', 'LYS', 'PHE', 'TYR', 'MET', 'FME'];
+const ALL = [
+  'GLY', 'ALA', 'SER', 'ASP', 'GLU', 'GLN', 'LYS', 'PHE', 'TYR', 'MET', 'FME',
+  'CYS', 'VAL', 'THR', 'ILE', 'LEU', 'ASN', 'ARG', 'HIS', 'TRP',
+];
 const EXPECTED = {
   GLY: 'N CA C O', ALA: 'N CA C O CB', SER: 'N CA C O CB OG', ASP: 'N CA C O CB CG OD1 OD2',
   GLU: 'N CA C O CB CG CD OE1 OE2', GLN: 'N CA C O CB CG CD OE1 NE2', LYS: 'N CA C O CB CG CD CE NZ',
   PHE: 'N CA C O CB CG CD1 CD2 CE1 CE2 CZ', TYR: 'N CA C O CB CG CD1 CD2 CE1 CE2 CZ OH',
   MET: 'N CA C O CB CG SD CE', FME: 'N CN O1 CA C O CB CG SD CE',
+  CYS: 'N CA C O CB SG', VAL: 'N CA C O CB CG1 CG2', THR: 'N CA C O CB OG1 CG2',
+  ILE: 'N CA C O CB CG1 CG2 CD1', LEU: 'N CA C O CB CG CD1 CD2', ASN: 'N CA C O CB CG OD1 ND2',
+  ARG: 'N CA C O CB CG CD NE CZ NH1 NH2', HIS: 'N CA C O CB CG ND1 CD2 CE1 NE2',
+  TRP: 'N CA C O CB CG CD1 CD2 NE1 CE2 CE3 CZ2 CZ3 CH2',
 };
-const COUNTS = { GLY: 4, ALA: 5, SER: 6, ASP: 8, GLU: 9, GLN: 9, LYS: 9, PHE: 11, TYR: 12, MET: 8, FME: 10 };
+const COUNTS = {
+  GLY: 4, ALA: 5, SER: 6, ASP: 8, GLU: 9, GLN: 9, LYS: 9, PHE: 11, TYR: 12, MET: 8, FME: 10,
+  CYS: 6, VAL: 7, THR: 7, ILE: 8, LEU: 8, ASN: 8, ARG: 11, HIS: 10, TRP: 14,
+};
 const pt = (arr, i) => [arr[i * 3], arr[i * 3 + 1], arr[i * 3 + 2]];
 const sub = S.sub, cross = S.cross, dot = S.dot, norm = S.norm;
 
@@ -37,17 +47,25 @@ test('placeAtom reproduces the requested bond, angle and dihedral (math.js conve
   }
 });
 
-test('residue templates have the listed atoms, in order', () => {
+test('all 20 residue templates have the listed atoms and elements, in order', () => {
+  assert.equal(S.RESIDUE_CODES.length, 20);
   assert.deepEqual([...S.RESIDUE_CODES].sort(), [...ALL].sort());
+  const validEl = new Set(['C', 'N', 'O', 'S']);
   for (const c of ALL) {
     const t = S.residueTemplate(c);
     assert.equal(t.names.join(' '), EXPECTED[c], c);
     assert.equal(t.names.length, COUNTS[c]);
     assert.equal(t.local.length, COUNTS[c] * 3);
     assert.equal(t.el.length, COUNTS[c]);
+    assert.ok(t.el.every(e => validEl.has(e)), `${c} valid elements`);
     assert.ok(t.names.every((n, i) => t.index[n] === i));
     assert.equal(S.residueTemplate(c), t, 'cached');
   }
+  // Sulfur element mapping for both MET/FME (SD) and CYS (SG)
+  const cys = S.residueTemplate('CYS');
+  assert.equal(cys.el[cys.index.SG], 'S');
+  const met = S.residueTemplate('MET');
+  assert.equal(met.el[met.index.SD], 'S');
 });
 
 test('local frame: CA at the origin, N on -x, C in the xy plane', () => {
@@ -59,7 +77,7 @@ test('local frame: CA at the origin, N on -x, C in the xy plane', () => {
   }
 });
 
-test('every bond is within 0.02 A of its design value and within 1.20-1.85 A', () => {
+test('every bond is within 0.02 A (<= 0.03 A) of its design value and within 1.20-1.85 A', () => {
   for (const c of ALL) {
     const t = S.residueTemplate(c);
     assert.equal(t.bonds.length, t.bondLengths.length);
@@ -72,33 +90,39 @@ test('every bond is within 0.02 A of its design value and within 1.20-1.85 A', (
   }
 });
 
-test('backbone angles match Engh & Huber ideal values', () => {
+test('backbone angles and CB torsion match Engh & Huber ideal values', () => {
   for (const c of ALL) {
     const t = S.residueTemplate(c), p = n => pt(t.local, t.index[n]);
     assert.ok(Math.abs(angle(p('N'), p('CA'), p('C')) - 111.0) < 0.05);
     assert.ok(Math.abs(angle(p('CA'), p('C'), p('O')) - 120.8) < 0.05);
-    if (t.index.CB !== undefined) assert.ok(Math.abs(angle(p('N'), p('CA'), p('CB')) - 110.5) < 0.05);
+    if (t.index.CB !== undefined) {
+      assert.ok(Math.abs(angle(p('N'), p('CA'), p('CB')) - 110.5) < 0.05);
+      const cbTors = dihedral(p('C'), p('N'), p('CA'), p('CB'));
+      assert.ok(Math.abs(cbTors + 122.5) < 0.05, `${c} CB torsion ${cbTors}`);
+    }
   }
 });
 
-test('no non-bonded contact below 2.2 A beyond 1-3 neighbours; 1-3 contacts at least 2.15 A', () => {
+test('no non-bonded contact below 2.2 A beyond 1-3 neighbours; 1-3 contacts sane', () => {
   // Strictly, ASP OD1...OD2 and GLU OE1...OE2 (1-3 pairs across the carboxylate) are 2.197 A with the
-  // Engh & Huber O-C-O geometry, 0.003 A under 2.2. The 2.2 A rule is therefore applied to pairs
-  // separated by three or more bonds, and 1-3 pairs get a looser floor.
+  // Engh & Huber O-C-O geometry, and HIS CD2...CE1 across NE2 in the 5-membered imidazole ring is
+  // 2.144 A by covalent geometry. The 2.2 A rule applies to pairs separated by three or more bonds,
+  // while 1-3 pairs keep their covalent floors (2.15 A except HIS imidazole 2.10 A).
   for (const c of ALL) {
     const t = S.residueTemplate(c), gd = graphDist(t.names.length, t.bonds);
+    const floor13 = c === 'HIS' ? 2.10 : 2.15;
     for (let i = 0; i < t.names.length; i++) {
       const d = gd(i);
       for (let j = i + 1; j < t.names.length; j++) {
         const r = dist(pt(t.local, i), pt(t.local, j));
         if (d[j] >= 3) assert.ok(r >= 2.2, `${c} ${t.names[i]}-${t.names[j]} ${r}`);
-        else if (d[j] === 2) assert.ok(r >= 2.15, `${c} 1-3 ${t.names[i]}-${t.names[j]} ${r}`);
+        else if (d[j] === 2) assert.ok(r >= floor13, `${c} 1-3 ${t.names[i]}-${t.names[j]} ${r}`);
       }
     }
   }
 });
 
-test('chirality is L: chiral volume +2.0..+3.0 A^3 and CORN rule agrees', () => {
+test('chirality is L for all 19 residues with CB: chiral volume +2.0..+3.0 A^3 and CORN rule agrees', () => {
   for (const c of ALL) {
     const t = S.residueTemplate(c);
     if (t.index.CB === undefined) continue;
@@ -115,12 +139,21 @@ test('chirality is L: chiral volume +2.0..+3.0 A^3 and CORN rule agrees', () => 
   }
 });
 
-test('PHE and TYR rings are planar and have aromatic bond lengths', () => {
+test('branched side-chain stereochemistry: THR (3R), ILE (3S), VAL CG1 pro-R, LEU CD1 pro-R', () => {
+  const pOf = (code, atom) => { const t = S.residueTemplate(code); return pt(t.local, t.index[atom]); };
+  // (p1 - c) . ((p2 - c) x (p3 - c)) > 0 for (S), < 0 for (R)
+  const cip = (p1, c, p2, p3) => dot(sub(p1, c), cross(sub(p2, c), sub(p3, c)));
+  assert.ok(cip(pOf('THR', 'OG1'), pOf('THR', 'CB'), pOf('THR', 'CA'), pOf('THR', 'CG2')) < 0, 'THR CB is 3R');
+  assert.ok(cip(pOf('ILE', 'CA'), pOf('ILE', 'CB'), pOf('ILE', 'CG1'), pOf('ILE', 'CG2')) > 0, 'ILE CB is 3S');
+  assert.ok(cip(pOf('VAL', 'CA'), pOf('VAL', 'CB'), pOf('VAL', 'CG1'), pOf('VAL', 'CG2')) < 0, 'VAL CG1 is pro-R');
+  assert.ok(cip(pOf('LEU', 'CB'), pOf('LEU', 'CG'), pOf('LEU', 'CD1'), pOf('LEU', 'CD2')) < 0, 'LEU CD1 is pro-R');
+});
+
+test('PHE, TYR, HIS, and TRP rings are planar and have aromatic bond lengths', () => {
   for (const c of ['PHE', 'TYR']) {
     const t = S.residueTemplate(c);
     const ring = ['CG', 'CD1', 'CD2', 'CE1', 'CE2', 'CZ'].map(n => pt(t.local, t.index[n]));
     const cen = ring.reduce((a, p) => S.add(a, p), [0, 0, 0]).map(x => x / 6);
-    // normal from three ring atoms CG, CE1(index 3), CE2(index 4) -> use cross of two in-plane vectors
     const nrm = norm(cross(sub(ring[3], ring[0]), sub(ring[4], ring[0])));
     for (const p of ring) assert.ok(Math.abs(dot(sub(p, cen), nrm)) <= 0.02, `${c} ring planarity`);
     const pairs = [['CG', 'CD1'], ['CG', 'CD2'], ['CD1', 'CE1'], ['CD2', 'CE2'], ['CE1', 'CZ'], ['CE2', 'CZ']];
@@ -131,17 +164,44 @@ test('PHE and TYR rings are planar and have aromatic bond lengths', () => {
     const chi2 = dihedral(pt(t.local, t.index.CA), pt(t.local, t.index.CB), pt(t.local, t.index.CG), pt(t.local, t.index.CD1));
     assert.ok(Math.abs(chi2 - 90) < 0.01, `chi2 ${chi2}`);
   }
+
+  // HIS 5-membered imidazole ring (planar, closure CD2-NE2)
+  {
+    const t = S.residueTemplate('HIS');
+    const ring = ['CG', 'ND1', 'CE1', 'NE2', 'CD2'].map(n => pt(t.local, t.index[n]));
+    const cen = ring.reduce((a, p) => S.add(a, p), [0, 0, 0]).map(x => x / 5);
+    const nrm = norm(cross(sub(ring[1], ring[0]), sub(ring[4], ring[0])));
+    for (const p of ring) assert.ok(Math.abs(dot(sub(p, cen), nrm)) <= 0.02, 'HIS ring planarity');
+    const dClose = dist(pt(t.local, t.index.CD2), pt(t.local, t.index.NE2));
+    assert.ok(Math.abs(dClose - 1.374) <= 0.02, `HIS CD2-NE2 closure ${dClose}`);
+  }
+
+  // TRP fused 9-atom indole ring (planar, closures CD2-CE2 and CZ3-CH2)
+  {
+    const t = S.residueTemplate('TRP');
+    const ring = ['CG', 'CD1', 'NE1', 'CE2', 'CD2', 'CE3', 'CZ3', 'CH2', 'CZ2'].map(n => pt(t.local, t.index[n]));
+    const cen = ring.reduce((a, p) => S.add(a, p), [0, 0, 0]).map(x => x / 9);
+    const nrm = norm(cross(sub(ring[1], ring[0]), sub(ring[4], ring[0])));
+    for (const p of ring) assert.ok(Math.abs(dot(sub(p, cen), nrm)) <= 0.02, 'TRP indole planarity');
+    const d5 = dist(pt(t.local, t.index.CD2), pt(t.local, t.index.CE2));
+    const d6 = dist(pt(t.local, t.index.CZ3), pt(t.local, t.index.CH2));
+    assert.ok(Math.abs(d5 - 1.409) <= 0.02, `TRP CD2-CE2 closure ${d5}`);
+    assert.ok(Math.abs(d6 - 1.400) <= 0.02, `TRP CZ3-CH2 closure ${d6}`);
+  }
 });
 
-test('ONE_TO_THREE covers the fixture letters and fMet', () => {
-  for (const k of 'AEFKGSDYQ') assert.ok(S.RESIDUE_CODES.includes(S.ONE_TO_THREE[k]));
+test('ONE_TO_THREE covers all 19 non-proline letters and fMet', () => {
+  for (const k of 'ACDEFGHIKLMNQRSTVWY') {
+    assert.ok(S.RESIDUE_CODES.includes(S.ONE_TO_THREE[k]), `missing ${k}`);
+  }
   assert.equal(S.ONE_TO_THREE.fMet, 'FME');
+  assert.equal(S.ONE_TO_THREE.P, undefined);
 });
 
 // ---------------- peptide ----------------
 const FIXTURE = ['FME', 'ALA', 'GLU', 'PHE', 'LYS', 'GLY', 'SER', 'ASP', 'TYR', 'GLN', 'ALA'];
 
-test('peptideFromConstruct gives the eleven fixture codes', () => {
+test('peptideFromConstruct gives the eleven fixture codes for DEFAULT_GENE_CONSTRUCT', () => {
   assert.deepEqual(S.peptideFromConstruct(S.DEFAULT_GENE_CONSTRUCT), FIXTURE);
 });
 
@@ -214,4 +274,51 @@ test('buildPeptide: end-to-end C-alpha distance is 30-38 A', () => {
   const pep = S.buildPeptide(FIXTURE);
   const e = dist(pep.residues[0].ca, pep.residues[10].ca);
   assert.ok(e >= 30 && e <= 38, `end-to-end ${e}`);
+});
+
+test('buildPeptide (Construct v3, 40 residues): all 20 templates build cleanly with zero steric clashes (< 2.6 A)', () => {
+  const codes = S.peptideFromConstruct(S.TRUE_SCALE_GENE_CONSTRUCT);
+  assert.equal(codes.length, 40);
+  assert.equal(codes[0], 'FME');
+  assert.equal(codes[24], 'MET');
+  assert.equal(new Set(codes).size, 20);
+
+  const pep = S.buildPeptide(codes);
+  const P = pep.atoms.pos;
+  const n = pep.atoms.count;
+  assert.equal(pep.residues.length, 40);
+  assert.equal(pep.atoms.name[n - 1], 'OXT');
+
+  // Verify CYS sulfur element in built peptide
+  const sgIdx = pep.atoms.name.indexOf('SG');
+  assert.ok(sgIdx >= 0);
+  assert.equal(pep.atoms.el[sgIdx], 'S');
+
+  // Every covalent bond within sane bounds
+  const bonds = [];
+  for (let i = 0; i < pep.bonds.length; i += 2) bonds.push([pep.bonds[i], pep.bonds[i + 1]]);
+  for (const [a, b] of bonds) {
+    const d = dist(pt(P, a), pt(P, b));
+    assert.ok(d >= 1.2 && d <= 1.85, `${codes[pep.atoms.residue[a]]}${pep.atoms.residue[a]}.${pep.atoms.name[a]}-${codes[pep.atoms.residue[b]]}${pep.atoms.residue[b]}.${pep.atoms.name[b]} ${d}`);
+  }
+
+  // Zero inter-residue contacts < 2.6 A outside bonded, 1-3, and 1-4 pairs (and in fact >= 2.6 A even at 1-4!)
+  const gd = graphDist(n, bonds);
+  let minInter = 99;
+  for (let i = 0; i < n; i++) {
+    const d = gd(i);
+    for (let j = i + 1; j < n; j++) {
+      if (pep.atoms.residue[i] === pep.atoms.residue[j]) continue;
+      const r = dist(pt(P, i), pt(P, j));
+      if (d[j] >= 4) {
+        minInter = Math.min(minInter, r);
+        assert.ok(r >= 2.6, `clash ${codes[pep.atoms.residue[i]]}${pep.atoms.residue[i]}.${pep.atoms.name[i]}-${codes[pep.atoms.residue[j]]}${pep.atoms.residue[j]}.${pep.atoms.name[j]} d_bond=${d[j]} r=${r}`);
+      } else if (d[j] === 3) {
+        assert.ok(r >= 2.6, `1-4 clash ${codes[pep.atoms.residue[i]]}${pep.atoms.residue[i]}.${pep.atoms.name[i]}-${codes[pep.atoms.residue[j]]}${pep.atoms.residue[j]}.${pep.atoms.name[j]} r=${r}`);
+      } else if (d[j] === 2) {
+        assert.ok(r >= 2.2, `1-3 clash r=${r}`);
+      }
+    }
+  }
+  assert.ok(minInter >= 2.6 && minInter < 99);
 });
