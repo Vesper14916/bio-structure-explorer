@@ -1,5 +1,4 @@
-// Committed ribosome asset (ribosome-70s), ST2 step 2: everything except the tunnel path and the ptc / tunnelExit anchors
-// (step 3 adds those tests). Reads committed files only (no tools/sources/); reference values come from asset.source.
+// Committed ribosome asset (ribosome-70s), ST2 steps 2 and 3 (including the tunnel path and the ptc / tunnelExit anchors). Reads committed files only (no tools/sources/); reference values come from asset.source.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -17,7 +16,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(root, 'assets', 'manifest.
 
 const a = raw('ribosome-70s');
 const d = decodeAsset(a);
-const REQUIRED_ANCHORS = ['center', 'siteA', 'siteP', 'siteE', 'siteAT', 'decoding', 'mrnaEntry', 'mrnaExit', 'antiSD', 'smallCenter', 'largeCenter'];
+const REQUIRED_ANCHORS = ['center', 'siteA', 'siteP', 'siteE', 'siteAT', 'decoding', 'mrnaEntry', 'mrnaExit', 'antiSD', 'smallCenter', 'largeCenter', 'ptc', 'tunnelExit'];
 const COMPLEMENT = { A: 'U', U: 'A', G: 'C', C: 'G' };
 const zOf = f => [f.R[2], f.R[5], f.R[8]];
 const pointOf = (arr, i) => [arr[3 * i], arr[3 * i + 1], arr[3 * i + 2]];
@@ -182,7 +181,7 @@ test('ribosome-70s L0 meshes are closed, outward, and contain at least 95 % of t
   for (const p of a.lod0.parts) assert.ok(p.beadsInside >= 0.95, `${p.part} recorded containment ${p.beadsInside}`);
 });
 
-test('ribosome-70s L2: valid bonds, atoms near the decoding anchor', () => {
+test('ribosome-70s L2: valid bonds, atoms near the site anchors (decoding, ptc)', () => {
   const l2 = d.lod2;
   assert.ok(l2.count > 100);
   for (let i = 0; i < l2.bonds.length; i += 2) {
@@ -190,9 +189,14 @@ test('ribosome-70s L2: valid bonds, atoms near the decoding anchor', () => {
     const bl = dist(pointOf(l2.positions, l2.bonds[i]), pointOf(l2.positions, l2.bonds[i + 1]));
     assert.ok(bl > 0.9 && bl < 2.3, `bond length ${bl}`);
   }
-  let near = 0;
-  for (let i = 0; i < l2.count; i++) if (dist(pointOf(l2.positions, i), d.anchors.decoding.o) <= 12.5) near++;
-  assert.ok(near > 0.3 * l2.count, 'a large share of L2 atoms lies within the decoding radius (whole residues extend beyond it)');
+  let near = 0, nearDec = 0;
+  for (let i = 0; i < l2.count; i++) {
+    const p = pointOf(l2.positions, i), dd = dist(p, d.anchors.decoding.o) <= 12.5;
+    if (dd) nearDec++;
+    if (dd || dist(p, d.anchors.ptc.o) <= 12.5) near++;
+  }
+  assert.ok(nearDec > 100, 'L2 holds atoms around the decoding anchor');
+  assert.ok(near > 0.3 * l2.count, 'a large share of L2 atoms lies within a site radius (whole residues extend beyond it)');
   for (let i = 0; i < l2.count; i++) assert.ok(l2.chain[i] < d.chains.length);
 });
 
@@ -203,4 +207,45 @@ test('ribosome-70s budgets (PLAN.md 7.5)', () => {
   assert.ok(a.lod2.count <= 4000, `L2 ${a.lod2.count} atoms`);
   assert.ok(fileSize('ribosome-70s') <= 1200000, `file ${fileSize('ribosome-70s')} bytes`);
   assert.ok(dist(d.anchors.largeCenter.o, d.anchors.smallCenter.o) > 40, 'subunit centres are separated');
+});
+
+test('ribosome-70s tunnel path, ptc and tunnelExit anchors, ptc L2 site (design 5.6)', () => {
+  const t = d.paths.tunnel, st = a.source.tunnel;
+  assert.ok(t && t.count >= 76, 'paths.tunnel present');
+  assert.equal(t.points.length, t.count * 3);
+  const pts = Array.from({ length: t.count }, (_, i) => pointOf(t.points, i));
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += dist(pts[i], pts[i - 1]);
+  assert.ok(Math.abs(len - st.lengthA) < 0.25, `recorded (path points are quantised to 0.05 A) length ${st.lengthA} matches decoded ${len}`);
+  assert.ok(dist(pts[0], d.anchors.ptc.o) <= 6, 'path starts within 6 A of the ptc origin');
+  assert.ok(dist(pts[pts.length - 1], d.anchors.tunnelExit.o) < 0.1, 'path ends at tunnelExit (path points are quantised to 0.05 A)');
+  assert.equal(t.synthetic, 0, 'tunnel is not synthetic');
+  assert.equal(st.synthetic, 0);
+  assert.ok(len >= 75 && len <= 110, `tunnel length ${len}`);
+  assert.ok(st.minClearanceBeyondSkipA >= 3.0, `minimum clearance ${st.minClearanceBeyondSkipA} beyond ${st.skipA} A`);
+  assert.equal(st.clearanceProfile.length, t.count, 'one clearance value per path point');
+  let minBeyond = Infinity;
+  st.clearanceProfile.forEach((c, i) => { if (i > st.skipA + 0.5) minBeyond = Math.min(minBeyond, c); });
+  assert.ok(minBeyond >= 3.0 - 0.1, `profile minimum beyond ${st.skipA} A is ${minBeyond}`);
+  assert.ok(st.fullRoute.lengthA > len && st.mouth.arcA >= 60, 'full route length and mouth arc recorded');
+  for (let i = 1; i < pts.length - 1; i++) assert.ok(Math.abs(dist(pts[i], pts[i - 1]) - 1) < 0.1, 'resampled at 1 A');
+  const first = [pts[1][0] - pts[0][0], pts[1][1] - pts[0][1], pts[1][2] - pts[0][2]];
+  const zp = zOf(d.anchors.ptc);
+  assert.ok(dot(zp, first) / Math.hypot(...first) > 0.9999, 'ptc z = first segment');
+  const n = pts.length, last = [pts[n - 1][0] - pts[n - 2][0], pts[n - 1][1] - pts[n - 2][1], pts[n - 1][2] - pts[n - 2][2]];
+  assert.ok(dot(zOf(d.anchors.tunnelExit), last) / Math.hypot(...last) > 0.9999, 'tunnelExit z = last segment');
+  for (const name of ['ptc', 'tunnelExit']) {
+    const R = d.anchors[name].R;
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+      const ci = [R[i], R[3 + i], R[6 + i]], cj = [R[j], R[3 + j], R[6 + j]];
+      assert.ok(Math.abs(dot(ci, cj) - (i === j ? 1 : 0)) < 1e-4, `${name} orthonormal`);
+    }
+  }
+  const site = d.lod2.sites.find(s => s.anchor === 'ptc');
+  assert.ok(site && site.radius === 12, 'L2 site ptc at 12 A');
+  assert.deepEqual(d.lod2.sites.map(s => s.anchor), ['decoding', 'ptc']);
+  const l2 = d.lod2;
+  let nearPtc = 0;
+  for (let i = 0; i < l2.count; i++) if (dist(pointOf(l2.positions, i), d.anchors.ptc.o) <= 12) nearPtc++;
+  assert.ok(nearPtc > 50, 'L2 holds atoms around the ptc origin');
 });

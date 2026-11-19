@@ -1,6 +1,6 @@
 # Ribosome asset (`ribosome-70s`)
 
-Task R3-A1, part 1 (stage ST2, step 2). Recipe: `tools/assets/ribosome.mjs`. Tests: `tests/assets-ribosome.test.mjs`. Output: `assets/ribosome-70s.asset.json` (asset format v2). Design basis: `docs/tasks/R3-ST2-design.md` section 5 (5.1 to 5.5 and 5.7), `PLAN.md` sections 7.2 to 7.5. The tunnel path, the `ptc` and `tunnelExit` anchors and the `ptc` L2 site are step 3 (see the last section).
+Task R3-A1 (stage ST2, steps 2 and 3). Recipe: `tools/assets/ribosome.mjs`. Tests: `tests/assets-ribosome.test.mjs`. Output: `assets/ribosome-70s.asset.json` (asset format v2). Design basis: `docs/tasks/R3-ST2-design.md` section 5 (5.1 to 5.5 and 5.7), `PLAN.md` sections 7.2 to 7.5. The tunnel path, the `ptc` and `tunnelExit` anchors and the `ptc` L2 site are described in the last section.
 
 ## 1. Provenance
 
@@ -222,7 +222,7 @@ Total 48,064 triangles (budget 70,000). Both meshes are closed with outward wind
 P beads for RNA (kind 1) and Cα beads for protein (kind 0), one per residue, grouped by chain in the order of the chain table: 9,978 beads (1,519 + 2,753 + 119 = 4,391 P beads; 5,587 Cα beads).
 
 ### L2
-Sites: `decoding`, 12 Å (step 3 adds `ptc`, 12 Å). The L2 builder takes the site list `[{ anchor, radius }]`: heavy atoms of whole rRNA and protein residues (both parts; mRNA and tRNAs are excluded) with any atom within the radius of the anchor origin, deduplicated across sites, plus Mg2+ ions within 8 Å of any site origin. Result: 307 atoms (334 bonds) in 20 residues: ten 16S nucleotides (chain `A`: 517, 518, 519, 528, 529, 530, 1491, 1492, 1493, 1494; 219 atoms), nine residues of protein S12 (chain `L`; 66 atoms) and one 23S nucleotide (chain `a`; 22 atoms). No Mg2+ lies within 8 Å of the decoding origin. The count is small because the decoding origin lies in the cleft where the mRNA and the A- and P-site tRNAs sit (150 of the 325 polymer atoms in the sphere belong to chains `X` and `Y`). Bonds: covalent radii (C 0.76, N 0.71, O 0.66, S 1.05, P 1.07 Å, tolerance 0.45 Å) inside a residue, plus the peptide C-N and the phosphodiester O3′-P bond between consecutive residues. Ion atoms (if any) take the chain index of the nearest polymer heavy atom; the `auth_asym_id` of the 7K00 ions (mostly the rRNA chains `A` and `a`, a few `b`, `c`, `d`, `z`) is not used, so that every L2 chain index refers to the chain table in the same way.
+Sites: `decoding` and `ptc`, 12 Å each (the figures in this paragraph are for the decoding site alone; section 11 gives the totals with `ptc`). The L2 builder takes the site list `[{ anchor, radius }]`: heavy atoms of whole rRNA and protein residues (both parts; mRNA and tRNAs are excluded) with any atom within the radius of the anchor origin, deduplicated across sites, plus Mg2+ ions within 8 Å of any site origin. Result: 307 atoms (334 bonds) in 20 residues: ten 16S nucleotides (chain `A`: 517, 518, 519, 528, 529, 530, 1491, 1492, 1493, 1494; 219 atoms), nine residues of protein S12 (chain `L`; 66 atoms) and one 23S nucleotide (chain `a`; 22 atoms). No Mg2+ lies within 8 Å of the decoding origin. The count is small because the decoding origin lies in the cleft where the mRNA and the A- and P-site tRNAs sit (150 of the 325 polymer atoms in the sphere belong to chains `X` and `Y`). Bonds: covalent radii (C 0.76, N 0.71, O 0.66, S 1.05, P 1.07 Å, tolerance 0.45 Å) inside a residue, plus the peptide C-N and the phosphodiester O3′-P bond between consecutive residues. Ion atoms (if any) take the chain index of the nearest polymer heavy atom; the `auth_asym_id` of the 7K00 ions (mostly the rRNA chains `A` and `a`, a few `b`, `c`, `d`, `z`) is not used, so that every L2 chain index refers to the chain table in the same way.
 
 ## 9. Budgets measured
 
@@ -230,8 +230,8 @@ Sites: `decoding`, 12 Å (step 3 adds `ptc`, 12 Å). The L2 builder takes the si
 | --- | --- | --- |
 | L0 triangles, total | 70,000 | 48,064 |
 | L1 beads | 15,000 | 9,978 |
-| L2 atoms | 4,000 | 307 |
-| File size | 1,200,000 bytes (aim for now: 1,100,000, leaving room for step 3) | 713,335 bytes |
+| L2 atoms | 4,000 | 756 (307 with the decoding site only) |
+| File size | 1,200,000 bytes | 725,027 bytes (with step 3) |
 
 Largest blocks of the JSON (bytes): `lod0` 577,330; `lod1` 106,482; `source` 11,484; `chains` 6,788; `lod2` 5,187; `tracks` 4,392; `anchors` 1,189.
 
@@ -250,4 +250,30 @@ Largest blocks of the JSON (bytes): `lod0` 577,330; `lod1` 106,482; `source` 11,
 
 ## 11. Tunnel (step 3)
 
-Pending. Step 3 adds the `tunnel` path, the `ptc` and `tunnelExit` anchors and the `ptc` L2 site, and fills this section.
+Algorithm (design 5.6, `PLAN.md` 7.4), implemented in `computeTunnel` and `tunnelProfile` of `tools/assets/ribosome.mjs`; deterministic (ties broken by voxel index).
+
+1. Grid: 140 Å cube, 1.0 Å voxels (141 per side), centred on `ptc` (O3′ of A76 of 7K00 chain `Z`, ribo frame [74.135, 9.871, -10.315]). Atoms: the 86,447 50S heavy atoms returned by `largeSubunitAtoms` (23S, 5S, L proteins; no ions, waters or ligands). A voxel is blocked when its centre is within 3.0 Å of any of them. The grid stores the exact distance to the nearest atom centre, capped at 10 Å (cap above the 8 Å solvent threshold).
+2. Target: centroid of the Cα atoms of uL23 (chain `s`) and uL29 (chain `x`) = [123.583, -48.627, -55.828]. The nearest unblocked voxel with a solvent-side ray (162 Fibonacci directions, 1 Å samples read from the nearest voxel, all unblocked, every sample beyond 8 Å from the voxel with clearance above the threshold) was searched among the 25,738 unblocked voxels within 30 Å of the centroid. Threshold used: **8 Å (no relaxation needed)**. Target voxel [130.135, -54.129, -55.315] (clearance 3.096 Å, 96.213 Å from `ptc`, 8.597 Å from the centroid).
+3. Start: nearest unblocked voxel to `ptc` + 5 Å along ribo −x: [69.135, 9.871, -10.315] (clearance 5.352 Å, 5 Å from `ptc`). Dijkstra over 26 neighbours, cost = step length / clearance(destination)². The route has 117 voxels.
+4. Three Chaikin passes (end points kept), resampled at 1.0 Å arc length, then rounded to the 0.05 Å storage step so that the anchors and the recorded numbers refer to the stored points.
+5. Gates: length 75 to 110 Å; clearance of every point beyond the first 6 Å of arc ≥ 3.0 Å, using exact distances to atom centres.
+
+### Result: route truncated at the tunnel mouth (recorded deviation from `PLAN.md` 7.4 step 2)
+
+The target defined in `PLAN.md` 7.4 lies beside uL23/uL29, about 45 Å along the subunit surface past the tunnel mouth. The full route is 145.898 Å long (gate 75 to 110 Å). The route is therefore truncated at the first solvent-side point after 60 Å of arc, tested with the target rule (162 Fibonacci rays reaching the cube boundary, every 1 Å sample unblocked, every sample beyond 8 Å with clearance above 8 Å) using exact clearances from a cell list. The mouth is at arc 86.712 Å, point [134.7, -24.7, -32.3]; it becomes `tunnelExit`. The straight-line §13 fallback was rejected because it crosses rRNA (minimum clearance 0.156 Å).
+
+Final path: 88 points, length **86.712 Å** (gate 75 to 110 Å), `synthetic: 0`. Exact minimum clearance beyond the first 6 Å: **3.659 Å** at arc 6.991 Å (gate 3.0 Å); maximum 8.862 Å. The clearance at every path point (1 Å steps, rounded to 0.01 Å) is stored in `source.tunnel.clearanceProfile`; the full untruncated route's length and minimum are in `source.tunnel.fullRoute`. Clearance is the distance to atom centres, not a pore radius.
+
+### Sanity check (not a gate)
+
+On the final path, uL4 (chain `e`): closest Cα residue 65, 7.961 Å from the path at arc 36.852 Å, path clearance there 5.607 Å. uL22 (chain `r`): closest Cα residue 91, 7.029 Å, arc 37.878 Å, clearance 5.849 Å. The tunnel length to the mouth (86.712 Å) lies in the expected 80 to 100 Å range. Not compared with a reference tunnel model. An earlier draft of this section quoted about 1.9 Å near uL22; that value came from the rejected straight line, not the route.
+
+### Anchors and L2
+
+`ptc`: o = O3′ of A76 of chain `Z`; z = first path segment; x = perpendicular component of ribo +x (design 5.4); y = z × x. `tunnelExit`: o = the mouth (last path point); z = last segment of the truncated path. Both orthonormal.
+
+L2 now has two sites, `decoding` and `ptc` (12 Å each; deduplicated; Mg²⁺ within 8 Å of a site origin: none for either site). Totals: 756 atoms (827 bonds, 41 residues; 175 atoms within 12 Å of the decoding origin, 222 within 12 Å of the `ptc` origin, none in both; the rest are the remaining atoms of whole residues).
+
+### Measured
+
+Build time of the whole ribosome recipe about 30 s (tunnel search about 3 s). File size: see section 9.

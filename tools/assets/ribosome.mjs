@@ -1,8 +1,7 @@
 // Recipe module for the E. coli 70S ribosome asset (Round 3, task R3-A1, ST2 step 2):
 //   - ribosome-70s (PDB 7K00 primary; 7ST2, 5WE4 and 7PJV superposed onto 7K00)
-// Step 2 builds the `ribo` frame, chain table, parts, L0/L1/L2 (site `decoding`), superpositions, the `mrna` track and
-// all site anchors except `ptc` and `tunnelExit`. Step 3 adds the `tunnel` path, the `ptc` and `tunnelExit` anchors
-// and the `ptc` L2 site at the places marked "STEP 3" below.
+// Builds the `ribo` frame, chain table, parts, L0/L1/L2 (sites `decoding`, `ptc`), superpositions, the `mrna` track,
+// all anchors, and the `tunnel` path (step 3).
 // Also exports `frameAtoms(sourcesDir)`: every 7K00 polymer heavy atom in the `ribo` frame (for tasks A3 and A4).
 // Design: docs/tasks/R3-ST2-design.md section 5; provenance and measurements: docs/assets/ribosome-70s.md.
 import fs from 'node:fs';
@@ -25,7 +24,7 @@ const E_SITE_GATE = 3.0;                     // A, 75-76 heavy-atom RMSD (PLAN.m
 const HYBRID_MAX_ORIGIN = 4.0;               // A, siteAP / sitePE condition (PLAN.md 7.4)
 const L0 = { sigma: 5, spacing: 4, maxTrianglesPerPart: 30000, minInside: 0.95 };
 const L2_SITE_RADIUS = 12, L2_ION_RADIUS = 8;
-const LIMITS = { l0Triangles: 70000, l1Beads: 15000, l2Atoms: 4000, fileBytes: 1100000 };   // STEP 3: raise fileBytes to 1200000 if needed
+const LIMITS = { l0Triangles: 70000, l1Beads: 15000, l2Atoms: 4000, fileBytes: 1200000 };
 const MRNA_RANGE = [-16, 15];
 const A_FORM_RISE = 2.81, A_FORM_TWIST = 32.73;
 
@@ -304,7 +303,7 @@ function buildL2(parsed, rows, T0, sites, anchors) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// STEP 3 (tunnel) anchor point: this function returns the 7K00 50S heavy atoms (23S, 5S, L proteins; no ions or waters)
+// This function returns the 7K00 50S heavy atoms (23S, 5S, L proteins; no ions or waters)
 // in the ribo frame. The tunnel search voxelises around `ptc` using exactly this list.
 function largeSubunitAtoms(parsed, rows, T0) {
   const tf = ptOf(T0);
@@ -312,6 +311,195 @@ function largeSubunitAtoms(parsed, rows, T0) {
   const out = [];
   for (const a of parsed.atoms) if (large.has(a.authAsym) && a.labelSeq !== null) out.push(tf([a.x, a.y, a.z]));
   return out;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Exit tunnel (design 5.6; PLAN.md 7.4, 13). Deterministic: no randomness, ties broken by voxel index.
+const TUNNEL = { cube: 140, voxel: 1.0, blockA: 3.0, clearCap: 10, rays: 162, solventClear: [8, 6, 4], targetRadius: 30, startOffsetA: 5,
+  lengthMin: 75, lengthMax: 110, mouthMinArcA: 60, minClearA: 3.0, skipA: 6, chaikin: 3, step: 1.0 };
+
+/** Exact nearest-atom-centre distance via a cell list (cell 6 A; rings of cells grow until the nearest hit is certain). */
+function makeNearest(atoms) {
+  const cell = 6, map = new Map();
+  const key = (i, j, k) => (i + 512) * 1048576 + (j + 512) * 1024 + (k + 512);
+  atoms.forEach((p, n) => { const kk = key(Math.floor(p[0] / cell), Math.floor(p[1] / cell), Math.floor(p[2] / cell)); if (!map.has(kk)) map.set(kk, []); map.get(kk).push(n); });
+  return (q, maxR = 80) => {
+    const ci = Math.floor(q[0] / cell), cj = Math.floor(q[1] / cell), ck = Math.floor(q[2] / cell);
+    let best = Infinity, bi = -1;
+    for (let r = 0; (r - 1) * cell <= maxR; r++) {
+      if (best < Infinity && best <= (r - 1) * cell) break;
+      for (let i = ci - r; i <= ci + r; i++) for (let j = cj - r; j <= cj + r; j++) for (let k = ck - r; k <= ck + r; k++) {
+        if (Math.max(Math.abs(i - ci), Math.abs(j - cj), Math.abs(k - ck)) !== r) continue;
+        const l = map.get(key(i, j, k));
+        if (l) for (const n of l) { const d = dist(q, atoms[n]); if (d < best || (d === best && n < bi)) { best = d; bi = n; } }
+      }
+    }
+    return { d: best, index: bi };
+  };
+}
+
+class MinHeap {
+  constructor() { this.c = []; this.v = []; }
+  get size() { return this.c.length; }
+  less(a, b) { return this.c[a] < this.c[b] || (this.c[a] === this.c[b] && this.v[a] < this.v[b]); }
+  swap(a, b) { [this.c[a], this.c[b]] = [this.c[b], this.c[a]]; [this.v[a], this.v[b]] = [this.v[b], this.v[a]]; }
+  push(cost, v) {
+    this.c.push(cost); this.v.push(v);
+    let i = this.c.length - 1;
+    while (i > 0) { const p = (i - 1) >> 1; if (!this.less(i, p)) break; this.swap(i, p); i = p; }
+  }
+  pop() {
+    const cost = this.c[0], v = this.v[0], lc = this.c.pop(), lv = this.v.pop();
+    const n = this.c.length;
+    if (n) {
+      this.c[0] = lc; this.v[0] = lv;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1, r = l + 1; let m = i;
+        if (l < n && this.less(l, m)) m = l;
+        if (r < n && this.less(r, m)) m = r;
+        if (m === i) break;
+        this.swap(i, m); i = m;
+      }
+    }
+    return { cost, v };
+  }
+}
+
+function fibonacciDirections(n) {
+  const g = Math.PI * (3 - Math.sqrt(5));
+  return Array.from({ length: n }, (_, i) => { const z = 1 - 2 * (i + 0.5) / n, r = Math.sqrt(1 - z * z); return [r * Math.cos(g * i), r * Math.sin(g * i), z]; });
+}
+
+function chaikin(pts, iters) {
+  let p = pts;
+  for (let it = 0; it < iters; it++) {
+    const q = [p[0]];
+    for (let i = 0; i + 1 < p.length; i++) q.push(add(scale(p[i], 0.75), scale(p[i + 1], 0.25)), add(scale(p[i], 0.25), scale(p[i + 1], 0.75)));
+    q.push(p[p.length - 1]);
+    p = q;
+  }
+  return p;
+}
+
+/** Points at arc lengths 0, step, 2 step, ... plus the end point (the last spacing may be shorter). */
+function resample(pts, step) {
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + dist(pts[i], pts[i - 1]));
+  const total = cum[cum.length - 1], out = [pts[0]];
+  let seg = 0;
+  for (let s = step; s < total - 1e-9; s += step) {
+    while (cum[seg + 1] < s) seg++;
+    const t = (s - cum[seg]) / (cum[seg + 1] - cum[seg]);
+    out.push(add(pts[seg], scale(sub(pts[seg + 1], pts[seg]), t)));
+  }
+  out.push(pts[pts.length - 1]);
+  return out;
+}
+
+/**
+ * atoms: 50S heavy atom centres (ribo frame). ptc: origin. targetPoint: centroid of uL23 and uL29 CA.
+ * Returns { path, record } or { fallback: reason, record, targetQ } when no route exists.
+ */
+function computeTunnel(atoms, ptc, targetPoint) {
+  const T = TUNNEL, N = Math.round(T.cube / T.voxel) + 1, H = (N - 1) / 2, N2 = N * N, total = N2 * N;
+  const lo = ptc.map(c => c - H * T.voxel);
+  const idxOf = (i, j, k) => (i * N + j) * N + k;
+  const posOf = idx => { const k = idx % N, j = ((idx - k) / N) % N, i = (idx - k - j * N) / N2; return [lo[0] + i * T.voxel, lo[1] + j * T.voxel, lo[2] + k * T.voxel]; };
+  // Clearance grid capped at clearCap: exact distance to the nearest atom centre wherever it is below the cap.
+  const clear = new Float32Array(total).fill(T.clearCap);
+  const R = Math.ceil(T.clearCap / T.voxel), cap2 = T.clearCap * T.clearCap;
+  for (const p of atoms) {
+    const ci = Math.round((p[0] - lo[0]) / T.voxel), cj = Math.round((p[1] - lo[1]) / T.voxel), ck = Math.round((p[2] - lo[2]) / T.voxel);
+    if (ci < -R || cj < -R || ck < -R || ci > N - 1 + R || cj > N - 1 + R || ck > N - 1 + R) continue;
+    for (let i = Math.max(0, ci - R); i <= Math.min(N - 1, ci + R); i++) {
+      const dx = lo[0] + i * T.voxel - p[0];
+      for (let j = Math.max(0, cj - R); j <= Math.min(N - 1, cj + R); j++) {
+        const dy = lo[1] + j * T.voxel - p[1], dxy = dx * dx + dy * dy;
+        if (dxy >= cap2) continue;
+        for (let k = Math.max(0, ck - R); k <= Math.min(N - 1, ck + R); k++) {
+          const dz = lo[2] + k * T.voxel - p[2], d2 = dxy + dz * dz, id = idxOf(i, j, k);
+          if (d2 < clear[id] * clear[id]) clear[id] = Math.sqrt(d2);
+        }
+      }
+    }
+  }
+  const open = id => clear[id] > T.blockA;            // unblocked: farther than 3.0 A from every 50S heavy atom
+  const at = q => {
+    const i = Math.round((q[0] - lo[0]) / T.voxel), j = Math.round((q[1] - lo[1]) / T.voxel), k = Math.round((q[2] - lo[2]) / T.voxel);
+    return i < 0 || j < 0 || k < 0 || i >= N || j >= N || k >= N ? -1 : idxOf(i, j, k);
+  };
+  const dirs = fibonacciDirections(T.rays);
+  const solvent = (id, minClear) => {
+    const o = posOf(id);
+    for (const d of dirs) {
+      let ok = true, escaped = false;
+      for (let s = 1; ; s++) {
+        const qi = at([o[0] + d[0] * s, o[1] + d[1] * s, o[2] + d[2] * s]);
+        if (qi < 0) { escaped = true; break; }
+        if (!open(qi) || (s > 8 && clear[qi] <= minClear)) { ok = false; break; }
+      }
+      if (ok && escaped) return true;
+    }
+    return false;
+  };
+  const voxelRec = id => { const q = posOf(id); return { index: id, xyz: q.map(r3), clearanceCappedA: r3(clear[id]), distToPtcA: r3(dist(q, ptc)) }; };
+  const rec = { cubeA: T.cube, voxelA: T.voxel, grid: N, blockedWithinA: T.blockA, clearanceCapA: T.clearCap, atoms50S: atoms.length, targetCentroid: targetPoint.map(r3) };
+
+  let target = -1, relax = null;
+  for (const minClear of T.solventClear) {
+    const cands = [];
+    for (let id = 0; id < total; id++) if (open(id)) { const d = dist(posOf(id), targetPoint); if (d <= T.targetRadius) cands.push([d, id]); }
+    cands.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    for (const [, id] of cands) if (solvent(id, minClear)) { target = id; break; }
+    rec.solventCandidates = cands.length;
+    if (target >= 0) { relax = minClear; break; }
+  }
+  rec.relaxationA = relax;
+  let start = -1, sd = Infinity;
+  const startQ = [ptc[0] - T.startOffsetA, ptc[1], ptc[2]];
+  for (let id = 0; id < total; id++) if (open(id)) { const d = dist(posOf(id), startQ); if (d < sd) { sd = d; start = id; } }
+  if (target < 0) return { fallback: 'no solvent-side target voxel within 30 A of the uL23/uL29 centroid at 8, 6 or 4 A', record: rec, targetQ: null };
+  rec.targetVoxel = voxelRec(target); rec.startVoxel = voxelRec(start);
+
+  // Dijkstra over 26 neighbours; cost = step length / clearance(destination)^2; ties broken by the smaller predecessor index.
+  const nb = [];
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) if (a || b || c) nb.push([a, b, c, Math.sqrt(a * a + b * b + c * c) * T.voxel]);
+  const best = new Float64Array(total).fill(Infinity), prev = new Int32Array(total).fill(-1);
+  const heap = new MinHeap();
+  best[start] = 0; heap.push(0, start);
+  while (heap.size) {
+    const { cost, v } = heap.pop();
+    if (cost > best[v]) continue;
+    if (v === target) break;
+    const k = v % N, j = ((v - k) / N) % N, i = (v - k - j * N) / N2;
+    for (const [a, b, c, len] of nb) {
+      const ii = i + a, jj = j + b, kk = k + c;
+      if (ii < 0 || jj < 0 || kk < 0 || ii >= N || jj >= N || kk >= N) continue;
+      const w = idxOf(ii, jj, kk);
+      if (!open(w)) continue;
+      const nc = cost + len / (clear[w] * clear[w]);
+      if (nc < best[w] || (nc === best[w] && v < prev[w])) { best[w] = nc; prev[w] = v; heap.push(nc, w); }
+    }
+  }
+  if (!Number.isFinite(best[target])) return { fallback: 'no connected unblocked route from the start voxel to the target voxel', record: rec, targetQ: posOf(target) };
+  const route = [];
+  for (let v = target; v !== -1; v = prev[v]) route.push(posOf(v));
+  route.reverse();
+  rec.routeVoxels = route.length; rec.routeCost = r6(best[target]);
+  return { path: resample(chaikin(route, T.chaikin), T.step), record: rec, targetQ: posOf(target), cubeLo: lo, cubeHi: lo.map(v => v + (N - 1) * T.voxel) };
+}
+
+/** Exact clearance profile of a path against the 50S atoms (nearest from makeNearest). */
+function tunnelProfile(path, nearest) {
+  const arc = [0];
+  for (let i = 1; i < path.length; i++) arc.push(arc[i - 1] + dist(path[i], path[i - 1]));
+  const cl = path.map(p => nearest(p).d);
+  let minBeyond = Infinity, at = -1;
+  cl.forEach((c, i) => { if (arc[i] > TUNNEL.skipA && c < minBeyond) { minBeyond = c; at = i; } });
+  const every5 = [];
+  for (let s = 0; s <= arc[arc.length - 1]; s += 5) { let i = 0; while (i + 1 < arc.length && arc[i + 1] <= s) i++; every5.push({ arcA: s, clearanceA: r3(cl[i]) }); }
+  return { length: arc[arc.length - 1], arc, cl, minBeyond, minAtArcA: arc[at], every5 };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -557,11 +745,76 @@ function buildRibosome(ctx) {
     setAnchor(name, { o: centroid(Array.from({ length: b.length / 3 }, (_, i) => [b[3 * i], b[3 * i + 1], b[3 * i + 2]])), R: I3 });
   }
 
-  // --- STEP 3 (tunnel): compute `tunnel` from largeSubunitAtoms(p7k, rows, T0) around `ptc`; add anchors `ptc` (O3' of A76 of
-  //     the P-site tRNA, z = first path segment) and `tunnelExit`, add `paths: { tunnel }`, and append { anchor: 'ptc', radius: 12 }
-  //     to L2_SITES below. Keep `largeSubunitAtoms` as the only source of the 50S atom list.
-  const L2_SITES = [{ anchor: 'decoding', radius: L2_SITE_RADIUS }];
-  void largeSubunitAtoms;
+  // --- Tunnel (step 3) --------------------------------------------------------------------------------------------
+  const zChain = c7k.get(pSite.trna);
+  const a76 = zChain && zChain.residues.find(r => r.authSeq === 76);
+  if (!a76 || !a76.atoms["O3'"]) throw new Error(`7K00 chain ${pSite.trna}: A76 O3' not modelled`);
+  const ptcO = P0(a76.atoms["O3'"]);
+  const atoms50 = largeSubunitAtoms(p7k, rows, T0);
+  const targetCa = [];
+  for (const id of ['s', 'x']) {
+    const r = rows.find(q => q.id === id);
+    if (!r || !/L23|L29/.test(r.description)) throw new Error(`7K00 chain ${id} is not uL23/uL29: ${r && r.description}`);
+    for (const res of r.chain.residues) if (res.atoms.CA) targetCa.push(P0(res.atoms.CA));
+  }
+  const targetPoint = centroid(targetCa);
+  const t0 = Date.now();
+  const tun = computeTunnel(atoms50, ptcO, targetPoint);
+  if (!tun.path) throw new Error(`tunnel: ${tun.fallback}; stop and report (no straight-line fallback, stage-lead decision)`);
+  const nearest = makeNearest(atoms50);
+  const quant = pts => pts.map(q => q.map(v => Math.round(v / QUANT_STEP) * QUANT_STEP));      // the stored points, so anchors and profile match the asset
+  const fullPath = quant(tun.path);
+  const fullProf = tunnelProfile(fullPath, nearest);
+  // Deviation from PLAN.md 7.4 step 2 (stage-lead decision): truncate at the tunnel mouth = first resampled point with arc >= 60 A that is
+  // solvent-side by the target test (162 rays reach the cube boundary, all 1 A samples unblocked, samples beyond 8 A have clearance > 8 A), exact clearances.
+  const cubeLo = tun.cubeLo, cubeHi = tun.cubeHi, dirs162 = fibonacciDirections(TUNNEL.rays);
+  const solventExact = o => {
+    for (const d of dirs162) {
+      let ok = true;
+      for (let s = 1; ; s++) {
+        const q = [o[0] + d[0] * s, o[1] + d[1] * s, o[2] + d[2] * s];
+        if (q.some((v, k) => v < cubeLo[k] || v > cubeHi[k])) break;
+        const c = nearest(q, 30).d;
+        if (c <= TUNNEL.blockA || (s > 8 && c <= 8)) { ok = false; break; }
+      }
+      if (ok) return true;
+    }
+    return false;
+  };
+  let mouth = -1;
+  for (let i = 0; i < fullPath.length; i++) if (fullProf.arc[i] >= TUNNEL.mouthMinArcA && solventExact(fullPath[i])) { mouth = i; break; }
+  if (mouth < 0) throw new Error(`tunnel: no solvent-side point after ${TUNNEL.mouthMinArcA} A on the ${r3(fullProf.length)} A route; stop and report`);
+  const tunnelPath = fullPath.slice(0, mouth + 1), tunnelSynthetic = 0;
+  const prof = tunnelProfile(tunnelPath, nearest);
+  if (prof.length < TUNNEL.lengthMin || prof.length > TUNNEL.lengthMax) throw new Error(`tunnel: truncated length ${r3(prof.length)} A outside ${TUNNEL.lengthMin}-${TUNNEL.lengthMax} A (route ${r3(fullProf.length)} A, mouth arc ${r3(fullProf.arc[mouth])} A); stop and report`);
+  if (prof.minBeyond < TUNNEL.minClearA) throw new Error(`tunnel: minimum clearance ${r3(prof.minBeyond)} A at arc ${r3(prof.minAtArcA)} A beyond ${TUNNEL.skipA} A is below ${TUNNEL.minClearA} A (length ${r3(prof.length)} A); stop and report`);
+  setAnchor('ptc', axisFrame(ptcO, norm(sub(tunnelPath[1], tunnelPath[0]))));
+  setAnchor('tunnelExit', axisFrame(tunnelPath[tunnelPath.length - 1], norm(sub(tunnelPath[tunnelPath.length - 1], tunnelPath[tunnelPath.length - 2]))));
+  // Sanity (not a gate): path clearance next to the closest C-alpha of uL4 (chain e) and uL22 (chain r), on the final path.
+  const constriction = {};
+  for (const [name, id] of [['uL4', 'e'], ['uL22', 'r']]) {
+    const r = rows.find(q => q.id === id);
+    let bd = Infinity, bi = -1, bres = null;
+    for (const res of r.chain.residues) if (res.atoms.CA) {
+      const q = P0(res.atoms.CA);
+      tunnelPath.forEach((p, i) => { const d = dist(p, q); if (d < bd) { bd = d; bi = i; bres = res.authSeq; } });
+    }
+    constriction[name] = { chain: id, description: r.description, closestCaAuthSeq: bres, caToPathA: r3(bd), pathArcA: r3(prof.arc[bi]), clearanceAtPathPointA: r3(prof.cl[bi]) };
+  }
+  const tunnelSource = {
+    algorithm: 'design 5.6 / PLAN.md 7.4, truncated at the tunnel mouth (recorded deviation from 7.4 step 2)', synthetic: tunnelSynthetic,
+    ...tun.record, ptcO3Prime: ptcO.map(r3), pathPoints: tunnelPath.length, lengthA: r3(prof.length), gateLengthA: [TUNNEL.lengthMin, TUNNEL.lengthMax],
+    fullRoute: { lengthA: r3(fullProf.length), points: fullPath.length, minClearanceBeyondSkipA: r3(fullProf.minBeyond) },
+    mouth: { rule: `first resampled point with arc >= ${TUNNEL.mouthMinArcA} A that is solvent-side (${TUNNEL.rays} rays, 1 A samples, exact clearances, samples beyond 8 A with clearance > 8 A)`, index: mouth, arcA: r3(fullProf.arc[mouth]), xyz: tunnelPath[mouth].map(r3) },
+    minClearanceBeyondSkipA: r3(prof.minBeyond), minClearanceArcA: r3(prof.minAtArcA), skipA: TUNNEL.skipA, gateMinClearanceA: TUNNEL.minClearA,
+    clearanceProfile: prof.cl.map(c => Math.round(c * 100) / 100), clearanceProfileStepA: 1, clearanceMaxA: r3(Math.max(...prof.cl.slice(1))), constriction,
+    startToPtcA: r3(dist(tunnelPath[0], ptcO)), exitToTargetVoxelA: r3(dist(tunnelPath[tunnelPath.length - 1], tun.targetQ)),
+    clearance: 'exact distance from each stored path point to the nearest 50S heavy atom centre (23S, 5S, L proteins of 7K00; no ions or waters)',
+  };
+  ctx.log(`tunnel: full route ${tunnelSource.fullRoute.lengthA} A, mouth arc ${tunnelSource.mouth.arcA} A, final length ${tunnelSource.lengthA} A, relaxation ${tun.record.relaxationA}, min clearance beyond ${TUNNEL.skipA} A ${tunnelSource.minClearanceBeyondSkipA} A at arc ${tunnelSource.minClearanceArcA}; ${Date.now() - t0} ms`);
+  ctx.log(`tunnel clearance every 5 A: ${prof.every5.map(e => e.clearanceA).join(' ')}; uL4 ${JSON.stringify(constriction.uL4)}; uL22 ${JSON.stringify(constriction.uL22)}`);
+  const paths = { tunnel: { points: encodePositions(tunnelPath.flat()), count: tunnelPath.length, synthetic: tunnelSynthetic } };
+  const L2_SITES = [{ anchor: 'decoding', radius: L2_SITE_RADIUS }, { anchor: 'ptc', radius: L2_SITE_RADIUS }];
 
   // --- L2 -------------------------------------------------------------------------------------------------------------
   const l2 = buildL2(p7k, rows, T0, L2_SITES, anchors);
@@ -616,7 +869,7 @@ function buildRibosome(ctx) {
       chainsUsed: [`${rows.length} ribosomal chains: ${rows.map(r => r.id).join(' ')} (16S, 30S proteins, 23S, 5S, 50S proteins)`, `X (mRNA, mrna track registers -3 to +8)`, `${pSite.trna} (P-site tRNA-fMet, siteP)`, `${aSite.trna} (A-site tRNA-Val, siteA)`, '5 (E-site fragment, check only)'],
       additionalSources: secondary,
       frame: { name: 'ribo', origin: `centroid of C1' of 7K00 chain X author ${pSite.start}-${pSite.start + 2}`, z: `unit vector to the centroid of C1' of author ${aSite.start}-${aSite.start + 2}`, x: `component of (centroid of ${an.rna23P} 23S P atoms - origin) perpendicular to z`, y: 'z x x', sourceFrame: { o: A.o.map(r3), R: Array.from(A.R, r6) } },
-      superpositions, siteChecks, codonPairing, mrna: mrnaRec, antiSD,
+      superpositions, siteChecks, codonPairing, mrna: mrnaRec, antiSD, tunnel: tunnelSource,
       notes: [
         'Generated by tools/build-assets.mjs (recipe tools/assets/ribosome.mjs) from the mmCIF files pinned in tools/sources.lock.json (model 1, altloc . or A, no hydrogens). Full provenance: docs/assets/ribosome-70s.md.',
         `Ribo frame (PLAN.md 7.3): origin = centroid of C1' of mRNA ${pSite.pairing.codon} (7K00 chain X author ${pSite.start}-${pSite.start + 2}); +z toward the centroid of C1' of the A-site codon ${aSite.pairing.codon} (author ${aSite.start}-${aSite.start + 2}); +x = component of (centroid of all 23S P atoms - origin) perpendicular to z; +y = z x x. The P- and A-site codons are found by geometric Watson-Crick pairing with the tRNAs, not assumed.`,
@@ -628,7 +881,7 @@ function buildRibosome(ctx) {
         'siteAP and sitePE are decided by source.siteChecks.hybrid.decision (4.0 A anticodon-origin condition, 16S+23S fit as written in PLAN.md 7.3).',
         'Track mrna: registers -16 to +15, register 0 = first nucleotide of the P-site codon; tracks.mrna.sources gives 7K00, 7ST2 or synthetic per register; synthetic registers are A-form single-strand steps (rise 2.81 A, twist 32.73 degrees about the local z axis) from the nearest fitted register, base N. Anchors mrnaEntry and mrnaExit are frames of registers +15 and -16 and are marked synthetic.',
         'antiSD: centroid of the heavy atoms of 7ST2 16S author 1535-1540 (CCUCCU) after superposition; z = unit vector from C1\' of 1535 to C1\' of 1540. 7K00 16S ends at 1534.',
-        'No paths and no ptc or tunnelExit anchors yet (ST2 step 3).',
+        `Path tunnel (starts at the ptc end, residue k at arc length k x 3.40 A, ends at tunnelExit = the tunnel mouth): Dijkstra on a 1 A voxel grid around the 50S (blocked within 3.0 A of any 50S heavy atom; cost = step / clearance squared), three Chaikin passes, resampled at 1.0 A, truncated at the first solvent-side point after 60 A of arc (deviation from PLAN.md 7.4 step 2; the 13 straight-line fallback was rejected because it crosses rRNA); see source.tunnel. Anchors ptc (O3 prime of A76 of the P-site tRNA; z = first path segment) and tunnelExit (last path point; z = last segment).`,
       ],
     },
     bounds,
@@ -636,7 +889,7 @@ function buildRibosome(ctx) {
     chains: chainDefs,
     lod0,
     lod1: { count: l1Count, positions: encodePositions(l1Pos), chain: encodeArray(Uint8Array.from(l1Chain)), kind: encodeArray(Uint8Array.from(l1Kind)) },
-    lod2, anchors, tracks,
+    lod2, anchors, tracks, paths,
   };
   const problems = validateAsset(asset);
   if (problems.length) throw new Error('ribosome-70s invalid:\n' + problems.join('\n'));
