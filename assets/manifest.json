@@ -7,6 +7,11 @@
       "synthetic": true
     },
     {
+      "id": "ribosome-70s",
+      "file": "ribosome-70s.asset.json",
+      "synthetic": false
+    },
+    {
       "id": "rnap-ec",
       "file": "rnap-ec.asset.json",
       "synthetic": false
