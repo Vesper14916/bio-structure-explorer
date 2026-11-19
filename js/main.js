@@ -557,7 +557,7 @@ function boot() {
   ui.setNucleicAcid?.(app.nucleicAcid);
   ui.setSequence(app.sequence);
   ui.setReplicationLegend?.(REPL_LEGEND);
-  ui.setExpressLegend?.(EXPRESS_LEGEND);
+  if (app.sceneVersion !== 'v2') ui.setExpressLegend?.(EXPRESS_LEGEND);
   const startMode = ['structure', 'pair', 'melt', 'replicate', 'express', 'crystal'].includes(params.get('mode')) ? params.get('mode') : 'structure';
   ui.setMode(startMode);
   showMode(startMode);

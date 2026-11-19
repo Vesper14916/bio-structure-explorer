@@ -98,3 +98,91 @@ Branch: `main` (tag `r3-w0`). Scope: R3-W0 (Chief + `r3/w0-sources`, `r3/w0-stub
   - Verdict: `PASS WITH MINOR FIXES` (1 High, 4 Medium, 3 Low). All 8 findings accepted and fixed before tagging `r3-w0` (`DEC-007`, `DEC-008`).
 - **Not verified in ST1:** ST2–ST10 assets, kinematics, story playback, and visual acceptance (all out of ST1 scope); standalone bundle `dist/helix-standalone.html` was not rebuilt because no standalone-exposed Round 1 behavior changed (rebuild scheduled when new scenes wire in).
 
+---
+
+## 6. Round 3 Stage ST4 / Gate G1 (`r3-w1`, 2026-11-19)
+
+Branch: `main` (tag `r3-w1`). Scope: ST2 intake (`r3-st2` at `2d9512c`, `R3-A1`, `R3-A2`), ST3 intake (`r3-st3` at `bc3c0bf`, `R3-K1`, `R3-S2`), ST4 tasks merged in order `R3-Q1 → R3-R1 → R3-U1` (`--no-ff`), Chief integration updates (`tests/stubs.test.mjs`, `js/main.js` `?scene=v2` legend guard, rebuilt `dist/helix-standalone.html`), rulings `DEC-009`–`DEC-021`, and ST4 Argon independent review (`docs/reviews/R3-ST4-argon.md`).
+
+**Gate G1 Verdict: `PASS`**
+
+### 6.1 Required Automated Gates
+
+- **Pinned PDB sources (`npm run fetch-sources`):** `sources: 13 ok, 0 failed (13 total)`.
+- **Asset pipeline reproducibility (`node tools/build-assets.mjs --check --quiet`):** Exit `0` — `identical` for all 6 committed files (`assets/ribosome-70s.asset.json`, `assets/rnap-ec.asset.json`, `assets/rnap-holo.asset.json`, `assets/trna-init.asset.json`, `assets/trna-aa.asset.json`, `assets/manifest.json`).
+- **Syntax check & unit tests (`npm test`):**
+  ```text
+  checked 63 files, 0 failed
+  ℹ tests 221
+  ℹ suites 0
+  ℹ pass 221
+  ℹ fail 0
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 13370.022256
+  ```
+  - **Runtime note (informational):** Under Node 24 LTS (this VM's runtime, larger V8 young-gen nursery than Claude's Node 22), `tests/kin-duplex.test.mjs:445` (`poseDuplex` heap growth `<= 1 MB` over 4,000 calls without forcing GC inside the test) can intermittently report ~2.4–3.7 MB pre-GC transient allocation when minor GC does not fire mid-loop. Direct `--expose-gc` diagnosis confirmed only **29,088 B (28.4 KiB)** retained post-GC across 4,000 calls (zero leak). On the integrated `main` Gate G1 run above, all 221/221 tests passed cleanly. Per `PLAN.md` §9.3, Chief did not modify Claude-owned `tests/kin-duplex.test.mjs`.
+- **Browser smoke gate (`npm run smoke`):**
+  ```text
+  SMOKE PASS
+  ```
+  Covers `index.html` (all 6 modes + Express scrub + `?mode=express&scene=v2`) and offline `dist/helix-standalone.html` (4,108,332 B / 4.11 MB ≤ 7.5 MB; 6 assets inlined in `window.__HELIX_ASSETS__`; `?mode=express&scene=v2` decodes all 5 real assets via `loadAssets` with zero network requests). Broken-import failure proof (`js/render/colors.js` reported on `SMOKE FAIL`) documented in `docs/handoffs/R3-Q1.md`.
+- **Express v2 UI suite (`node tests/ui-story.browser.mjs`):**
+  ```text
+  UI-STORY PASS (50 checks)
+  ```
+- **Detail-sphere, `AtomGroupLayer`, performance & visual-regression suite (`node tests/render-detail.browser.mjs`):**
+  ```text
+  TEST1 PASS: 248-bp duplex (10168 atoms) + 40-aa peptide (329 atoms) + NTP (31 atoms) | diffs: r30-vs-r0=3.01%, shifted=4.69%, codon=0.94%, element=4.38% | geometries: 13->13 (cleared=12)
+  TEST2 PASS (perf, software WebGL, quality=high): 675 nt (13965 atoms) | 10 frames: median=4701.7 ms, mean=5202.6 ms, max=6272.1 ms
+  TEST3 PASS (visual regression vs r3-st3, <= 0.5%): Explore=0.000%, Pairs=0.000%, Melt=0.000%, Copy=0.000%, X-ray=0.000%
+  RENDER DETAIL PASS
+  ```
+
+### 6.2 Assets (`ribosome-70s`, `trna-init`, `trna-aa`) — Tests & §7.5 Budgets
+
+- `node --test tests/assets-ribosome.test.mjs tests/assets-trna.test.mjs tests/asset-budgets.test.mjs`: `34/34 pass` (`0 fail`).
+- Structural highlights: 6/6 Watson–Crick pairs verified across decoded `ribosome-70s` + `trna-init`/`trna-aa` (`0.18–0.61 Å` ≤ 2.5 Å); 7ST2 E-site chain `6` matches 7K00 E-site CCA chain `5` at `1.16 Å` RMSD; exit tunnel path `86.71 Å` (88 pts, min clearance `3.66 Å`, `{N} = 26`, `DEC-009`); `trna-init` span `76.15 Å`, `trna-aa` span `81.71 Å` (`DEC-013`).
+
+| Target | Metric | Observed | §7.5 Budget | Status |
+| --- | --- | ---: | ---: | :---: |
+| `ribosome-70s` | L0 tri / L1 beads / L2 atoms / size | 48,064 / 9,978 / 756 / 724.8 kB | ≤ 70k / ≤ 15k / ≤ 4k / ≤ 1.2 MB | PASS |
+| `trna-init` | L0 tri / L1 beads / L2 atoms / size | 3,716 / 76 / 42 / 50.9 kB | ≤ 4k / ≤ 80 / ≤ 400 / ≤ 60 kB | PASS |
+| `trna-aa` | L0 tri / L1 beads / L2 atoms / size | 3,712 / 73 / 42 / 50.9 kB | ≤ 4k / ≤ 80 / ≤ 400 / ≤ 60 kB | PASS |
+| All manifest assets | Aggregate size (5 real assets) | 1,166.1 kB | ≤ 3.0 MB | PASS |
+| `dist/helix-standalone.html` | Single-file bundle (Q1 + R1 + U1 + 6 inlined assets) | 4.11 MB (4,108,332 B) | ≤ 7.5 MB | PASS |
+
+### 6.3 Actor-Card Colour Verification (`PLAN.md` §4.3 & `DEC-019`)
+
+- Audited by Chief and independently verified by ST4 Argon (`docs/reviews/R3-ST4-argon.md`, window `2026-11-19T10:27:11Z`–`2026-11-19T10:29:59Z`, 2 min 48 s / 30 min budget, verdict `PASS WITH MINOR NOTES`).
+- Resolved `ACTOR_TOKENS` / `instanceColor` albedo matches every `PLAN.md` §4.3 token at **`ΔE = 0.00`**:
+  - `ribosome-70s`: L0 `small` `#e4dcc4`, `large` `#d2b183`; L1 `rRNA16S` `#f0eadb` (lit screenshot min CIE76 `ΔE = 0.51`), `rprotein30S` `#c9bd9c` (`ΔE = 0.69`), `rRNA23S`/`rRNA5S` `#e0c59f` (`ΔE = 0.69`), `rprotein50S` `#b38f5e` (`ΔE = 1.62`).
+  - `trna-init` (`#ffd43b`) and `trna-aa` (`#ff922b`): albedo `ΔE = 0.00`; visually verified distinct warm yellow vs. saturated orange L-shapes with crisp procedural anticodons (`docs/evidence/r3/A2/`). Under ACES Filmic + `L1_MAT` PBR specular/rim lighting, raw lit pixels show CIE76 `ΔE ≈ 18` against unlit sRGB hexes due to highlight desaturation; `DEC-019` formalizes Gate G1 colour evaluation on resolved albedo / unlit renders (or ACES-matched swatches) and records the ST5 `chainColor()` RNAP-substring watch item.
+
+### 6.4 Kin-Lab Visual Check (`R3-K1`, `docs/evidence/r3/K1/`)
+
+- Chief visually inspected `kin-lab-r45-b0.jpg`, `kin-lab-r45-b05.jpg`, `kin-lab-r45-b1.jpg`, and `kin-lab-r105-b1.jpg`.
+- Confirmed continuous, unbroken DNA duplex across `β = 0`, `0.5`, and `1.0` with smooth bend into the RNAP channel (`63.8°`) and open transcription bubble inside the enzyme, zero tears or teleport discontinuities (`DEC-014`–`DEC-016`).
+
+### 6.5 Detail-Sphere & `AtomGroupLayer` Visual Check (`R3-R1`, `docs/evidence/r3/R1/`)
+
+- Chief visually inspected all 5 2× JPEG q90 captures (`detail-center-r30.jpg`, `detail-shifted-r30.jpg`, `detail-radius0-cartoon.jpg`, `detail-codon-scheme.jpg`, `detail-element-scheme.jpg`).
+- Confirmed smoothstep cross-fade across the 12 Å band between atomic ball-and-stick DNA/peptide/ATP inside `radius = 30` Å and cartoon ribbons + Cα peptide tube outside, clean focus shift (`+55 Å`), 100% cartoon rendering at `radius = 0`, and distinct `strand`, `codon`, and `element` schemes (`DEC-020`).
+
+### 6.6 Express v2 Panel Checklist (`R3-U1`, `PLAN.md` §4.8–§4.10)
+
+- Verified via `node tests/ui-story.browser.mjs` (50/50 checks) and Chief visual inspection of desktop (`1440×900`) and mobile (`iPhone 13`) 2× captures in `docs/evidence/r3/U1/` (`desktop-ch1.jpg`, `desktop-inspect-filled.jpg`, `phone-ch1.jpg`, `phone-ch1-expanded.jpg`):
+  - All 11 §4.8 items present in exact order; exact §4.10 header and "What you are seeing" copy; plain text `"E. coli"` (`DEC-006`).
+  - 16 chapters with live `{N} = 26` substitution in chapter 14; 41 codon cells + 40 peptide pills; 4 stats (`mRNA`, `RNA·DNA hybrid`, `Codon`, `Peptide`); Inspect card with 6 `<dl>` rows + safe `RCSB ↗` link (`target="_blank" rel="noopener"`).
+  - Exact §4.9 Legend (`15` entries in Step by step, `+ NusG` `#15aabf` in Coupled), preserved on `?mode=express&scene=v2` boot via Chief's `js/main.js` guard (`DEC-021`).
+  - All 11 `onExpression` actions and Express-only keyboard shortcuts (`Space`, `ArrowLeft`/`ArrowRight`, `Home`) verified; `171/171` buttons have accessible names; `6/6` Tab focus-visible; `0 px` horizontal overflow on desktop and iPhone 13.
+  - Closed-CSS design gaps adjudicated as non-blocking for Gate G1 (`DEC-021`: `"Step by step"` pill width inside `div.group.row-between`, inline `ol`/`.chapter-row` reset, mobile `PEEK_H = 112` first-line caption fold).
+
+### 6.7 Not Verified in ST4
+
+- Hardware GPU frame rate (all ST4 browser timings ran on headless Chromium SwiftShader software WebGL).
+- Physical iOS/Android touch gestures (tested under Playwright `iPhone 13` emulation).
+- Live 3D `StoryScene` playback, ST5 factor assets (`A3`), RNAP v2 (`A4`), transcription choreography (`S3`), and translation choreography (`S4`) — scheduled for ST5–ST10.
+
+

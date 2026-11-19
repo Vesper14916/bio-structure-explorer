@@ -2,6 +2,7 @@
 // expose every contracted export, and throw `Error('not implemented: <name>')`.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 const STUBS = [
   // Story (js/sim/gene/)
@@ -45,11 +46,11 @@ const STUBS = [
   { path: 'js/scene/labels.js', fns: ['selectLabels'] },
 
   // Render (js/render/)
-  { path: 'js/render/atom-groups.js', classes: ['AtomGroupLayer'] },
+  { path: 'js/render/atom-groups.js', implemented: true, browserOnly: true, classes: ['AtomGroupLayer'] }, // DEC-005: implemented in R3-R1 (imports 'three' via browser importmap); behaviour in tests/render-detail.browser.mjs
   { path: 'js/render/fx.js', classes: ['FxLayer'] },
 
   // UI (js/ui/)
-  { path: 'js/ui/view-story.js', fns: ['createStoryView'] },
+  { path: 'js/ui/view-story.js', implemented: true, fns: ['createStoryView'] }, // DEC-005: implemented in R3-U1; behaviour in tests/ui-story.browser.mjs
   { path: 'js/ui/inspect.js', fns: ['buildInspectInfo'] },
 ];
 
@@ -59,8 +60,19 @@ test('stub manifest covers all 23 Round 3 modules', () => {
 
 for (const spec of STUBS) {
   test(`stub ${spec.path} imports in Node and throws not implemented`, async () => {
-    const url = new URL(`../${spec.path}`, import.meta.url).href;
-    const mod = await import(url);
+    const fileUrl = new URL(`../${spec.path}`, import.meta.url);
+    if (spec.implemented && spec.browserOnly) {
+      const src = fs.readFileSync(fileUrl, 'utf8');
+      for (const name of spec.fns ?? []) {
+        assert.match(src, new RegExp(`export\\s+(?:async\\s+)?function\\s+${name}\\b|export\\s*\\{[^}]*\\b${name}\\b`), `${spec.path} must export function ${name}`);
+      }
+      for (const name of spec.classes ?? []) {
+        assert.match(src, new RegExp(`export\\s+class\\s+${name}\\b|export\\s*\\{[^}]*\\b${name}\\b`), `${spec.path} must export class ${name}`);
+      }
+      return;
+    }
+
+    const mod = await import(fileUrl.href);
 
     for (const name of spec.fns ?? []) {
       assert.equal(typeof mod[name], 'function', `${spec.path} must export function ${name}`);
@@ -75,6 +87,7 @@ for (const spec of STUBS) {
     for (const name of spec.classes ?? []) {
       const Ctor = mod[name];
       assert.equal(typeof Ctor, 'function', `${spec.path} must export class ${name}`);
+      if (spec.implemented) continue; // DEC-005: implemented modules keep the export check only
       assert.throws(
         () => new Ctor(),
         (err) => err instanceof Error && err.message === `not implemented: ${name}` && /not implemented: /.test(err.message),

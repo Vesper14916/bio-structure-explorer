@@ -122,5 +122,39 @@ This log records accepted contract changes, pre-approved fallbacks from `PLAN.md
 - **Decision:** **Accepted.** Retroactively approved as required by R3-S2 step 3. File ownership of `js/sim/gene/transcription.js`, `js/sim/gene/translation.js`, and `js/sim/gene/coupled.js` remains with S3 (ST6), S4 (ST7), and S5 (ST9) respectively.
 - **Impact:** Keeps `stateAt` and `npm test` runnable end-to-end across ST3–ST5 while preserving downstream ownership boundaries.
 
+## DEC-019: Gate G1 colour-sampling protocol for ACES + PBR high-chroma tokens & ST5 factor colour watch item
+
+- **Date:** 2026-11-19
+- **Source:** ST4 Argon independent review (`docs/reviews/R3-ST4-argon.md`, findings L1, L2, L3)
+- **Context:** `js/render/actors.js` assigns exact `PLAN.md` §4.3 sRGB hex tokens to `ribosome-70s`, `trna-init` (`#ffd43b`), and `trna-aa` (`#ff922b`) (albedo CIE76 `ΔE = 0.00`). While low-chroma ribosome neutrals measure `ΔE = 0.51–1.62` even on lit ACES + PBR screenshots, near-gamut high-chroma tRNA tokens measure `ΔE ≈ 18` when lit ACES pixels are compared directly against unlit sRGB hexes due to ACES Filmic highlight desaturation and cool specular/rim irradiance. In addition, `js/render/actors.js` `chainColor()` currently checks `'alpha'`/`'beta'`/`'omega'`/`'sigma'` substrings in `chain.name` before falling back to `partColor(partId, assetId)`.
+- **Decision:**
+  1. **Colour sampling (L1):** Gate G1 (and subsequent asset colour gates) evaluates `ΔE ≤ 6` against `PLAN.md` §4.3 raw sRGB tokens on **resolved material albedo / `instanceColor` / unlit flat renders** (`ΔE = 0.00` for all ST2 assets), or compares lit captures against **ACES + PBR-lit reference swatches** rendered under the same stage rig. Visually inspect lit captures to verify preserved hue and clear inter-actor separation.
+  2. **ST5 factor watch item (L3):** In ST5 (`R3-A3` / Chief integration), ensure all factor assets (`rf1`, `ef-tu`, `ef-g`, `nusg`) either carry explicit `subunit` tags or guard RNAP substring matching in `js/render/actors.js:chainColor()` to RNAP assets so mmCIF descriptions containing `"alpha"` or `"beta"` cannot mis-tint factor chains.
+  3. **Test hardening (L2):** Note Argon's non-blocking unit-test hardening items (`tests/assets-trna.test.mjs`, `tests/assets-ribosome.test.mjs`, `tests/asset-budgets.test.mjs`) for optional follow-up without blocking Gate G1.
+- **Impact:** Prevents false-fail colour rejections on high-chroma tokens (`trna-init`, `trna-aa`, and ST5 factors `rf1`, `ef-tu`, `ef-g`, `nusg`) while keeping strict albedo fidelity.
+
+## DEC-020: R3-R1 detail-sphere & AtomGroupLayer design gaps, browser-only stub check, and picking deferral
+
+- **Date:** 2026-11-19
+- **Source:** `docs/handoffs/R3-R1.md` (Design gaps, Requests, Open questions)
+- **Context:** `PLAN.md` §4.4 leaves peptide cartoon Cα bead radius, peptide cartoon colour under `element` scheme, and `< 2`-residue peptide fallback unspecified. Implementing `js/render/atom-groups.js` with `import * as THREE from 'three';` prevents Node from dynamically importing that file without the browser importmap. R1 also asked whether `viewer.pick(...)` should pick inside `AtomGroupLayer`.
+- **Decision:**
+  1. **Accepted** `CA_BEAD_RADIUS = 0.85` Å (≈ 2× `PEPTIDE_BOND_RADIUS` `0.42` Å), `ELEMENT_INFO.C.color` (`0x9eb2cc`) for peptide cartoon trace under `element` scheme, and bead-only rendering when `residues.length < 2`.
+  2. **Extended `DEC-005`** in `tests/stubs.test.mjs`: implemented browser/Three.js modules are marked `implemented: true, browserOnly: true` and verified statically for their contracted exports in Node (with full runtime verification in `tests/render-detail.browser.mjs` and `npm run smoke`).
+  3. **Deferred** `AtomGroupLayer` picking to ST6 (`R3-U2` / `R3-R2`); `Viewer` keeps only `setDetailFocus` and `setAtomGroups` in ST4.
+- **Impact:** Clean `npm test` execution across Node and browser-only Three.js modules; unambiguous picking ownership for ST6.
+
+## DEC-021: R3-U1 Express v2 toggle payload, §4.9 legend boot guard, and closed-CSS design-gap rulings
+
+- **Date:** 2026-11-19
+- **Source:** `docs/handoffs/R3-U1.md` (Design gaps, Requests, Open questions)
+- **Context:** U1 emitted partial-object toggle payloads `{ action: 'toggle', value: { cutaway } | { labels } | { crowding } }`, flagged `js/main.js` line 560 overwriting the §4.9 Express v2 legend on `?mode=express&scene=v2` boot, and noted three minor visual/CSS gaps under the closed `PLAN.md` §4.8 stylesheet.
+- **Decision:**
+  1. **Confirmed toggle payload shape:** `onAction` emits `{ action: 'toggle', value: { cutaway: bool } | { labels: bool } | { crowding: bool } }`; `StoryScene.setToggles(patch)` (`R3-R2`, ST5) shall accept partial toggle objects and merge them into current toggle state.
+  2. **Boot legend guard:** Applied immediately in `js/main.js` (`if (app.sceneVersion !== 'v2') ui.setExpressLegend?.(EXPRESS_LEGEND);`) so `?mode=express&scene=v2` displays the §4.9 legend immediately on boot.
+  3. **Closed-CSS design gaps:** Accepted all three as non-blocking for Gate G1 without mutating §4.8 CSS: (a) `"Step by step"` pill overflowing its 50% `.seg-thumb` by ~6–10 px beside `Speed` inside `div.group.row-between` (deferred to ST6 `R3-U2` / ST10 `R3-Q3` polish if a layout adjustment is approved); (b) inline `ol` list reset and `.chapter-row` `width: 100%` in `js/ui/view-story.js`; (c) mobile `PEEK_H = 112` showing line 1 of caption until expanded.
+- **Impact:** Freezes the `view-story.js` ↔ `StoryScene` toggle interface ahead of ST5 `R3-R2`, fixes `?mode=express&scene=v2` legend rendering immediately, and preserves strict §4.8 CSS compliance for Gate G1.
+
+
 
 

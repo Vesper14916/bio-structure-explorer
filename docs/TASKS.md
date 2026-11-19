@@ -74,19 +74,28 @@ Model note (`PLAN.md` §9.1): Antigravity `invoke_subagent` inherits the parent 
 | **R3-K1** | `DONE` | Claude (C2) | `claude/bold-mayer-j248mg` (merged `--no-ff`) | `js/kin/frames.js`, `js/kin/track.js`, `js/kin/duplex.js`, `dev/kin-lab.html`, `tests/kin-frames.test.mjs`, `tests/kin-duplex.test.mjs`, `docs/evidence/r3/K1/` (6 captures), `docs/handoffs/R3-K1.md`. Rulings: `DEC-014`–`DEC-016`. |
 | **R3-S2** | `DONE` | Claude (C2) | `claude/bold-mayer-j248mg` (merged `--no-ff`) | `js/sim/gene/timeline.js`, `js/sim/gene/shots.js`, `js/sim/gene/story.js`, pass-through plug points (`transcription.js`, `translation.js`, `coupled.js`), `tests/timeline.test.mjs`, `tests/story.test.mjs`, `docs/handoffs/R3-S2.md`. Rulings: `DEC-017`–`DEC-018`. |
 
-### Stage ST4 — Standalone Gates, Detail Sphere, Express v2 Panel & Gate G1 (Gemini; target tag `r3-w1`)
+### Stage ST4 — Standalone Gates, Detail Sphere, Express v2 Panel & Gate G1 (Gemini; tag `r3-w1`)
 
 | Task ID | Status | Owner / Executor | Branch | Deliverable & Handoff |
 | :--- | :--- | :--- | :--- | :--- |
-| **R3-Q1** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/q1` | Standalone inlined assets (`window.__HELIX_ASSETS__`), `?scene=v2` smoke + broken-import diagnostics, `tests/asset-budgets.test.mjs`. |
-| **R3-R1** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/r1` | Detail-sphere cross-fade (`molecule.js`, `cartoon.js`), `AtomGroupLayer` (`atom-groups.js`), `viewer.setDetailFocus`/`setAtomGroups`, `tests/render-detail.browser.mjs`, `docs/evidence/r3/R1/`. |
-| **R3-U1** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/u1` | Express v2 panel (`js/ui/view-story.js`, `ui.js` `?scene=v2` wiring, `css/style.css` §4.8 block), `dev/ui-story.html`, `tests/ui-story.browser.mjs`, `docs/evidence/r3/U1/`. |
+| **R3-Q1** | `DONE` | Gemini subagent (inherited model) | `r3/q1` (merged `--no-ff`) | Standalone inlined assets (`window.__HELIX_ASSETS__` in `dist/helix-standalone.html`), `?scene=v2` smoke + broken-import diagnostics (`tests/smoke.browser.mjs`), `tests/asset-budgets.test.mjs`, `docs/handoffs/R3-Q1.md`. |
+| **R3-R1** | `DONE` | Gemini subagent (inherited model) | `r3/r1` (merged `--no-ff`) | Detail-sphere cross-fade (`js/render/molecule.js`, `js/render/cartoon.js`), `AtomGroupLayer` (`js/render/atom-groups.js`), `viewer.setDetailFocus`/`setAtomGroups` (`js/render/viewer.js`), `tests/render-detail.browser.mjs`, `docs/evidence/r3/R1/` (5 captures), `docs/handoffs/R3-R1.md`. Ruling: `DEC-020`. |
+| **R3-U1** | `DONE` | Gemini subagent (inherited model) | `r3/u1` (merged `--no-ff`) | Express v2 panel (`js/ui/view-story.js`, `js/ui/ui.js` `?scene=v2` wiring, `css/style.css` §4.8 block), `dev/ui-story.html`, `tests/ui-story.browser.mjs` (50 checks), `docs/evidence/r3/U1/` (13 captures), `docs/handoffs/R3-U1.md`. Ruling: `DEC-021`. |
+
+#### ST4 Argon Job Log (`PLAN.md` §9.1 & §11)
+
+- **Job:** Independent review of Gate G1 evidence for Claude ST2 assets (`ribosome-70s`, `trna-init`, `trna-aa`): colour sampling against `PLAN.md` §4.3, LOD/size budgets (§7.5), pairing tests and structural invariants, and unit-test quality audit.
+- **Start (UTC):** `2026-11-19T10:27:11Z`
+- **End (UTC):** `2026-11-19T10:29:59Z` (2 min 48 s / 30 min budget)
+- **Executor note:** Read-only `research` subagent (inherited session model).
+- **Report:** `docs/reviews/R3-ST4-argon.md`
+- **Outcome:** `PASS WITH MINOR NOTES` (0 High, 0 Medium, 3 Low) — recommended Gate G1 PASS. Recorded `DEC-019` clarifying Gate G1 colour sampling on resolved albedo / unlit renders or ACES-matched reference swatches (L1), flagging the `js/render/actors.js:chainColor()` RNAP substring watch item for ST5 factors (L3), and noting optional test-hardening items (L2).
 
 ### Upcoming Stages (ST5–ST10)
 
 | Stage | Executor | Tasks (merge order) | Base Tag | Target Tag | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ST5** | Gemini | `R3-A4` → `R3-A3` → `R3-K2` → `R3-R2` | `r3-w1` | `r3-st5` | `PENDING` |
+| **ST5** | Gemini | `R3-A4` → `R3-A3` → `R3-K2` → `R3-R2` | `r3-w1` | `r3-st5` | `READY` |
 | **ST6** | Gemini | `R3-R3` → `R3-U2` → `R3-S3` → `R3-INT2`; Gate **G2** | `r3-st5` | `r3-w2` | `PENDING` |
 | **ST7** | **Claude (C3)** | `R3-K3` → `R3-S4` (translation choreography) | `r3-w2` | `r3-st7` | `PENDING` |
 | **ST8** | Gemini | Intake ST7; `R3-R4` → `R3-Q2` → `R3-U3` → `R3-V2` → `R3-INT3`; Gate **G3** | `r3-st7` | `r3-w3` | `PENDING` |
