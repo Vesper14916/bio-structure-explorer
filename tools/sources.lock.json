@@ -41,6 +41,114 @@
       "bytes": 3450268,
       "target": "rnap-holo",
       "role": "candidate for rnap-holo; compared, not selected"
+    },
+    {
+      "pdbId": "7K00",
+      "url": "https://files.rcsb.org/download/7K00.cif.gz",
+      "file": "tools/sources/7K00.cif",
+      "downloaded": "2026-11-18",
+      "sha256": "147e624572f8fc2efaea6617ab99fb86843818bd8bfa08fbb9121fbd185e3897",
+      "bytes": 18216760,
+      "gzSha256": "8d8b9af7a1c32db8c01782fa3c9a5f08643f3ea596c744fc0a14684fd140209e",
+      "gzBytes": 3506791,
+      "target": "ribosome-70s",
+      "role": "ribosome-70s, trna-init, trna-aa, mRNA core track; E. coli 70S cryo-EM 1.98 A"
+    },
+    {
+      "pdbId": "7ST2",
+      "url": "https://files.rcsb.org/download/7ST2.cif.gz",
+      "file": "tools/sources/7ST2.cif",
+      "downloaded": "2026-11-18",
+      "sha256": "8a565792221c1a8b46220b87832a69009cef5e629788d4a42d16c6655be12e4f",
+      "bytes": 16565462,
+      "gzSha256": "0ba40c6dd79280ef84052bb5b1a1b54deafb1fc1c599bf3f442a59f14b503e80",
+      "gzBytes": 3389568,
+      "target": "ribosome-70s",
+      "role": "E-site tRNA frame and mRNA track extension; non-rotated post-translocation 70S cryo-EM 2.9 A"
+    },
+    {
+      "pdbId": "8FZH",
+      "url": "https://files.rcsb.org/download/8FZH.cif.gz",
+      "file": "tools/sources/8FZH.cif",
+      "downloaded": "2026-11-18",
+      "sha256": "162a0b6bb5736f86beb9b50ba21cf95b2843a21ec1182f212d0c5d2f9b52cabb",
+      "bytes": 17449599,
+      "gzSha256": "bb3d2114409a5955a9e967947c8ebe13b23cdff304030f176cccde207b3431a6",
+      "gzBytes": 3457493,
+      "target": "rf1",
+      "role": "E. coli RF1 on UAA stop codon; 70S cryo-EM 2.9 A"
+    },
+    {
+      "pdbId": "5WE4",
+      "url": "https://files.rcsb.org/download/5WE4.cif.gz",
+      "file": "tools/sources/5WE4.cif",
+      "downloaded": "2026-11-18",
+      "sha256": "6a9ae196d1b907712061e4c9c86f90b7b4d1c325bc222932eccaf4a2b2f50eed",
+      "bytes": 18570909,
+      "gzSha256": "46843b05257f4e6fe44c3486db4f9d2afc36cf6a3cc90473f02693bcd626c0bc",
+      "gzBytes": 4107234,
+      "target": "ef-tu",
+      "role": "EF-Tu and A/T Phe-tRNA frame; wild-type ternary complex on E. coli 70S cryo-EM 3.1 A"
+    },
+    {
+      "pdbId": "7PJV",
+      "url": "https://files.rcsb.org/download/7PJV.cif.gz",
+      "file": "tools/sources/7PJV.cif",
+      "downloaded": "2026-11-18",
+      "sha256": "1018b2d8ba7a9ef2cab9f9d4e60802c2de015b2bb11a6a6fce40993729e611cf",
+      "bytes": 17736641,
+      "gzSha256": "9e2a56faffff8557347ed41ee3dd5f2b09e2da0f5403c6066f82acaad2f4bd25",
+      "gzBytes": 3526926,
+      "target": "ef-g",
+      "role": "EF-G and hybrid tRNA candidate frames during translocation; E. coli 70S cryo-EM 3.1 A"
+    },
+    {
+      "pdbId": "9ZN2",
+      "url": "https://files.rcsb.org/download/9ZN2.cif.gz",
+      "file": "tools/sources/9ZN2.cif",
+      "downloaded": "2026-11-18",
+      "sha256": "73f1e9a576b76653092cf95d8c192e431196637b32fae4793c4075cd14e61ef4",
+      "bytes": 17051819,
+      "gzSha256": "d19ad388536642a83cc4d15b5a147b77dac86c6bde03dce0938abf43d3cb9fe8",
+      "gzBytes": 3373729,
+      "target": "if1-if2",
+      "role": "IF1 and IF2 on E. coli 70S initiation complex; cryo-EM 3.0 A"
+    },
+    {
+      "pdbId": "9FDA",
+      "url": "https://files.rcsb.org/download/9FDA.cif.gz",
+      "file": "tools/sources/9FDA.cif",
+      "downloaded": "2026-11-18",
+      "sha256": "ccea6665665ac009fe188cc909fde92837051c6f0cdbf34093187b60b08f1ab3",
+      "bytes": 4428443,
+      "gzSha256": "6cf200f9be758982583c9619922ee7f0e3542526a947fa5da0213b0f8f595df2",
+      "gzBytes": 986257,
+      "target": "if3",
+      "role": "IF3 on E. coli 30S subunit (edeine excluded); cryo-EM 2.0 A"
+    },
+    {
+      "pdbId": "6ZTJ",
+      "url": "https://files.rcsb.org/download/6ZTJ.cif.gz",
+      "file": "tools/sources/6ZTJ.cif",
+      "downloaded": "2026-11-18",
+      "sha256": "37038e39f2db27d0e300f45adf26226964d0595598609f9ec712588f353bc1d3",
+      "bytes": 22537098,
+      "gzSha256": "acb846d300d19184c6d016797dc6301a2cb65667f03d9941c38e263116758df8",
+      "gzBytes": 4159671,
+      "target": "nusg",
+      "role": "NusG, RNAP-ribosome expressome transform, coupled mRNA path; E. coli cryo-EM 3.4 A"
+    },
+    {
+      "pdbId": "7YPA",
+      "url": "https://files.rcsb.org/download/7YPA.cif.gz",
+      "file": "tools/sources/7YPA.cif",
+      "downloaded": "2026-11-18",
+      "sha256": "27c373d4d33c2533b46c1582562c4ddc3ad9573ea8a826d314b27bdf1df84fa0",
+      "bytes": 2921231,
+      "gzSha256": "2f8d8b7f28d93d1aeb3ea60f38d44fed632a722d016553e158d71f51f4491768",
+      "gzBytes": 608479,
+      "target": "rnap-hairpin",
+      "role": "termination hairpin nucleation complex relative to RNAP for rnap-ec; E. coli cryo-EM 3.05 A"
     }
   ]
 }
