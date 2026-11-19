@@ -116,13 +116,13 @@ function parseOnly(args) {
   return new Set(raw.split(',').map(s => s.trim()).filter(Boolean));
 }
 
-function buildManifest(builtIds, existingManifest) {
+function buildManifest(builtIds, existingManifest, { preserveExisting = false } = {}) {
   const base = existingManifest && Array.isArray(existingManifest.assets) ? existingManifest.assets : [];
   const entries = [];
   const seen = new Set();
-  // Keep synthetic entries (e.g. fixture-machine) first
+  // Keep synthetic entries (e.g. fixture-machine) first, and preserve existing entries on --only runs.
   for (const e of base) {
-    if (e.synthetic && !seen.has(e.id)) { entries.push(e); seen.add(e.id); }
+    if ((preserveExisting || e.synthetic) && !seen.has(e.id)) { entries.push(e); seen.add(e.id); }
   }
   if (!seen.has('fixture-machine')) {
     entries.push({ id: 'fixture-machine', file: 'fixture-machine.asset.json', synthetic: true });
@@ -156,6 +156,7 @@ async function main() {
   const lock = readLock();
   const loader = makeSourceLoader(lock);
   const built = new Map();
+  const visiting = new Set();
   const ctx = {
     root,
     sourcesDir: path.join(root, 'tools', 'sources'),
@@ -169,18 +170,24 @@ async function main() {
 
   async function runRecipe(recipe) {
     if (built.has(recipe.id)) return built.get(recipe.id);
-    for (const dep of recipe.dependsOn || []) {
-      const depRecipe = byId.get(dep);
-      if (!depRecipe) throw new Error(`recipe ${recipe.id} depends on unknown recipe ${dep}`);
-      await runRecipe(depRecipe);
+    if (visiting.has(recipe.id)) throw new Error(`circular recipe dependency involving ${recipe.id}`);
+    visiting.add(recipe.id);
+    try {
+      for (const dep of recipe.dependsOn || []) {
+        const depRecipe = byId.get(dep);
+        if (!depRecipe) throw new Error(`recipe ${recipe.id} depends on unknown recipe ${dep}`);
+        await runRecipe(depRecipe);
+      }
+      const res = await recipe.build(ctx);
+      const wrapped = res && res.asset ? res : { asset: res, report: null };
+      const problems = validateAsset(wrapped.asset);
+      if (problems.length) throw new Error(`${recipe.id} invalid:\n` + problems.join('\n'));
+      built.set(recipe.id, wrapped);
+      if (wrapped.report) log(`\n${recipe.id} report ` + JSON.stringify(wrapped.report, null, 1));
+      return wrapped;
+    } finally {
+      visiting.delete(recipe.id);
     }
-    const res = await recipe.build(ctx);
-    const wrapped = res && res.asset ? res : { asset: res, report: null };
-    const problems = validateAsset(wrapped.asset);
-    if (problems.length) throw new Error(`${recipe.id} invalid:\n` + problems.join('\n'));
-    built.set(recipe.id, wrapped);
-    if (wrapped.report) log(`\n${recipe.id} report ` + JSON.stringify(wrapped.report, null, 1));
-    return wrapped;
   }
 
   const targetRecipes = only ? allRecipes.filter(r => only.has(r.id)) : allRecipes;
@@ -189,10 +196,10 @@ async function main() {
     const res = await runRecipe(r);
     outputs[`assets/${r.id}.asset.json`] = JSON.stringify(res.asset);
   }
-  if (!only) {
+  if (!only || !check) {
     const manifestPath = path.join(root, 'assets', 'manifest.json');
     const existing = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : null;
-    outputs['assets/manifest.json'] = buildManifest(targetRecipes.map(r => r.id), existing);
+    outputs['assets/manifest.json'] = buildManifest(targetRecipes.map(r => r.id), existing, { preserveExisting: Boolean(only) });
   }
 
   if (check) {

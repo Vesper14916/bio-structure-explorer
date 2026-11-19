@@ -50,12 +50,14 @@ test('v1 assets remain valid and decode with normalized lod2.sites and empty pat
   assert.equal(d.lod2.sites.length, 1);
   assert.equal(d.lod2.sites[0].anchor, rnapEc.lod2.anchor);
   assert.equal(d.lod2.sites[0].radius, rnapEc.lod2.radius);
+  assert.equal(d.parts[0].role, 'body');
 });
 
 test('validator rejects broken v1 and v2 assets', () => {
   const bad = structuredClone(fixture);
   bad.anchors.activeSite.R = [2, 0, 0, 0, 1, 0, 0, 0, 1];
   bad.tracks.template.registers[3] = 99;
+  bad.tracks.template.synthetic[0] = '7K00';
   bad.chains[0].class = 'lipid';
   bad.parts[0].role = 'catalyst';
   bad.lod2.sites.push({ anchor: 'nonexistent', radius: -5 });
@@ -64,11 +66,32 @@ test('validator rejects broken v1 and v2 assets', () => {
   const problems = validateAsset(bad);
   assert.ok(problems.some(m => m.includes('activeSite')));
   assert.ok(problems.some(m => m.includes('consecutive')));
+  assert.ok(problems.some(m => m.includes('synthetic entries must be 0 or 1')));
   assert.ok(problems.some(m => m.includes('bad class')));
   assert.ok(problems.some(m => m.includes('bad role')));
   assert.ok(problems.some(m => m.includes('unknown anchor')));
   assert.ok(problems.some(m => m.includes('radius must be > 0')));
   assert.ok(problems.some(m => m.includes('points length mismatch')));
-  assert.ok(problems.some(m => m.includes('synthetic')));
+  assert.ok(problems.some(m => m.includes('path channel: synthetic')));
   assert.deepEqual(PART_ROLES, ['body', 'replaceable', 'release']);
+
+  // v2 must not bypass lod2.sites using legacy v1 lod2.anchor
+  const v2Legacy = structuredClone(fixture);
+  delete v2Legacy.lod2.sites;
+  v2Legacy.lod2.anchor = 'activeSite';
+  v2Legacy.lod2.radius = 12;
+  assert.ok(validateAsset(v2Legacy).some(m => m.includes('lod2.sites missing')));
+
+  // v2 empty sites array rejected
+  const v2EmptySites = structuredClone(fixture);
+  v2EmptySites.lod2.sites = [];
+  assert.ok(validateAsset(v2EmptySites).some(m => m.includes('non-empty array')));
+
+  // v1 invalid lod2.anchor / lod2.radius rejected
+  const v1BadLod2 = structuredClone(rnapEc);
+  v1BadLod2.lod2.anchor = 'missingAnchor';
+  v1BadLod2.lod2.radius = 0;
+  const v1Problems = validateAsset(v1BadLod2);
+  assert.ok(v1Problems.some(m => m.includes('unknown anchor')));
+  assert.ok(v1Problems.some(m => m.includes('lod2.radius must be > 0')));
 });

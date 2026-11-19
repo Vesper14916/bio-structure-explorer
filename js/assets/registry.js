@@ -107,7 +107,7 @@ export async function loadAsset(id, opts = {}) {
   if (useCache && decodedCache.has(id)) return decodedCache.get(id);
 
   const inlined = getInlinedStore(opts);
-  if (inlined && Object.prototype.hasOwnProperty.call(inlined, id)) {
+  if (inlined && (opts.inlined || (!opts.fetch && !opts.assetsDir)) && Object.prototype.hasOwnProperty.call(inlined, id)) {
     const asset = finishAsset(inlined[id], opts.decode);
     if (useCache) decodedCache.set(id, asset);
     return asset;

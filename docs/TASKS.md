@@ -32,3 +32,45 @@ Base branch: `claude/admiring-cray-fdre6q`. Team plan: `docs/tasks/R2-W1-README.
 | **R2-W1-INT** | `DONE` | Integration Owner | Merge D → C → A → B; gate review; evidence in `docs/VALIDATION.md` | `docs/tasks/R2-W1-README.md` |
 
 Wave 1 closed 2026-11-17. Evidence: `docs/VALIDATION.md` section 4.
+
+---
+
+## Round 3 — Ten Serial Stages (opened 2026-11-19)
+
+Schedule and executor allocation: `PLAN.md` §9.1 and §11 (revised 2026-11-19, base commit `2bcb1fc`).
+Integration Owner / Chief: **Gemini (Antigravity, main session)**.
+Model note (`PLAN.md` §9.1): Antigravity `invoke_subagent` inherits the parent session model (`Model: 'inherit'`); all ST1 implementation subagents and the ST1 read-only review subagent therefore inherited the Chief session model.
+
+### Stage ST1 — Setup, Contracts, and Construct v3 (Gemini; tag `r3-w0`)
+
+| Task ID | Status | Owner / Executor | Branch | Deliverable & Handoff |
+| :--- | :--- | :--- | :--- | :--- |
+| **R3-W0 (Chief)** | `DONE` | Gemini Chief | `main` | Recipe driver `tools/build-assets.mjs` + `tools/assets/rnap.mjs`, `fetch-sources` script, Asset Format v2 (`js/assets/format.js`) + v2 `fixture-machine`, `js/assets/registry.js`, Round 3 §4.3 `ACTOR_TOKENS` + `crowdColor`, camera far `12000`, `?scene=v2` route, frozen `docs/CONTRACTS.md` §7, `docs/DECISIONS.md`. |
+| **R3-W0-sources** | `DONE` | Gemini subagent (inherited model) | `r3/w0-sources` (merged `--no-ff`) | `tools/lib/superpose.mjs`, `tools/lib/match.mjs`, `tools/fetch-sources.mjs`, `tools/sources.lock.json` (all 13 entries with SHA-256), `tests/tools-superpose.test.mjs`, `docs/handoffs/R3-W0-sources.md`. |
+| **R3-W0-stubs** | `DONE` | Gemini subagent (inherited model) | `r3/w0-stubs` (merged `--no-ff`) | 23 Node-safe module stubs (`PLAN.md` §8.1), `tests/stubs.test.mjs`, `docs/handoffs/R3-W0-stubs.md`. |
+| **R3-W0-fixtures** | `DONE` | Gemini subagent (inherited model) | `r3/w0-fixtures` (merged `--no-ff`) | `tests/fixtures/world-state.json`, `tests/fixtures/story-mini.json`, `tests/fixtures.test.mjs`, `docs/handoffs/R3-W0-fixtures.md`. |
+| **R3-S1** | `DONE` | Gemini subagent (inherited model) | `r3/s1` (merged `--no-ff` after W0) | Construct v3 (248 bp, 179-nt mRNA, 40-codon ORF), `codonTable`, `AMINO_ACIDS`, 9 remaining non-proline residue templates (20 total), `tests/scenario.test.mjs`, `tests/residues.test.mjs`, `docs/SCIENCE.md` §3–§4, `docs/handoffs/R3-S1.md`. |
+
+#### ST1 Argon Job Log (`PLAN.md` §9.1 & §11)
+
+- **Job:** Review frozen `docs/CONTRACTS.md` §7 and Asset Format v2 against `PLAN.md` §7–§8 before tagging `r3-w0`.
+- **Start (UTC):** `2026-11-19T06:33:15Z`
+- **End (UTC):** `2026-11-19T06:37:47Z` (4 min 32 s / 30 min budget)
+- **Executor note:** Read-only `research` subagent (inherited session model).
+- **Report:** `docs/reviews/R3-ST1-argon.md`
+- **Outcome:** `PASS WITH MINOR FIXES` — 1 High (`format.js` v2 `lod2.sites` bypass & v1 `lod2` validation), 4 Medium (`tracks.*.synthetic` validation + `tracks.*.sources`, `WorldState.dna.trackBlend` + restored §7.3–§7.4 semantics, ribosome `(partId, chain.class)` L1 fallback, `build-assets.mjs --only` manifest merge), 3 Low (`decodeAsset` part role default, `registry.js` inlined guard, cycle guard & docs). All 8 findings accepted and applied prior to tagging `r3-w0` (`DEC-007`, `DEC-008`).
+
+### Upcoming Stages (ST2–ST10)
+
+| Stage | Executor | Tasks (merge order) | Base Tag | Target Tag | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **ST2** | **Claude (C1)** | `R3-A1` → `R3-A2` (ribosome & tRNA assets) | `r3-w0` | `r3-st2` | `READY` |
+| **ST3** | **Claude (C2)** | `R3-K1` → `R3-S2` (duplex/track kinematics & story engine) | `r3-st2` | `r3-st3` | `PENDING` |
+| **ST4** | Gemini | Intake ST2 & ST3; `R3-Q1` → `R3-R1` → `R3-U1`; Gate **G1** | `r3-st3` | `r3-w1` | `PENDING` |
+| **ST5** | Gemini | `R3-A4` → `R3-A3` → `R3-K2` → `R3-R2` | `r3-w1` | `r3-st5` | `PENDING` |
+| **ST6** | Gemini | `R3-R3` → `R3-U2` → `R3-S3` → `R3-INT2`; Gate **G2** | `r3-st5` | `r3-w2` | `PENDING` |
+| **ST7** | **Claude (C3)** | `R3-K3` → `R3-S4` (translation choreography) | `r3-w2` | `r3-st7` | `PENDING` |
+| **ST8** | Gemini | Intake ST7; `R3-R4` → `R3-Q2` → `R3-U3` → `R3-V2` → `R3-INT3`; Gate **G3** | `r3-st7` | `r3-w3` | `PENDING` |
+| **ST9** | Gemini | `R3-P1` → `R3-D1` → `R3-S5` → `R3-V1` → `R3-INT4`; Gate **G4** | `r3-w3` | `r3-w4` | `PENDING` |
+| **ST10** | Gemini + Human | `R3-Q3` → `R3-INT5` + Human visual acceptance; Gate **G5** | `r3-w4` | `v1.0.0` | `PENDING` |
+

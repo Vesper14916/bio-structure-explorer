@@ -185,6 +185,8 @@ Renderers must use these values so every machine reads as one family with the ex
 
 ### 6.5 True-scale construct (`TRUE_SCALE_GENE_CONSTRUCT`)
 Superseded in Round 3 (ST1, task S1) by **Construct v3** (`version: 3`, 248 bp coding strand, 179-nt transcript over DNA `[45, 224)`, 40 sense codons `[69, 189)` + `TAA` stop `[189, 192)`, `PLAN.md` §5.1). `DEFAULT_GENE_CONSTRUCT` (48 bp) stays unchanged until cutover at Gate G4.
+- `codonTable(construct = TRUE_SCALE_GENE_CONSTRUCT)` (`js/science/scenario.js`, re-exported from `js/science/index.js`) returns the 41 rows in the Round 1 `DEFAULT_CODONS` shape (`{ index, number, triplet, anticodon3to5, aa3, aa1, aaName, color, isInitiator, isStop }`).
+- `AMINO_ACIDS` (`js/science/genetic-code.js`, re-exported from `js/science/index.js`) aliases `AMINO_ACID_INFO` for codon/peptide colouring.
 
 ### 6.6 Residue and substrate templates
 - `residueTemplate(code3)` returns `{ code3, names, el, local: Float32Array, bonds, bondLengths, index }` with PDB atom names and element symbols as strings (`'C' | 'N' | 'O' | 'S'`). Local frame: Cα at the origin. Round 3 (S1) covers all 19 non-proline amino acids plus `FME` (20 templates total).
@@ -193,25 +195,31 @@ Superseded in Round 3 (ST1, task S1) by **Construct v3** (`version: 3`, 248 bp c
 
 ---
 
-## 7. Round 3 contracts (frozen 2026-11-18, Stage ST1 / W0)
+## 7. Round 3 contracts (frozen 2026-11-19, Stage ST1 / W0)
 
-Owner: Chief / Integration Owner. These contracts govern all Round 3 stages (ST1–ST10). A task that needs a contract change stops the affected part, files a proposal under `Requests` in its handoff, and awaits the Chief's decision in `docs/DECISIONS.md`.
+Owner: Chief / Integration Owner. These contracts govern all Round 3 stages (ST1–ST10). A task that needs a contract change stops the affected part, files a proposal under `Requests` in its handoff, and awaits the Chief's decision in `docs/DECISIONS.md`. Per-asset frames, required anchors, superposition gates, and size budgets are defined in `PLAN.md` §7.2–§7.5.
 
 ### 7.1 Asset format v2 (`js/assets/format.js`) and registry (`js/assets/registry.js`)
 
 Asset format v2 extends v1 (`docs/CONTRACTS.md` §6.2). Both `version: 1` and `version: 2` validate and decode through `validateAsset` and `decodeAsset`.
 
-| Addition (v2) | Schema & semantics |
+| Field / Addition | Schema & semantics |
 | :--- | :--- |
 | `version` | `2` (`SUPPORTED_VERSIONS = [1, 2]`). Existing v1 files (`rnap-ec`, `rnap-holo`) remain valid. |
-| `parts[].role` | Optional string enum: `"body" \| "replaceable" \| "release"`. Defaults to `"body"` when absent. |
-| `lod2.sites` | Non-empty array `[{ anchor: string, radius: number }]` replacing the single `anchor` and `radius` fields. Each `anchor` must exist in `anchors`; `radius > 0`. On decode, `lod2.sites` is always normalized to an array (v1 single `{ anchor, radius }` becomes a 1-element array), and `lod2.anchor`/`lod2.radius` mirror `sites[0]` for backwards compatibility. |
-| `paths` | Optional map `{ [name]: { points: base64 int16 xyz, count: int >= 2, synthetic: 0 \| 1 \| (0\|1)[] } }`. Decoded as `{ points: Float32Array (length count*3), count, synthetic }`. Used for `tunnel` (ribosome) and `coupledMrna` (RNAP expressome). |
+| `source` | Primary PDB fields (`type: "pdb"`, `pdbId`, `title`, `method`, `organism`, `downloaded`, `sha256`, `license`) are required for PDB assets. Multi-source assets (e.g. `ribosome-70s` combining 7K00 + 7ST2 + 5WE4 + 7PJV) store the primary PDB in `source` and may record secondary PDB entries in `source.additionalSources` / `source.notes`. |
+| `parts[].role` | Optional string enum: `"body" \| "replaceable" \| "release"`. `decodeAsset` normalizes absent roles to `"body"`. |
+| `chains[].subunit` | Optional L1 tint tag recognized by `js/render/actors.js`: `alpha`, `beta`, `betaPrime`, `omega`, `sigma70`, `rRNA16S`, `rprotein30S`, `rRNA23S`, `rRNA5S`, `rprotein50S`. For `small`/`large` ribosome parts without `subunit`, `chainColor` falls back by `(partId, chain.class)`. |
+| `anchors[name]` | Rigid frame `{ o, R }` (orthonormal, error ≤ 1e-4); `anchors.center` is required. Optional metadata such as `synthetic: 1` (e.g. RNAP `ntpEntry`) is permitted. |
+| `lod2` / `lod2.sites` | Optional block (omitted for factors without L2 sites). In `version: 2`, `lod2.sites` MUST be a non-empty array `[{ anchor: string, radius: number }]` (legacy `lod2.anchor` alone is rejected on v2); every `anchor` must exist in `anchors` and `radius > 0`. In `version: 1`, `lod2.anchor` (present in `anchors`) and `lod2.radius > 0` are validated. On decode, `lod2.sites` is always normalized to an array and `lod2.anchor`/`lod2.radius` mirror `sites[0]`. |
+| `tracks[name]` | `{ kind: "dna" \| "rna", registers: int[], frames: Frame[], synthetic: (0 \| 1)[], bases: string, sources?: string[] }`. `registers` must be consecutive ascending integers; `synthetic` entries MUST be strictly `0` (fitted from any PDB) or `1` (interpolated/synthetic). Optional `sources` (length `n`, e.g. `"7K00"`, `"7ST2"`, `"synthetic"`) may record per-register provenance (`DEC-008`). |
+| `paths` | Optional map `{ [name]: { points: base64 int16 xyz, count: int >= 2, synthetic: 0 \| 1 \| (0 \| 1)[] } }`. Decoded as `{ points: Float32Array (length count*3), count, synthetic }`. Consumers must accept both scalar `0 \| 1` and per-point `Array<0 \| 1>` (`DEC-002`). Used for `tunnel` (ribosome) and `coupledMrna` (RNAP expressome). |
 
 **Pipeline layout (`tools/build-assets.mjs` and `tools/assets/<recipe>.mjs`):**
-- CLI: `node tools/build-assets.mjs [--only <id>] [--check] [--dry-run] [--quiet]`.
+- CLI: `node tools/build-assets.mjs [--only <id1,id2,...>] [--check] [--dry-run] [--quiet]`.
 - Each recipe module exports either `{ id, sources: [pdbId...], dependsOn?: [id...], build(ctx) }` or `recipes: [...]`.
-- `ctx` provides `{ root, sourcesDir, lock, lockEntry(pdbId), loadSource(pdbIdOrEntry), built, log, LICENSE }`.
+- `build(ctx)` may return either `asset` directly or `{ asset, report, ...extras }`; the wrapped object is stored in `ctx.built.get(id)` for downstream `dependsOn` recipes.
+- `ctx` provides `{ root, sourcesDir, lock, lockEntry(pdbId), loadSource(pdbIdOrEntry), built, log, LICENSE }`. `ctx.loadSource` caches parsed mmCIF structures per PDB ID across recipes. Recipes MUST load PDBs via `ctx.loadSource(pdbId)` / `ctx.lockEntry(pdbId)` rather than filtering `sources.lock.json` by `target` (since shared PDBs like `7K00`, `5WE4`, `7PJV`, `6ZTJ`, `7YPA` serve multiple assets).
+- Running `--only <id>` (without `--check`) merges the targeted asset IDs into the existing `assets/manifest.json` while preserving all other entries.
 - `tools/fetch-sources.mjs` (`npm run fetch-sources`) downloads all entries from `tools/sources.lock.json` into `tools/sources/` (gitignored), decompresses `.cif.gz`, and verifies SHA-256 and byte length.
 - `tools/lib/superpose.mjs` exports `superpose(mobilePts, targetPts)` (`{ R, t, o, rmsd, n }`) and `superposeIterative(mobilePts, targetPts, { cutoff = 2.0, passes = 2 })`.
 - `tools/lib/match.mjs` exports `matchResidueAtoms(mobileChain, targetChain, atomName)` and `matchChains(mobileChains, targetChains, chainPairs, atomName)`.
@@ -221,7 +229,7 @@ Asset format v2 extends v1 (`docs/CONTRACTS.md` §6.2). Both `version: 1` and `v
 - `loadAsset(id, opts)` -> `Promise<DecodedAsset>`
 - `loadAssets(ids, opts)` -> `Promise<{ [id]: DecodedAsset }>`
 - `clearAssetCache()`
-- Resolution order: in-memory cache -> inlined standalone store (`globalThis.__HELIX_ASSETS__` / `window.__HELIX_ASSETS__`) -> Node disk (`assets/manifest.json`) or browser same-origin `fetch`.
+- Resolution order: in-memory cache -> inlined standalone store (`globalThis.__HELIX_ASSETS__` / `window.__HELIX_ASSETS__`, bypassed when explicit `opts.fetch` or `opts.assetsDir` is passed without `opts.inlined`) -> Node disk (`assets/manifest.json`) or browser same-origin `fetch`.
 
 ### 7.2 Module layout
 
@@ -253,24 +261,24 @@ export function chapterAt(story, t)                // -> Chapter
 
 **`WorldState` schema (all coordinates in world ångströms):**
 
-| Field | Type & fields |
+| Field | Type & semantics |
 | :--- | :--- |
 | `t` | `number` (story time in seconds at 1×) |
 | `chapter` | `Chapter` |
 | `chapterProgress` | `number` in `[0, 1]` |
-| `caption` | `string` (exact caption from `PLAN.md` §6.2 or §6.4) |
+| `caption` | `string` (exact plain-text caption from `PLAN.md` §6.2 or §6.4; `"E. coli"` without markdown asterisks per `DEC-006`) |
 | `machines` | `Array<{ id, assetId, transform: { o, R }, opacity, visible, parts: { [partId]: { visible, opacity, transform? } }, label, pickable }>` |
-| `dna` | `{ machineId: 'rnap' \| null, register: number, bend: number, bubble: [lo, hi], relax: number }` |
-| `rna` | `{ length: number, addProgress: number, hairpin: number, released: boolean, layout: 'rnap' \| 'free' \| 'ribosome' \| 'coupled', layoutBlend: number }` |
-| `ribosome` | `{ codon: number, bound: boolean }` |
-| `trnas` | `Array<{ slot: 0..3, kind: 'init' \| 'aa', aa: 'fMet' \| code3 \| null, site: 'AT'\|'A'\|'AP'\|'P'\|'PE'\|'E'\|'out', from: site, blend: number, codon: number, opacity: number, peptidyl: boolean }>` |
-| `peptide` | `{ length: number, attach: 'P' \| 'A' \| 'free', release: number }` |
-| `ntp` | `{ base: 'A'\|'C'\|'G'\|'U' \| null, path: number, bonded: boolean }` |
-| `ppi` | `{ path: number, opacity: number }` |
-| `fx` | `Array<{ type: 'pulse' \| 'gtp', anchor: { machineId, name } \| { atomGroup, atoms: [i, j] }, f: number }>` |
+| `dna` | `{ machineId: 'rnap' \| null, register: number /* gene index of template register 0; fractional while stepping */, bend: number /* β in [0, 1] */, bubble: [lo, hi] /* registers relative to template register 0 */, relax: number /* [0, 1] */, trackBlend?: number /* [0, 1]: 0 = rnap-holo tracks, 1 = rnap-ec tracks; default 1 for rnap-ec, 0 for rnap-holo (DEC-007) */ }` |
+| `rna` | `{ length: number /* integer */, addProgress: number /* [0, 1] for the next nucleotide */, hairpin: number /* [0, 1] */, released: boolean, layout: 'rnap' \| 'free' \| 'ribosome' \| 'coupled', layoutBlend: number /* [0, 1] */ }` |
+| `ribosome` | `{ codon: number /* P-site codon index, fractional during translocation */, bound: boolean }` |
+| `trnas` | `Array<{ slot: 0..3, kind: 'init' \| 'aa', aa: 'fMet' \| code3 \| null, site: 'AT'\|'A'\|'AP'\|'P'\|'PE'\|'E'\|'out', from: site, blend: number /* [0, 1] */, codon: number, opacity: number, peptidyl: boolean }>` |
+| `peptide` | `{ length: number, attach: 'P' \| 'A' \| 'free', release: number /* [0, 1] */ }` |
+| `ntp` | `{ base: 'A'\|'C'\|'G'\|'U' \| null, path: number /* [0, 1] */, bonded: boolean }` |
+| `ppi` | `{ path: number /* [0, 1] */, opacity: number }` |
+| `fx` | `Array<{ type: 'pulse' \| 'gtp', anchor: { machineId, name } \| { atomGroup, atoms: [i, j] }, f: number /* [0, 1] */ }>` |
 | `counters` | `{ mrna: number, hybrid: number, codon: number, peptide: number }` |
 | `highlight` | `{ codon: number \| null }` |
-| `shot` | `{ id: string, from: string \| null, blend: number }` |
+| `shot` | `{ id: string, from: string \| null, blend: number /* [0, 1] */ }` |
 
 **Invariants and budget:**
 - `stateAt` is a pure function of `(story, t)`. It MUST NOT read the clock, DOM, or global mutable state.
@@ -283,20 +291,22 @@ export function chapterAt(story, t)                // -> Chapter
 // js/kin/pose.js
 export function createPoser(scenario, assets) // -> Poser (precomputes templates, typed buffers)
 // Poser.pose(world: WorldState, target: { asm: Assembly, groups: AtomGroups, actors: ActorSpec[] })
+//   writes nucleotide frames into target.asm (then calls target.asm.updatePositions()),
+//   atom-group positions into target.groups, and actor transforms into target.actors.
 ```
 
 - Median runtime ≤ 6 ms per `pose` call for the full scene in Node 22.
 - **World frame:** `+x` runs along the gene's downstream axis, `+y` is up, gene midpoint (bp 124) is at `[0, 0, 0]`.
 - **Duplex algorithm (`js/kin/duplex.js`):**
   1. Template frames inside track range `[r0, r1]`: `F_r = M · T_r` (linear origin + quaternion slerp for fractional `r`).
-  2. Downstream arm (`r > r1`): `F_r = M · T_{r1} · S(r - r1)` where `S(x)` is B-DNA screw step (`3.38·x` Å, `34.2857·x` deg about local `z`).
-  3. Upstream arm (`r < r0`): cubic Bézier in machine frame (`P0 = o(T_{r0})`, `t0 = -z(T_{r0})`, `tE = -z_d`, `L = 40 × 3.38 Å`, `P1 = P0 + t0·L/3`, `P3 = P0 + (t0 + tE)·L/2`, `P2 = P3 - tE·L/3`), 512-sample arc-length table, rotation-minimising frames (double-reflection) seeded from `T_{r0}` with twist `-34.2857°/bp`.
+  2. Downstream arm (`r > r1`): `F_r = M · T_{r1} · S(r - r1)` where `S(x)` is B-DNA screw step (`3.38·x` Å, `34.2857·x` deg about local `z`, right-multiplied so `F · S(1)` is 3′-ward on the coding strand).
+  3. Upstream arm (`r < r0`): cubic Bézier in machine frame (`P0 = o(T_{r0})`, `t0 = -z(T_{r0})`, `tE = -z_d`, `L = 40 × 3.38 Å`, `P1 = P0 + t0·L/3`, `P3 = P0 + (t0 + tE)·L/2`, `P2 = P3 - tE·L/3`); beyond `P3` the axis continues straight along `tE`. Uses a 512-sample arc-length table and rotation-minimising frames (double-reflection) seeded from `T_{r0}` with twist `-34.2857°/bp` going upstream.
   4. Bending blend `β`: `t0 -> slerp(tE, t0, β)` and track frames `-> slerp(ideal, track, β)`. At `β = 0`, duplex is ideal and straight.
-  5. Strands: coding strand is `partnerFrame(template)` outside bubble; `nontemplate` track inside bubble.
+  5. Strands: coding strand is `partnerFrame(template)` outside bubble; `nontemplate` track inside bubble (synthetic where flagged).
   6. Relaxation: freeze last machine pose and drive `β` from 1 to 0 over `dna.relax`.
-- **Machine motion along DNA:** `M(t) = M_0 · translate(z_d · 3.38 · (register(t) - register_0))` (no rotation). Promoter escape blends `rnap-holo` -> `rnap-ec` track frames over 1.5 s; asset switches to `rnap-ec` at blend 0.5.
+- **Machine motion along DNA:** `M(t) = M_0 · translate(z_d · 3.38 · (register(t) - register_0))` (no rotation). Promoter binding uses `rnap-holo` with its RPo tracks (`dna.trackBlend = 0`). At promoter escape (chapter 5), `dna.trackBlend` ramps from `0` to `1` over 1.5 s to slerp track frames from `rnap-holo` to `rnap-ec` per register, and `machines[rnap].assetId` switches to `rnap-ec` at `trackBlend = 0.5` (`σ` is released first).
 - **Free chains (`js/kin/chain.js`):** centripetal Catmull–Rom splines, 512-sample arc-length table, A-form single strand (`rise 2.81 Å`, `twist 32.73°`, RMF), deterministic tail control points from `mulberry32(seed ^ hash(chainId))` every 20 nt (turn ≤ 35°), gentle sinusoidal normal sway `6 Å · sin(2π(t/7 + φ_k))` ramped to 0 within 30 Å of any anchor.
-- **Peptide on path (`js/kin/peptide-path.js`):** Cα of residue `k` at arc length `k · 3.40 Å` along `tunnel` then free spline; residue local frames re-applied on RMF; every `C(i)–N(i+1)` distance within `1.33 ± 0.25 Å`.
+- **Peptide on path (`js/kin/peptide-path.js`):** Cα of residue `k` (`k = 0` is the C-terminal residue attached to the tRNA; higher `k` advances toward the N-terminus) sits at arc length `k · 3.40 Å` along `tunnel` then along the free-peptide spline. Residue atoms come from per-residue local frames measured once on the ideal `buildPeptide` chain (`x = Cα(i+1) − Cα(i−1)`, `y = perpendicular component of Cβ or Hα direction`, alternating 180° per residue) and re-applied on the path's rotation-minimising frames. Gate: every `C(i)–N(i+1)` distance within `1.33 ± 0.25 Å` at every tested time.
 
 ### 7.5 Scene, Viewer, and UI APIs (`js/scene/`, `js/render/`, `js/ui/`)
 
@@ -318,4 +328,5 @@ export function createStoryScene(viewer, { scenario, assets, mode, tier }) // ->
   - `viewer.setFar(far)` (camera far plane; W0 sets default far to `12000`)
 - **UI actions (`onExpression({ action, value })`):** `play`, `pause`, `restart`, `seek`, `speed`, `mode`, `camera`, `toggle`, `chapter`, `selectCodon`, `clearInspect`.
 - **Camera far plane:** `12000` (raised from `5000` in W0).
+
 

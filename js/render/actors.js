@@ -1,4 +1,4 @@
-// Machine actors: rigid macromolecular machines loaded from helix-asset v1 files (docs/CONTRACTS.md 6.2),
+// Machine actors: rigid macromolecular machines loaded from helix-asset v1/v2 files (docs/CONTRACTS.md 6.2 & 7.1),
 // drawn at three levels of detail in the visual style of 6.4.
 //   L0  translucent envelope mesh per part
 //   L1  one instanced bead per residue (Calpha / P), chain tints
@@ -90,6 +90,8 @@ export function chainColor(chain, partId, assetId) {
   const sub = chain && chain.subunit;
   if (sub && T[sub] !== undefined) return T[sub];               // explicit subunit tag from the asset pipeline
   if (sub === 'sigma70' || sub === 'sigma') return P.sigma;
+  if (partId === 'small') return chain && chain.class === 'rna' ? T.rRNA16S : T.rprotein30S;
+  if (partId === 'large') return chain && chain.class === 'rna' ? T.rRNA23S : T.rprotein50S;
   if (/beta[\s_-]*(prime|'|′)|β\s*['′]/.test(n)) return T.betaPrime;   // test beta' before beta
   if (n.includes('beta') || n.includes('β')) return T.beta;
   if (n.includes('alpha') || n.includes('α')) return T.alpha;

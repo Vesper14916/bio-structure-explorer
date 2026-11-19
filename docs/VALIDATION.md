@@ -58,3 +58,43 @@ Integration branch `claude/admiring-cray-fdre6q` after merging tasks D, C, A, B 
 - Integration change: `chainColor` in `js/render/actors.js` now prefers the asset's explicit `chains[].subunit` tag before falling back to name matching.
 
 Not verified in Wave 1: hardware-GPU frame rate, phone layout, real-time cross-fade timing, comparison of the measured 63.8° DNA bend with published values. The Express scene still uses the 48-bp construct and placeholder envelopes; migrating it is Wave 2.
+
+---
+
+## 5. Round 3 Stage ST1 exit check (`r3-w0`, 2026-11-19)
+
+Branch: `main` (tag `r3-w0`). Scope: R3-W0 (Chief + `r3/w0-sources`, `r3/w0-stubs`, `r3/w0-fixtures`), R3-S1 (`r3/s1`, merged after W0), and the ST1 Argon review (`docs/reviews/R3-ST1-argon.md`, all 8 findings applied).
+
+- **Pinned PDB sources (`node tools/fetch-sources.mjs --check`):**
+  - `sources: 13 ok, 0 failed (13 total)` (existing 4 RNAP entries plus all 9 Round 3 entries from `PLAN.md` §7.2 verified by SHA-256 and byte count).
+- **Asset pipeline reproducibility (`node tools/build-assets.mjs --check --quiet` & `--only rnap-ec --check --quiet`):**
+  - `identical  assets/rnap-ec.asset.json`
+  - `identical  assets/rnap-holo.asset.json`
+  - `identical  assets/manifest.json`
+  - `assets/fixture-machine.asset.json` upgraded to Asset Format v2 (`version: 2`, `parts[].role`, 2 `lod2.sites`, `paths.channel`).
+- **Syntax check & automated tests (`npm test`):**
+  ```text
+  checked 63 files, 0 failed
+  ℹ tests 120
+  ℹ suites 0
+  ℹ pass 120
+  ℹ fail 0
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 6427.428148
+  ```
+  Covers Asset Format v1/v2 (`tests/asset-format.test.mjs`), Asset Registry (`tests/asset-registry.test.mjs`), superposition & matching helpers (`tests/tools-superpose.test.mjs`), all 23 Round 3 module stubs importing cleanly in Node (`tests/stubs.test.mjs`), WorldState & mini-story fixtures (`tests/fixtures.test.mjs`), Construct v3 (`version: 3`, 248 bp, 179-nt transcript, 40-codon ORF, 41-row `codonTable`, `tests/scenario.test.mjs`), and all 20 residue templates + 40-residue Construct v3 `buildPeptide` with zero contacts `< 2.6 Å` (`tests/residues.test.mjs`), alongside all pre-existing science, simulation, and asset tests.
+- **Browser smoke gate (`npm run smoke`):**
+  ```text
+  SMOKE PASS
+  ```
+  Verified `index.html` and `dist/helix-standalone.html` across all 6 modes (keys `1`–`6`) and Express progress scrub in headless Chromium (software WebGL) with zero console errors, zero page errors, zero HTTP >= 400 responses, and zero external requests.
+- **`?mode=express&scene=v2` browser route check (Playwright headless Chromium, 1280×800):**
+  - Loaded `/index.html?mode=express&scene=v2` with zero console errors, zero page errors, zero HTTP >= 400 responses, and zero external requests.
+  - Observed `window.helix.app`: `mode = "express"`, `sceneVersion = "v2"`, `v2WorldState` loaded from `tests/fixtures/world-state.json` (`t = 42.75`, `chapter.id = "elongate-tx"`, `counters.mrna = 81`, `ntp.base = "G"`, `machines.length = 1`), and `viewer.camera.far = 12000`.
+- **ST1 Argon review (`docs/reviews/R3-ST1-argon.md`):**
+  - Window: `2026-11-19T06:33:15Z` – `2026-11-19T06:37:47Z` (4 min 32 s).
+  - Verdict: `PASS WITH MINOR FIXES` (1 High, 4 Medium, 3 Low). All 8 findings accepted and fixed before tagging `r3-w0` (`DEC-007`, `DEC-008`).
+- **Not verified in ST1:** ST2–ST10 assets, kinematics, story playback, and visual acceptance (all out of ST1 scope); standalone bundle `dist/helix-standalone.html` was not rebuilt because no standalone-exposed Round 1 behavior changed (rebuild scheduled when new scenes wire in).
+

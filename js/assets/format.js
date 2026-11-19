@@ -110,8 +110,12 @@ export function validateAsset(a) {
           if (!site || !Number.isFinite(site.radius) || !(site.radius > 0)) bad(`lod2.sites[${i}]: radius must be > 0`);
         }
       }
-    } else if (a.version >= 2 && a.lod2.anchor === undefined) {
+    } else if (a.version >= 2) {
       bad('lod2.sites missing');
+    } else {
+      if (typeof a.lod2.anchor !== 'string' || !a.lod2.anchor) bad('lod2.anchor missing');
+      else if (!a.anchors || !a.anchors[a.lod2.anchor]) bad(`lod2.anchor: unknown anchor ${a.lod2.anchor}`);
+      if (!Number.isFinite(a.lod2.radius) || !(a.lod2.radius > 0)) bad('lod2.radius must be > 0');
     }
   }
   // tracks (optional)
@@ -119,7 +123,9 @@ export function validateAsset(a) {
     const n = (t.registers || []).length;
     if (!['dna', 'rna'].includes(t.kind)) bad(`track ${k}: kind must be dna or rna`);
     if (!n || (t.frames || []).length !== n || (t.synthetic || []).length !== n || (t.bases || '').length !== n) bad(`track ${k}: registers/frames/synthetic/bases length mismatch`);
-    for (let i = 1; i < n; i++) if (t.registers[i] !== t.registers[i - 1] + 1) { bad(`track ${k}: registers must be consecutive ascending integers`); break; }
+    if (n && !Number.isInteger(t.registers[0])) bad(`track ${k}: registers must be integers`);
+    for (let i = 1; i < n; i++) if (!Number.isInteger(t.registers[i]) || t.registers[i] !== t.registers[i - 1] + 1) { bad(`track ${k}: registers must be consecutive ascending integers`); break; }
+    if (Array.isArray(t.synthetic) && t.synthetic.length === n && !t.synthetic.every(v => v === 0 || v === 1)) bad(`track ${k}: synthetic entries must be 0 or 1`);
     for (let i = 0; i < n; i++) if (frameError(t.frames[i]) > 1e-4) { bad(`track ${k}: frame ${i} not orthonormal`); break; }
   }
   // paths (optional, v2)
@@ -164,7 +170,9 @@ export function decodeAsset(a) {
   } : null;
   return {
     version: a.version,
-    id: a.id, name: a.name, source: a.source, bounds: a.bounds, parts: a.parts, chains: a.chains,
+    id: a.id, name: a.name, source: a.source, bounds: a.bounds,
+    parts: a.parts.map(pt => ({ ...pt, role: pt.role ?? 'body' })),
+    chains: a.chains,
     anchors: a.anchors, tracks: a.tracks || {}, paths,
     lod0: a.lod0.parts.map(m => ({ part: m.part, positions: decodePositions(m.positions), indices: decodeArray(m.indices, m.indexType === 'u32' ? Uint32Array : Uint16Array) })),
     lod1: { count: a.lod1.count, positions: decodePositions(a.lod1.positions), chain: decodeArray(a.lod1.chain, Uint8Array), kind: decodeArray(a.lod1.kind, Uint8Array) },

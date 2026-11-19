@@ -43,3 +43,16 @@ This log records accepted contract changes, pre-approved fallbacks from `PLAN.md
 - **Decision:** All chapter captions in `tests/fixtures/story-mini.json`, `js/sim/gene/timeline.js` (S2), and `js/ui/view-story.js` (U1) store and render plain text (`"E. coli"`, no markdown asterisks).
 - **Impact:** Fixture captions and runtime captions match identically and avoid raw markdown artifacts in the DOM.
 
+## DEC-007 — Optional `WorldState.dna.trackBlend` for promoter escape (2026-11-19, ST1 Argon review)
+
+- **Context:** `PLAN.md` §8.3 requires promoter escape (chapter 5) to slerp track frames from `rnap-holo` to `rnap-ec` over 1.5 s while switching `assetId` at blend 0.5, yet `WorldState.dna` lacked a blend parameter and `Poser.pose(world, target)` receives only `WorldState`.
+- **Decision:** Add optional `trackBlend?: number` (`[0, 1]`; `0` = `rnap-holo` tracks, `1` = `rnap-ec` tracks; default `1` when RNAP `assetId === 'rnap-ec'` and `0` when `'rnap-holo'`) to `WorldState.dna` in `docs/CONTRACTS.md` §7.3.
+- **Impact:** Gives K1 (`poseDuplex` / `blendTrackFrame`) and S2/S3 a clean, stateless, backwards-compatible channel for promoter escape without breaking `tests/fixtures/world-state.json`.
+
+## DEC-008 — Binary `tracks.*.synthetic` with optional `tracks.*.sources` (2026-11-19, ST1 Argon review)
+
+- **Context:** `PLAN.md` §7.4 describes recording per-register source provenance on `ribosome-70s` `tracks.mrna` (7K00 vs 7ST2 vs synthetic), while `CONTRACTS.md` §6.2 defines `tracks.*.synthetic` as `[0 | 1]`. Putting strings like `"7K00"` into `synthetic` would break boolean truthiness checks in kinematics.
+- **Decision:** `js/assets/format.js` strictly enforces `tracks.*.synthetic` elements to be `0 | 1` (`0` = fitted from any PDB, `1` = interpolated/synthetic). Multi-source tracks may attach an optional parallel `tracks.*.sources: string[]` array (e.g. `"7K00"`, `"7ST2"`, `"synthetic"`) for per-register provenance.
+- **Impact:** Prevents ST2/ST3 truthiness bugs while preserving full multi-PDB provenance for A1 (`ribosome-70s`).
+
+
