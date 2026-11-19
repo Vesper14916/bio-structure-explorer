@@ -152,7 +152,7 @@ test('ribosome-70s mrna track: registers -16..+15 with per-register sources', ()
   t.registers.forEach((k, i) => {
     assert.ok(['7K00', '7ST2', 'synthetic'].includes(t.sources[i]));
     assert.equal(t.synthetic[i], t.sources[i] === 'synthetic' ? 1 : 0, `register ${k}`);
-    assert.equal(t.bases[i] === 'N', t.synthetic[i] === 1, `register ${k} base`);
+    assert.match(t.bases[i], /^[ACGU]$/, `register ${k} base (synthetic registers take the deposited _entity_poly base)`);
     assert.equal(t.sources[i] === '7K00', k >= -3 && k <= 8, `register ${k} source`);
   });
   assert.deepEqual(t.registers.filter((k, i) => t.sources[i] === '7ST2'), [-14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4]);

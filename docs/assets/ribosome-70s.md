@@ -183,12 +183,12 @@ Registers -16 to +15 (32); register 0 = first nucleotide of the P-site codon. Fr
 
 | Registers | Source | `synthetic` | Bases |
 | --- | --- | --- | --- |
-| -16, -15 | synthetic | 1 | `NN` |
+| -16, -15 | synthetic | 1 | `GU` (7K00 `_entity_poly`, label 1–2) |
 | -14 to -4 (11) | 7ST2 chain `4` (register = author - 19) | 0 | `AGGAGGUAAAA` |
 | -3 to +8 (12) | 7K00 chain `X` (register = author - 16) | 0 | `AAAAUGGUAUAA` |
-| +9 to +15 (7) | synthetic | 1 | `NNNNNNN` |
+| +9 to +15 (7) | synthetic | 1 | `CUA` (+9 to +11, 7K00 `_entity_poly`, label 26–28) and `AAAA` (+12 to +15, 7ST2 `_entity_poly`) |
 
-Synthetic registers extend from the nearest fitted register (-14 for -16 and -15; +8 for +9 to +15) by single-strand A-form steps: per step the origin moves by 2.81 Å along the local z axis and the frame rotates by 32.73° about local z. The sign is chosen so that a step toward increasing register follows the local origin difference of the last two fitted registers (dot product with the local z axis); it is +1 at both ends, and steps toward decreasing register use the opposite sense. The straight continuation is a placeholder: the real mRNA path is not modelled there.
+Synthetic registers extend from the nearest fitted register (-14 for -16 and -15; +8 for +9 to +15) by single-strand A-form steps: per step the origin moves by 2.81 Å along the local z axis and the frame rotates by 32.73° about local z. The sign is chosen so that a step toward increasing register follows the local origin difference of the last two fitted registers (dot product with the local z axis); it is +1 at both ends, and steps toward decreasing register use the opposite sense. The straight continuation is a placeholder: the real mRNA path is not modelled there. The bases of synthetic registers are not invented: they are the deposited mRNA sequences (`_entity_poly.pdbx_seq_one_letter_code_can`) of 7K00, which extends 13 nt beyond the modelled residues, and of 7ST2 where 7K00 ends; the register-to-label offset is taken from a modelled residue of each chain (stage lead change, so that consumers that draw track bases never meet an unknown base). Known limitation: synthetic frames stack at 2.81 Å origin spacing, tighter than a real single strand; downstream kinematics may relax them.
 
 The 7ST2 chain fills registers -14 to -4, where 7K00 has no mRNA. Where both entries model the same register (-3 to +4) the 7K00 frame is used. Deviation of the 7ST2 frame (after superposition) from the 7K00 frame:
 

@@ -519,8 +519,9 @@ function stepFrame(f, n, s) {
   return { o, R };
 }
 
-function buildMrnaTrack(fitted) {
+function buildMrnaTrack(fitted, seqBase = () => null) {
   // fitted: Map(register -> { f: {o,R} ribo frame, base, src })
+  // seqBase(register) -> { base, src } from the deposited _entity_poly sequences, for registers without coordinates.
   const [lo, hi] = MRNA_RANGE;
   const regs = [...fitted.keys()].sort((a, b) => a - b);
   const frames = [], synthetic = [], sources = [];
@@ -538,8 +539,10 @@ function buildMrnaTrack(fitted) {
     const sInc = dot(col(F.f.R, 2), d) >= 0 ? 1 : -1;
     const dir = k > nearest ? 1 : -1;
     frames.push(stepFrame(F.f, Math.abs(k - nearest), sInc * dir));
-    synthetic.push(1); sources.push('synthetic'); bases += 'N';
-    stepInfo.push({ register: k, from: nearest, senseIncreasing: sInc });
+    const sb = seqBase(k);
+    if (!sb) throw new Error(`mrna register ${k}: no coordinates and no deposited sequence`);
+    synthetic.push(1); sources.push('synthetic'); bases += sb.base;
+    stepInfo.push({ register: k, from: nearest, senseIncreasing: sInc, baseFrom: sb.src });
   }
   return { registers: Array.from({ length: hi - lo + 1 }, (_, i) => lo + i), frames, synthetic, sources, bases, stepInfo };
 }
@@ -722,7 +725,16 @@ function buildRibosome(ctx) {
     } else if (k >= MRNA_RANGE[0] && k <= MRNA_RANGE[1]) { fitted.set(k, { f: Ff, base: f.base, src: '7ST2' }); only7st.push(k); }
   }
   deviations.sort((a, b) => a.register - b.register);
-  const mt = buildMrnaTrack(fitted);
+  // Bases for synthetic registers come from the deposited mRNA sequences (_entity_poly), 7K00 first, then 7ST2.
+  // Register -> label_seq_id offset is taken from one modelled residue of each chain.
+  const entitySeqLookup = (parsed, chain, regOf, src) => {
+    const seq = parsed.entityPolySeq[chain.entity] || '';
+    const r0 = chain.residues[0], off = r0.seq - regOf(r0);
+    return k => { const i = k + off - 1; return i >= 0 && i < seq.length && /^[ACGU]$/.test(seq[i]) ? { base: seq[i], src } : null; };
+  };
+  const seq7k = entitySeqLookup(p7k, an.mrna, r => r.authSeq - s7k, '7K00 _entity_poly');
+  const seq7st = entitySeqLookup(p7st, mrna7st[0], reg7st, '7ST2 _entity_poly');
+  const mt = buildMrnaTrack(fitted, k => seq7k(k) || seq7st(k));
   for (const k of mt.registers) if (k < MRNA_RANGE[0] || k > MRNA_RANGE[1]) throw new Error('mrna register out of range');
   const tracks = { mrna: { kind: 'rna', registers: mt.registers, frames: mt.frames.map(frameOut), synthetic: mt.synthetic, sources: mt.sources, bases: mt.bases } };
   const fAt = k => mt.frames[k - MRNA_RANGE[0]];
@@ -879,7 +891,7 @@ function buildRibosome(ctx) {
         'Site anchors siteA, siteP, siteE and siteAT are the trna frame (trnaFrame in tools/assets/trna.mjs) of the tRNA in the ribo frame, so placing a trna-* asset with an anchor reproduces the source coordinates. See source.siteChecks and source.superpositions.',
         'Superposition (other entries onto 7K00): P atoms of 16S and 23S residues with equal author number and equal residue name, superposeIterative (2.0 A cutoff, two passes). Author numbers are used because the 7ST2 16S label_seq_id is the author number minus one.',
         'siteAP and sitePE are decided by source.siteChecks.hybrid.decision (4.0 A anticodon-origin condition, 16S+23S fit as written in PLAN.md 7.3).',
-        'Track mrna: registers -16 to +15, register 0 = first nucleotide of the P-site codon; tracks.mrna.sources gives 7K00, 7ST2 or synthetic per register; synthetic registers are A-form single-strand steps (rise 2.81 A, twist 32.73 degrees about the local z axis) from the nearest fitted register, base N. Anchors mrnaEntry and mrnaExit are frames of registers +15 and -16 and are marked synthetic.',
+        'Track mrna: registers -16 to +15, register 0 = first nucleotide of the P-site codon; tracks.mrna.sources gives 7K00, 7ST2 or synthetic per register; synthetic registers are A-form single-strand steps (rise 2.81 A, twist 32.73 degrees about the local z axis) from the nearest fitted register; their bases come from the deposited _entity_poly mRNA sequence of 7K00 (registers -16, -15, +9 to +11) or 7ST2 (+12 to +15), recorded per register (baseFrom) in the syntheticSteps list of the mRNA record in source. Anchors mrnaEntry and mrnaExit are frames of registers +15 and -16 and are marked synthetic.',
         'antiSD: centroid of the heavy atoms of 7ST2 16S author 1535-1540 (CCUCCU) after superposition; z = unit vector from C1\' of 1535 to C1\' of 1540. 7K00 16S ends at 1534.',
         `Path tunnel (starts at the ptc end, residue k at arc length k x 3.40 A, ends at tunnelExit = the tunnel mouth): Dijkstra on a 1 A voxel grid around the 50S (blocked within 3.0 A of any 50S heavy atom; cost = step / clearance squared), three Chaikin passes, resampled at 1.0 A, truncated at the first solvent-side point after 60 A of arc (deviation from PLAN.md 7.4 step 2; the 13 straight-line fallback was rejected because it crosses rRNA); see source.tunnel. Anchors ptc (O3 prime of A76 of the P-site tRNA; z = first path segment) and tunnelExit (last path point; z = last segment).`,
       ],
