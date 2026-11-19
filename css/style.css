@@ -554,3 +554,24 @@ kbd { display: inline-block; min-width: 24px; padding: 2px 7px; text-align: cent
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
   .spinner i { opacity: 0.8; transform: none; }
 }
+
+/* ---------- story (Round 3) ---- */
+.scrub { position: relative; }
+.scrub-ticks { position: absolute; left: 0; right: 0; top: 50%; height: 0; pointer-events: none; }
+.scrub-ticks i { position: absolute; top: -4px; width: 2px; height: 8px; margin-left: -1px; border-radius: 1px; background: var(--line-2); }
+.scrub-ticks i.is-active { background: var(--accent); }
+.chapter-count { font-size: 12px; color: var(--text-3); }
+.chapter-list { display: grid; gap: 2px; max-height: 284px; overflow-y: auto; margin: 2px -4px 0; padding: 0 4px; }
+.chapter-row { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px; border-radius: var(--r-sm); border: 1px solid transparent; background: none; color: var(--text-2); text-align: left; font-size: 13px; }
+.chapter-row:hover { background: var(--raise); color: var(--text); }
+.chapter-row[aria-current="step"] { background: var(--accent-2); border-color: var(--accent-line); color: #fff; }
+.chapter-n, .chapter-d { font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.chapter-row[aria-current="step"] .chapter-n { color: var(--accent); }
+.chapter-t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inspect-role { font-size: 13px; line-height: 1.5; color: var(--text-2); margin-bottom: 10px; }
+.inspect-dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; font-size: 12.5px; }
+.inspect-dl dt { color: var(--text-3); }
+.inspect-dl dd { color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+.inspect-dl ul { display: grid; gap: 3px; }
+.inspect-dl li::before { content: "– "; color: var(--text-3); }
+
