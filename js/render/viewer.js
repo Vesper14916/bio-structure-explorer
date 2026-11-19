@@ -87,7 +87,7 @@ class Viewer {
     r.localClippingEnabled = true;       // per-material clipping planes (machine actor cutaway)
 
     const scene = this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 5000);
+    this.camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 12000);
     this.camera.position.set(0, 8, 90);
     scene.add(this.camera);
     buildLightRig(this.camera);

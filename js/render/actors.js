@@ -8,13 +8,46 @@
 import * as THREE from 'three';
 import { ELEMENT_INFO } from '../science/index.js';
 import { BALL_SCALE, BOND_RADIUS } from './molecule.js';
+import { FOG_COLOR } from './stage.js';
 import { writeSphere, writeCylinder, writeHidden, clamp, sphereGeometry, cylinderGeometry } from './util.js';
 
-// ---- visual tokens (docs/CONTRACTS.md 6.4) -------------------------------------------------------
+// ---- visual tokens (docs/CONTRACTS.md 6.4 and PLAN.md 4.3) ---------------------------------------
 export const ACTOR_TOKENS = {
-  partColor: { core: 0x4fb6ff, sigma: 0xb58cff, accessory: 0xb58cff, unknown: 0x9fb2dc },
-  chainTint: { alpha: 0x8fd0ff, beta: 0x4fb6ff, betaPrime: 0x2f8fe0, omega: 0xb9e2ff },
+  partColor: {
+    core: 0x4fb6ff,
+    sigma: 0xb58cff,
+    accessory: 0xb58cff,
+    small: 0xe4dcc4,
+    large: 0xd2b183,
+    unknown: 0x9fb2dc,
+  },
+  actorColor: {
+    'rnap-ec': 0x4fb6ff,
+    'rnap-holo': 0x4fb6ff,
+    'ribosome-70s': 0xe4dcc4,
+    'trna-init': 0xffd43b,
+    'trna-aa': 0xff922b,
+    rf1: 0xff6b6b,
+    'ef-tu': 0xf783ac,
+    'ef-g': 0xa9e34b,
+    if1: 0xd0bfff,
+    if2: 0xb197fc,
+    if3: 0x9775fa,
+    nusg: 0x15aabf,
+  },
+  chainTint: {
+    alpha: 0x8fd0ff,
+    beta: 0x4fb6ff,
+    betaPrime: 0x2f8fe0,
+    omega: 0xb9e2ff,
+    rRNA16S: 0xf0eadb,
+    rprotein30S: 0xc9bd9c,
+    rRNA23S: 0xe0c59f,
+    rRNA5S: 0xe0c59f,
+    rprotein50S: 0xb38f5e,
+  },
   l0: { roughness: 0.55, metalness: 0, opacityOnly: 0.30, opacityWithL1: 0.10 },
+  crowd: { mixTowardFog: 0.65, opacity: 0.22, depthWrite: false },
   beadRadius: { ca: 1.9, p: 2.4 },
   ratio: { l0Only: 6, l2: 2.5 },
   fadeSeconds: 0.25,
@@ -32,8 +65,26 @@ const ELEMENT_COLOR = {
 };
 const OTHER_COLOR = 0xb0b8c8;
 
-/** Chain colour for L1 beads: a 6.4 tint when the chain name matches, otherwise the part colour. */
-export function chainColor(chain, partId) {
+const fogLinear = new THREE.Color(FOG_COLOR);
+const tmpCrowd = new THREE.Color();
+
+/** Resolve L0 part colour from part id, falling back to actor id for single-body assets. */
+export function partColor(partId, assetId) {
+  const P = ACTOR_TOKENS.partColor, A = ACTOR_TOKENS.actorColor;
+  if (partId && P[partId] !== undefined) return P[partId];
+  if (assetId && A[assetId] !== undefined) return A[assetId];
+  return P.unknown;
+}
+
+/** Crowder colour: machine L0 part colour mixed 65 % toward FOG_COLOR (0x0a1628) in linear space (PLAN.md §4.3). */
+export function crowdColor(hex) {
+  tmpCrowd.setHex(hex);
+  tmpCrowd.lerp(fogLinear, ACTOR_TOKENS.crowd.mixTowardFog);
+  return tmpCrowd.getHex();
+}
+
+/** Chain colour for L1 beads: an explicit subunit tint when matched, otherwise part/actor colour. */
+export function chainColor(chain, partId, assetId) {
   const n = String(chain && chain.name || '').toLowerCase();
   const T = ACTOR_TOKENS.chainTint, P = ACTOR_TOKENS.partColor;
   const sub = chain && chain.subunit;
@@ -44,7 +95,7 @@ export function chainColor(chain, partId) {
   if (n.includes('alpha') || n.includes('α')) return T.alpha;
   if (n.includes('omega') || n.includes('ω')) return T.omega;
   if (n.includes('sigma') || n.includes('σ')) return P.sigma;
-  return P[partId] ?? P.unknown;
+  return partColor(partId, assetId);
 }
 
 /** Level the ratio rule asks for: 'l0' | 'l1' | 'l2'. */
@@ -140,7 +191,7 @@ export class ActorLayer {
       geo.computeVertexNormals();
       const T = ACTOR_TOKENS.l0;
       const mat = new THREE.MeshStandardMaterial({
-        color: ACTOR_TOKENS.partColor[m.part] ?? ACTOR_TOKENS.partColor.unknown,
+        color: partColor(m.part, asset.id),
         roughness: T.roughness, metalness: T.metalness, transparent: true, depthWrite: false, opacity: T.opacityOnly,
       });
       const mesh = new THREE.Mesh(geo, mat);
@@ -162,7 +213,7 @@ export class ActorLayer {
     const c1 = rec.l1.instanceColor.array;
     for (let i = 0; i < n1; i++) {
       const ch = L1.chain[i];
-      tmpColor.setHex(chainColor(asset.chains[ch], chainPart[ch]));
+      tmpColor.setHex(chainColor(asset.chains[ch], chainPart[ch], asset.id));
       c1[i * 3] = tmpColor.r; c1[i * 3 + 1] = tmpColor.g; c1[i * 3 + 2] = tmpColor.b;
     }
     rec.l1.instanceColor.needsUpdate = true;

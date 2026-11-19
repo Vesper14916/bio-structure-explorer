@@ -1,6 +1,6 @@
 // Helix — application glue: connects the UI, the WebGL viewer, the science model and the sims.
 import {
-  buildDuplex, buildRnaDuplex, buildCrystal, measureDuplex,
+  Assembly, buildDuplex, buildRnaDuplex, buildCrystal, measureDuplex,
   cleanSequence, cleanRnaSequence, applyFrame, idealPairFrame, HELIX_B, HELIX_A,
 } from './science/index.js';
 import { createViewer } from './render/viewer.js';
@@ -18,6 +18,8 @@ const cleanForNa = (s, na = app.nucleicAcid) => (na === 'rna' ? cleanRnaSequence
 
 const app = {
   mode: 'structure',
+  sceneVersion: params.get('scene') === 'v2' ? 'v2' : 'v1',
+  v2WorldState: null,
   nucleicAcid: initialNa,
   sequence: (initialNa === 'rna' ? cleanRnaSequence(params.get('seq') || '') : cleanSequence(params.get('seq') || '')).slice(0, 40)
     || (initialNa === 'rna' ? cleanRnaSequence(DEFAULT_SEQUENCE) : DEFAULT_SEQUENCE),
@@ -141,17 +143,18 @@ function showMode(mode, { keepCamera = false } = {}) {
   app.mode = mode;
   viewer.setHighlight(null);
   viewer.setBlobs([]);
+  viewer.setActors?.([]);
   viewer.setAnnotations([]);
   viewer.setFollowTarget?.(null);
   viewer.setFraming?.(
     mode === 'replicate' ? replicationFraming(replSim()) :
-    mode === 'express' ? expressionFraming(exprSim()) : null
+    mode === 'express' && app.sceneVersion !== 'v2' ? expressionFraming(exprSim()) : null
   );
 
   if (mode === 'crystal') app.asm = crystal();
   else if (mode === 'melt') { const s = meltSim(); s.setConditions({ T: app.melt.T, Na: app.melt.Na }); app.asm = s.assembly; }
   else if (mode === 'replicate') app.asm = replSim().assembly;
-  else if (mode === 'express') app.asm = exprSim().assembly;
+  else if (mode === 'express') app.asm = app.sceneVersion === 'v2' ? new Assembly().finalize() : exprSim().assembly;
   else app.asm = ideal();
 
   viewer.setStyle(styleForMode());
@@ -171,14 +174,18 @@ function showMode(mode, { keepCamera = false } = {}) {
     viewer.setBlobs(sim.blobs);
     pushReplication(true);
   } else if (mode === 'express') {
-    const sim = exprSim();
-    sim.setCutaway(app.exprCutaway);
-    sim.setCameraMode(app.exprCamera);
-    if (sim.state.progress === 0 || sim.state.finished) { sim.seek(0); sim.play(); }
-    viewer.setBlobs(sim.blobs);
-    applyExpressCamera();
-    applyCodonHighlight(app.selectedCodon, { focus: false });
-    pushExpression(true);
+    if (app.sceneVersion === 'v2') {
+      loadV2Placeholder();
+    } else {
+      const sim = exprSim();
+      sim.setCutaway(app.exprCutaway);
+      sim.setCameraMode(app.exprCamera);
+      if (sim.state.progress === 0 || sim.state.finished) { sim.seek(0); sim.play(); }
+      viewer.setBlobs(sim.blobs);
+      applyExpressCamera();
+      applyCodonHighlight(app.selectedCodon, { focus: false });
+      pushExpression(true);
+    }
   } else if (mode === 'crystal') {
     app.pair = null;
     ui.setCrystalInfo({ atoms: app.asm.atoms.count, waters: app.asm.waters ? app.asm.waters.count : null });
@@ -369,7 +376,46 @@ function pushExpression(force = false) {
   ui.setExpressState?.(payload);
 }
 
+function applyV2WorldState(ws) {
+  app.v2WorldState = ws;
+  if (!ws || app.mode !== 'express' || app.sceneVersion !== 'v2') return;
+  ui.setExpressState?.({
+    progress: ws.chapterProgress ?? 0,
+    playing: false,
+    speed: app.exprSpeed,
+    phase: ws.chapter?.title || 'Story v2',
+    caption: ws.caption || '',
+    rnaCount: ws.counters?.mrna ?? 0,
+    hybridCount: ws.counters?.hybrid ?? 0,
+    codonIndex: ws.counters?.codon ?? 0,
+    peptideCount: ws.counters?.peptide ?? 0,
+  });
+}
+
+async function loadV2Placeholder() {
+  if (app.v2WorldState) { applyV2WorldState(app.v2WorldState); return; }
+  const isStandalone = typeof import.meta.url === 'string' && import.meta.url.startsWith('data:');
+  if (!isStandalone && (location.protocol === 'http:' || location.protocol === 'https:')) {
+    try {
+      const url = new URL('../tests/fixtures/world-state.json', import.meta.url);
+      const res = await fetch(url);
+      if (res.ok) {
+        applyV2WorldState(await res.json());
+        return;
+      }
+    } catch { /* fall through to minimal placeholder */ }
+  }
+  applyV2WorldState({
+    t: 42.75,
+    chapter: { index: 5, id: 'elongate-tx', title: 'Elongation', group: 'T', t0: 32.4, t1: 53.1, shot: 'rnap-follow' },
+    chapterProgress: 0.5,
+    caption: 'The polymerase reads the template 3′→5′ and builds RNA 5′→3′. About nine base pairs of RNA·DNA hybrid stay inside; the DNA re-closes behind.',
+    counters: { mrna: 81, hybrid: 9, codon: 0, peptide: 0 },
+  });
+}
+
 function tickExpression(dt) {
+  if (app.sceneVersion === 'v2') return;
   const sim = exprSim();
   sim.update(dt * app.exprSpeed);
   viewer.sync();
@@ -437,6 +483,7 @@ const handlers = {
   },
 
   onExpression({ action, value }) {
+    if (app.sceneVersion === 'v2') return;
     const sim = exprSim();
     if (action === 'play') { if (sim.state.finished) sim.seek(0); sim.play(); }
     else if (action === 'pause') sim.pause();
@@ -474,6 +521,7 @@ function boot() {
   viewer.on('pick', e => {
     if (app.mode === 'melt' || app.mode === 'replicate') return;
     if (app.mode === 'express') {
+      if (app.sceneVersion === 'v2') return;
       if (!e || (e.codon === undefined || e.codon < 0)) {
         if (app.selectedCodon !== null) { applyCodonHighlight(null, { focus: false }); pushExpression(true); }
         return;

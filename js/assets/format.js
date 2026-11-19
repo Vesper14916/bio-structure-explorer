@@ -1,12 +1,15 @@
-// Helix asset format v1: shared reader/writer helpers and validator.
+// Helix asset format v1 & v2: shared reader/writer helpers and validator.
 // No DOM and no three.js dependency; runs in Node and in the browser.
-// The format is frozen in docs/CONTRACTS.md section 6. Change the contract before changing this file.
+// The format is frozen in docs/CONTRACTS.md sections 6.2 and 7. Change the contract before changing this file.
 
 export const ASSET_FORMAT = 'helix-asset';
-export const ASSET_VERSION = 1;
+export const ASSET_VERSION_V1 = 1;
+export const ASSET_VERSION = 2;
+export const SUPPORTED_VERSIONS = Object.freeze([1, 2]);
 export const QUANT_STEP = 0.05;               // angstrom per int16 unit (range about +/-1638 A)
-export const CHAIN_CLASSES = ['protein', 'rna', 'dna'];
-export const BEAD_KIND = { CA: 0, P: 1 };
+export const CHAIN_CLASSES = Object.freeze(['protein', 'rna', 'dna']);
+export const PART_ROLES = Object.freeze(['body', 'replaceable', 'release']);
+export const BEAD_KIND = Object.freeze({ CA: 0, P: 1 });
 
 const bytesToB64 = u8 => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
 const b64ToBytes = b64 => { const s = atob(b64); const u8 = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i); return u8; };
@@ -45,11 +48,11 @@ function frameError(f) {
   return Math.max(e, Math.abs(det - 1));
 }
 
-/** Validate an asset object. Returns an array of problem strings (empty when valid). */
+/** Validate a v1 or v2 asset object. Returns an array of problem strings (empty when valid). */
 export function validateAsset(a) {
   const p = [], bad = m => p.push(m);
   if (!a || a.format !== ASSET_FORMAT) return ['format must be "helix-asset"'];
-  if (a.version !== ASSET_VERSION) bad(`version must be ${ASSET_VERSION}`);
+  if (!SUPPORTED_VERSIONS.includes(a.version)) bad(`version must be one of ${SUPPORTED_VERSIONS.join(', ')}`);
   if (!/^[a-z0-9-]+$/.test(a.id || '')) bad('id must be kebab-case');
   if (!a.name) bad('name missing');
   if (a.units !== 'angstrom') bad('units must be "angstrom"');
@@ -58,7 +61,12 @@ export function validateAsset(a) {
   if (!['pdb', 'synthetic'].includes(s.type)) bad('source.type must be "pdb" or "synthetic"');
   if (s.type === 'pdb') for (const k of ['pdbId', 'title', 'method', 'organism', 'downloaded', 'sha256', 'license']) if (!s[k]) bad(`source.${k} missing`);
   if (!a.bounds || !isVec(a.bounds.center, 3) || !(a.bounds.radius > 0) || !isVec(a.bounds.size, 3)) bad('bounds invalid');
-  const partIds = new Set((a.parts || []).map(x => x.id));
+  const partIds = new Set();
+  for (const part of a.parts || []) {
+    if (!part || !part.id) { bad('part id missing'); continue; }
+    partIds.add(part.id);
+    if (part.role !== undefined && !PART_ROLES.includes(part.role)) bad(`part ${part.id}: bad role ${part.role}`);
+  }
   if (!partIds.size) bad('parts missing');
   for (const c of a.chains || []) {
     if (!partIds.has(c.part)) bad(`chain ${c.id}: unknown part ${c.part}`);
@@ -82,6 +90,9 @@ export function validateAsset(a) {
     if (decodePositions(a.lod1.positions).length !== n * 3 || ch.length !== n || kd.length !== n) bad('lod1 array lengths mismatch');
     for (let i = 0; i < n; i++) if (ch[i] >= nChains || kd[i] > 1) { bad('lod1 chain/kind out of range'); break; }
   }
+  // anchors (validated before lod2.sites references them)
+  for (const [k, f] of Object.entries(a.anchors || {})) if (frameError(f) > 1e-4) bad(`anchor ${k}: frame not orthonormal`);
+  if (!a.anchors || !a.anchors.center) bad('anchors.center missing');
   // lod2 (optional)
   if (a.lod2) {
     const n = a.lod2.count, b = decodeArray(a.lod2.bonds, Uint16Array);
@@ -89,10 +100,21 @@ export function validateAsset(a) {
     if (decodeArray(a.lod2.element, Uint8Array).length !== n || decodeArray(a.lod2.chain, Uint8Array).length !== n) bad('lod2 element/chain length mismatch');
     if (b.length !== a.lod2.bondCount * 2) bad('lod2 bondCount mismatch');
     for (let i = 0; i < b.length; i++) if (b[i] >= n) { bad('lod2 bond index out of range'); break; }
+    if (a.lod2.sites !== undefined) {
+      if (!Array.isArray(a.lod2.sites) || !a.lod2.sites.length) bad('lod2.sites must be a non-empty array');
+      else {
+        for (let i = 0; i < a.lod2.sites.length; i++) {
+          const site = a.lod2.sites[i];
+          if (!site || typeof site.anchor !== 'string' || !site.anchor) bad(`lod2.sites[${i}]: anchor missing`);
+          else if (!a.anchors || !a.anchors[site.anchor]) bad(`lod2.sites[${i}]: unknown anchor ${site.anchor}`);
+          if (!site || !Number.isFinite(site.radius) || !(site.radius > 0)) bad(`lod2.sites[${i}]: radius must be > 0`);
+        }
+      }
+    } else if (a.version >= 2 && a.lod2.anchor === undefined) {
+      bad('lod2.sites missing');
+    }
   }
-  // anchors and tracks
-  for (const [k, f] of Object.entries(a.anchors || {})) if (frameError(f) > 1e-4) bad(`anchor ${k}: frame not orthonormal`);
-  if (!a.anchors || !a.anchors.center) bad('anchors.center missing');
+  // tracks (optional)
   for (const [k, t] of Object.entries(a.tracks || {})) {
     const n = (t.registers || []).length;
     if (!['dna', 'rna'].includes(t.kind)) bad(`track ${k}: kind must be dna or rna`);
@@ -100,22 +122,53 @@ export function validateAsset(a) {
     for (let i = 1; i < n; i++) if (t.registers[i] !== t.registers[i - 1] + 1) { bad(`track ${k}: registers must be consecutive ascending integers`); break; }
     for (let i = 0; i < n; i++) if (frameError(t.frames[i]) > 1e-4) { bad(`track ${k}: frame ${i} not orthonormal`); break; }
   }
+  // paths (optional, v2)
+  if (a.paths !== undefined) {
+    if (!a.paths || typeof a.paths !== 'object' || Array.isArray(a.paths)) bad('paths must be an object');
+    else {
+      for (const [k, pt] of Object.entries(a.paths)) {
+        if (!pt || !Number.isInteger(pt.count) || pt.count < 2) { bad(`path ${k}: count must be an integer >= 2`); continue; }
+        if (typeof pt.points !== 'string' || decodePositions(pt.points).length !== pt.count * 3) bad(`path ${k}: points length mismatch`);
+        const synOk = pt.synthetic === 0 || pt.synthetic === 1
+          || (Array.isArray(pt.synthetic) && pt.synthetic.length === pt.count && pt.synthetic.every(v => v === 0 || v === 1));
+        if (!synOk) bad(`path ${k}: synthetic must be 0 or 1 (or an array of 0/1 of length count)`);
+      }
+    }
+  }
   return p;
 }
 
-/** Decode an asset into typed arrays ready for a renderer or simulation. Throws on invalid input. */
+/** Decode a v1 or v2 asset into typed arrays ready for a renderer or simulation. Throws on invalid input. */
 export function decodeAsset(a) {
   const problems = validateAsset(a);
   if (problems.length) throw new Error(`invalid asset ${a && a.id}: ${problems.join('; ')}`);
+  const paths = {};
+  for (const [k, pt] of Object.entries(a.paths || {})) {
+    paths[k] = {
+      points: decodePositions(pt.points),
+      count: pt.count,
+      synthetic: pt.synthetic,
+    };
+  }
+  const lod2 = a.lod2 ? {
+    count: a.lod2.count,
+    positions: decodePositions(a.lod2.positions),
+    element: decodeArray(a.lod2.element, Uint8Array),
+    chain: decodeArray(a.lod2.chain, Uint8Array),
+    bonds: decodeArray(a.lod2.bonds, Uint16Array),
+    anchor: a.lod2.anchor ?? (a.lod2.sites && a.lod2.sites[0] ? a.lod2.sites[0].anchor : undefined),
+    radius: a.lod2.radius ?? (a.lod2.sites && a.lod2.sites[0] ? a.lod2.sites[0].radius : undefined),
+    sites: a.lod2.sites
+      ? a.lod2.sites.map(s => ({ anchor: s.anchor, radius: s.radius }))
+      : (a.lod2.anchor ? [{ anchor: a.lod2.anchor, radius: a.lod2.radius }] : []),
+  } : null;
   return {
+    version: a.version,
     id: a.id, name: a.name, source: a.source, bounds: a.bounds, parts: a.parts, chains: a.chains,
-    anchors: a.anchors, tracks: a.tracks || {},
+    anchors: a.anchors, tracks: a.tracks || {}, paths,
     lod0: a.lod0.parts.map(m => ({ part: m.part, positions: decodePositions(m.positions), indices: decodeArray(m.indices, m.indexType === 'u32' ? Uint32Array : Uint16Array) })),
     lod1: { count: a.lod1.count, positions: decodePositions(a.lod1.positions), chain: decodeArray(a.lod1.chain, Uint8Array), kind: decodeArray(a.lod1.kind, Uint8Array) },
-    lod2: a.lod2 ? {
-      count: a.lod2.count, positions: decodePositions(a.lod2.positions), element: decodeArray(a.lod2.element, Uint8Array),
-      chain: decodeArray(a.lod2.chain, Uint8Array), bonds: decodeArray(a.lod2.bonds, Uint16Array), anchor: a.lod2.anchor, radius: a.lod2.radius,
-    } : null,
+    lod2,
   };
 }
 
