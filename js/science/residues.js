@@ -10,15 +10,28 @@
 //    machine-checked against the paper. Aromatic rings are regularised to a planar hexagon
 //    (bond 1.385 A, all angles 120 deg) so that the ring closes exactly; this simplifies the
 //    Engh & Huber ring values (bonds 1.382-1.389 A, angles 118-121 deg).
-//  - Torsions: all side-chain chi = 180 deg (extended), except PHE/TYR chi2 = 90 deg;
-//    carboxylate, amide and ring groups are planar (torsions 0 or 180 deg).
-//  - ASP chi2 (CA-CB-CG-OD1) = +90 deg, OD2 at -90 deg (carboxylate stays planar). The brief's all-180
-//    rule left the carboxylate torsion open; the 180/0 choice put OD2 at 2.495 A from the next
-//    residue's N in the fixture peptide, so chi2 = 90 was used.
+//  - Torsions:
+//    - Original 11 Round 2 templates (GLY, ALA, SER, ASP, GLU, GLN, LYS, MET, FME, PHE, TYR) keep
+//      chi1 = 180 deg (extended), with PHE/TYR chi2 = 90 deg and ASP chi2 = +90/-90 deg (planar
+//      carboxylate; 180/0 put OD2 at 2.495 A from the next residue's N in the fixture peptide).
+//    - Round 3 additions (ARG, ASN, CYS, HIS, ILE, LEU, THR, TRP, VAL) use standard extended
+//      Lovell et al. (2000) rotamers: chi1 = -60 deg for non-beta-branched residues (CYS -60;
+//      LEU -60/180; ASN -60/-80; ARG -60/180/-60/180 to avoid MET24.CE..ARG26.NE clash at 1.98 A
+//      when chi3 = 180; TRP -60/95), and chi1 = 180 deg for beta-branched residues (VAL, THR,
+//      ILE 180/180). Exception: HIS (neutral ND1-H tautomer, heavy atoms only) uses the extended
+//      t-80 rotamer (chi1 = 180, chi2 = -80 deg, matching PHE/TYR chi1 = 180) because chi1 = -60
+//      clashes (< 2.48 A at every chi2) with LYS33.CE (existing chi1 = 180 template) in Construct v3.
+//    - Stereochemistry of chiral/prochiral branches: THR CB is (3R) (OG1 at 180, CG2 at +58.4 deg);
+//      ILE CB is (3S) (CG1 at 180, CG2 at +57.6 deg); VAL CG1 is pro-R (CG1 at 180, CG2 at -57.6 deg);
+//      LEU CD1 is pro-R (CD1 at 180, CD2 at -57.3 deg).
+//    - HIS imidazole ring (neutral ND1-H) and TRP fused indole ring are strictly planar with
+//      Engh & Huber (1991) bond lengths and angles; ring-closure bonds (HIS CD2-NE2 1.368 vs 1.374 A;
+//      TRP CD2-CE2 1.409 vs 1.409 A and CZ3-CH2 1.403 vs 1.400 A) close within 0.006 A.
 //  - FME formyl group: C-N 1.33, C=O 1.23 A (brief), CA-N-CN 121.7 deg (same as C-N-CA of a peptide),
 //    N-CN-O1 125.0 deg (formamide-like, approximate). O1 is cis to CA about N-CN, which puts the
 //    formyl H trans to CA, as for a trans peptide bond.
-// Simplifications: heavy atoms only, no hydrogens, no OXT in the template, no rotamer statistics.
+// Simplifications: heavy atoms only, no hydrogens, no OXT in the template, no proline (ring cannot
+// close in the fixed extended backbone phi = -139 deg), no rotamer statistics.
 import { DEG, sub, cross, dot, norm } from './math.js';
 
 /** Position of atom d bonded to c: |cd| = bond, angle b-c-d = angleDeg, dihedral a-b-c-d = torsionDeg
@@ -63,6 +76,32 @@ export const SIDE_CHAIN_TABLE = {
     R('CE', 'C', 'CB', 'CG', 'CD', 1.508, 111.3, 180), R('NZ', 'N', 'CG', 'CD', 'CE', 1.486, 111.9, 180)],
   MET: [CB(1.530), R('CG', 'C', 'N', 'CA', 'CB', 1.520, 113.3, 180), R('SD', 'S', 'CA', 'CB', 'CG', 1.807, 112.7, 180),
     R('CE', 'C', 'CB', 'CG', 'SD', 1.774, 100.9, 180)],
+  CYS: [CB(1.530), R('SG', 'S', 'N', 'CA', 'CB', 1.808, 114.4, -60)],
+  VAL: [CB(1.540), R('CG1', 'C', 'N', 'CA', 'CB', 1.521, 110.5, 180),
+    R('CG2', 'C', 'N', 'CA', 'CB', 1.521, 110.5, -57.6)],
+  THR: [CB(1.542), R('OG1', 'O', 'N', 'CA', 'CB', 1.433, 109.6, 180),
+    R('CG2', 'C', 'N', 'CA', 'CB', 1.521, 110.5, 58.4)],
+  ILE: [CB(1.540), R('CG1', 'C', 'N', 'CA', 'CB', 1.530, 110.4, 180),
+    R('CG2', 'C', 'N', 'CA', 'CB', 1.521, 110.5, 57.6),
+    R('CD1', 'C', 'CA', 'CB', 'CG1', 1.513, 113.8, 180)],
+  LEU: [CB(1.530), R('CG', 'C', 'N', 'CA', 'CB', 1.530, 116.3, -60),
+    R('CD1', 'C', 'CA', 'CB', 'CG', 1.521, 110.7, 180), R('CD2', 'C', 'CA', 'CB', 'CG', 1.521, 110.7, -57.3)],
+  ASN: [CB(1.530), R('CG', 'C', 'N', 'CA', 'CB', 1.516, 112.6, -60),
+    R('OD1', 'O', 'CA', 'CB', 'CG', 1.231, 120.8, -80), R('ND2', 'N', 'CA', 'CB', 'CG', 1.328, 116.4, 100)],
+  ARG: [CB(1.530), R('CG', 'C', 'N', 'CA', 'CB', 1.520, 114.1, -60),
+    R('CD', 'C', 'CA', 'CB', 'CG', 1.520, 111.3, 180), R('NE', 'N', 'CB', 'CG', 'CD', 1.460, 112.0, -60),
+    R('CZ', 'C', 'CG', 'CD', 'NE', 1.329, 124.2, 180),
+    R('NH1', 'N', 'CD', 'NE', 'CZ', 1.326, 120.0, 0), R('NH2', 'N', 'CD', 'NE', 'CZ', 1.326, 120.0, 180)],
+  // Neutral ND1-H tautomer (heavy atoms only); planar 5-membered imidazole ring.
+  HIS: [CB(1.530), R('CG', 'C', 'N', 'CA', 'CB', 1.497, 113.8, 180),
+    R('ND1', 'N', 'CA', 'CB', 'CG', 1.378, 122.7, -80), R('CD2', 'C', 'CA', 'CB', 'CG', 1.354, 131.2, 100),
+    R('CE1', 'C', 'CB', 'CG', 'ND1', 1.321, 107.2, 180), R('NE2', 'N', 'CG', 'ND1', 'CE1', 1.319, 111.7, 0)],
+  // Planar fused 5+6 indole ring (Engh & Huber 1991).
+  TRP: [CB(1.530), R('CG', 'C', 'N', 'CA', 'CB', 1.498, 113.6, -60),
+    R('CD1', 'C', 'CA', 'CB', 'CG', 1.365, 126.9, 95), R('CD2', 'C', 'CA', 'CB', 'CG', 1.433, 126.8, -85),
+    R('NE1', 'N', 'CB', 'CG', 'CD1', 1.374, 110.1, 180), R('CE2', 'C', 'CG', 'CD1', 'NE1', 1.370, 108.9, 0),
+    R('CE3', 'C', 'CB', 'CG', 'CD2', 1.398, 133.9, 0), R('CZ2', 'C', 'CD1', 'NE1', 'CE2', 1.394, 130.1, 180),
+    R('CZ3', 'C', 'CG', 'CD2', 'CE3', 1.382, 118.6, 180), R('CH2', 'C', 'NE1', 'CE2', 'CZ2', 1.368, 117.5, 180)],
 };
 SIDE_CHAIN_TABLE.FME = SIDE_CHAIN_TABLE.MET;
 // Aromatic side chains share the ring rows (regular hexagon).
@@ -73,20 +112,31 @@ const ring = extra => [CB(1.530), R('CG', 'C', 'N', 'CA', 'CB', 1.502, 113.8, 18
   R('CZ', 'C', 'CG', 'CD1', 'CE1', RING, 120, 0), ...extra];
 SIDE_CHAIN_TABLE.PHE = ring([]);
 SIDE_CHAIN_TABLE.TYR = ring([R('OH', 'O', 'CD1', 'CE1', 'CZ', 1.376, 120, 180)]);
-// Bonds not implied by the placement rows (ring closure): [atom, atom, length].
-const EXTRA_BONDS = { PHE: [['CE2', 'CZ', RING]], TYR: [['CE2', 'CZ', RING]] };
+// Bonds not implied by the placement rows (ring closures): [atom, atom, length].
+const EXTRA_BONDS = {
+  PHE: [['CE2', 'CZ', RING]],
+  TYR: [['CE2', 'CZ', RING]],
+  HIS: [['CD2', 'NE2', 1.374]],
+  TRP: [['CD2', 'CE2', 1.409], ['CZ3', 'CH2', 1.400]],
+};
 
 const ATOM_ORDER = {
   GLY: 'N CA C O', ALA: 'N CA C O CB', SER: 'N CA C O CB OG', ASP: 'N CA C O CB CG OD1 OD2',
   GLU: 'N CA C O CB CG CD OE1 OE2', GLN: 'N CA C O CB CG CD OE1 NE2', LYS: 'N CA C O CB CG CD CE NZ',
   PHE: 'N CA C O CB CG CD1 CD2 CE1 CE2 CZ', TYR: 'N CA C O CB CG CD1 CD2 CE1 CE2 CZ OH',
   MET: 'N CA C O CB CG SD CE', FME: 'N CN O1 CA C O CB CG SD CE',
+  CYS: 'N CA C O CB SG', VAL: 'N CA C O CB CG1 CG2', THR: 'N CA C O CB OG1 CG2',
+  ILE: 'N CA C O CB CG1 CG2 CD1', LEU: 'N CA C O CB CG CD1 CD2', ASN: 'N CA C O CB CG OD1 ND2',
+  ARG: 'N CA C O CB CG CD NE CZ NH1 NH2', HIS: 'N CA C O CB CG ND1 CD2 CE1 NE2',
+  TRP: 'N CA C O CB CG CD1 CD2 NE1 CE2 CE3 CZ2 CZ3 CH2',
 };
 export const RESIDUE_CODES = Object.freeze(Object.keys(ATOM_ORDER));
 export const ONE_TO_THREE = Object.freeze({
-  A: 'ALA', E: 'GLU', F: 'PHE', K: 'LYS', G: 'GLY', S: 'SER', D: 'ASP', Y: 'TYR', Q: 'GLN', M: 'MET', fMet: 'FME',
+  A: 'ALA', C: 'CYS', D: 'ASP', E: 'GLU', F: 'PHE', G: 'GLY', H: 'HIS', I: 'ILE', K: 'LYS',
+  L: 'LEU', M: 'MET', N: 'ASN', Q: 'GLN', R: 'ARG', S: 'SER', T: 'THR', V: 'VAL', W: 'TRP',
+  Y: 'TYR', fMet: 'FME',
 });
-const ELEMENT = n => (n === 'SD' ? 'S' : n[0]);
+const ELEMENT = n => (n === 'SD' || n === 'SG' ? 'S' : n[0]);
 
 /** Uncached internal-coordinate build. phi (FME formyl placement) and psi (carbonyl O) are in degrees. */
 export function buildResidueRaw(code3, phi = -139, psi = 135) {
