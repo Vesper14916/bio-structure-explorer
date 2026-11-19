@@ -1,0 +1,84 @@
+{
+  "t": 42.75,
+  "chapter": {
+    "index": 5,
+    "id": "elongate-tx",
+    "title": "Elongation",
+    "group": "T",
+    "t0": 32.4,
+    "t1": 53.1,
+    "shot": "rnap-follow",
+    "caption": "The polymerase reads the template 3′→5′ and builds RNA 5′→3′. About nine base pairs of RNA·DNA hybrid stay inside; the DNA re-closes behind."
+  },
+  "chapterProgress": 0.5,
+  "caption": "The polymerase reads the template 3′→5′ and builds RNA 5′→3′. About nine base pairs of RNA·DNA hybrid stay inside; the DNA re-closes behind.",
+  "machines": [
+    {
+      "id": "rnap",
+      "assetId": "rnap-ec",
+      "transform": {
+        "o": [6.76, 0, 0],
+        "R": [0, 0, 1, 0, 1, 0, -1, 0, 0]
+      },
+      "opacity": 1,
+      "visible": true,
+      "parts": {
+        "core": {
+          "visible": true,
+          "opacity": 1
+        }
+      },
+      "label": "RNA polymerase",
+      "pickable": true
+    }
+  ],
+  "dna": {
+    "machineId": "rnap",
+    "register": 126,
+    "bend": 1,
+    "bubble": [-10, 2],
+    "relax": 0
+  },
+  "rna": {
+    "length": 81,
+    "addProgress": 0.5,
+    "hairpin": 0,
+    "released": false,
+    "layout": "rnap",
+    "layoutBlend": 0
+  },
+  "ribosome": {
+    "codon": 0,
+    "bound": false
+  },
+  "trnas": [],
+  "peptide": {
+    "length": 0,
+    "attach": "free",
+    "release": 0
+  },
+  "ntp": {
+    "base": "G",
+    "path": 0.5,
+    "bonded": false
+  },
+  "ppi": {
+    "path": 0,
+    "opacity": 0
+  },
+  "fx": [],
+  "counters": {
+    "mrna": 81,
+    "hybrid": 9,
+    "codon": 0,
+    "peptide": 0
+  },
+  "highlight": {
+    "codon": null
+  },
+  "shot": {
+    "id": "rnap-follow",
+    "from": null,
+    "blend": 1
+  }
+}
