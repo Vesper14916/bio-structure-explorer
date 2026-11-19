@@ -7,6 +7,11 @@
       "synthetic": true
     },
     {
+      "id": "ribosome-70s",
+      "file": "ribosome-70s.asset.json",
+      "synthetic": false
+    },
+    {
       "id": "rnap-ec",
       "file": "rnap-ec.asset.json",
       "synthetic": false
@@ -14,6 +19,16 @@
     {
       "id": "rnap-holo",
       "file": "rnap-holo.asset.json",
+      "synthetic": false
+    },
+    {
+      "id": "trna-init",
+      "file": "trna-init.asset.json",
+      "synthetic": false
+    },
+    {
+      "id": "trna-aa",
+      "file": "trna-aa.asset.json",
       "synthetic": false
     }
   ]

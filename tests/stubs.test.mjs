@@ -5,16 +5,17 @@ import assert from 'node:assert/strict';
 
 const STUBS = [
   // Story (js/sim/gene/)
-  { path: 'js/sim/gene/story.js', fns: ['buildStory', 'stateAt', 'chapterAt'] },
-  { path: 'js/sim/gene/timeline.js', fns: ['buildTimeline'] },
-  { path: 'js/sim/gene/transcription.js', fns: ['contributeTx'] },
-  { path: 'js/sim/gene/translation.js', fns: ['contributeTl'] },
-  { path: 'js/sim/gene/coupled.js', fns: ['buildCoupledTimeline', 'contributeCoupled'] },
-  { path: 'js/sim/gene/shots.js', fns: ['getShot', 'resolveChapterShot'] },
+  { path: 'js/sim/gene/story.js', implemented: true, fns: ['buildStory', 'stateAt', 'chapterAt'] }, // DEC-005: implemented in R3-S2 step 4; behaviour in tests/story.test.mjs
+  { path: 'js/sim/gene/timeline.js', implemented: true, fns: ['buildTimeline'] }, // DEC-005: implemented in R3-S2 step 3; behaviour in tests/timeline.test.mjs
+  { path: 'js/sim/gene/transcription.js', implemented: true, fns: ['contributeTx'] }, // DEC-005: pass-through plug point in R3-S2 step 4; behaviour in tests/story.test.mjs
+  { path: 'js/sim/gene/translation.js', implemented: true, fns: ['contributeTl'] }, // DEC-005: pass-through plug point in R3-S2 step 4; behaviour in tests/story.test.mjs
+  { path: 'js/sim/gene/coupled.js', implemented: true, fns: ['buildCoupledTimeline', 'contributeCoupled'] },
+  { path: 'js/sim/gene/shots.js', implemented: true, fns: ['getShot', 'resolveChapterShot'] }, // DEC-005: implemented in R3-S2 step 3; behaviour in tests/timeline.test.mjs
 
   // Kinematics (js/kin/)
   {
     path: 'js/kin/frames.js',
+    implemented: true, // DEC-005: implemented in R3-K1 step 1; export check only, behaviour in tests/kin-frames.test.mjs
     fns: [
       'matToQuat',
       'quatToMat',
@@ -28,8 +29,8 @@ const STUBS = [
       'sampleCatmullRom',
     ],
   },
-  { path: 'js/kin/duplex.js', fns: ['poseDuplex'] },
-  { path: 'js/kin/track.js', fns: ['sampleTrack', 'blendTrackFrame'] },
+  { path: 'js/kin/duplex.js', implemented: true, fns: ['poseDuplex'] }, // DEC-005: implemented in R3-K1 step 2; behaviour in tests/kin-duplex.test.mjs
+  { path: 'js/kin/track.js', implemented: true, fns: ['sampleTrack', 'blendTrackFrame'] },
   { path: 'js/kin/chain.js', fns: ['buildFreeChain', 'poseFreeChain'] },
   { path: 'js/kin/hairpin.js', fns: ['poseHairpin'] },
   { path: 'js/kin/peptide-path.js', fns: ['posePeptideOnPath'] },
@@ -63,6 +64,7 @@ for (const spec of STUBS) {
 
     for (const name of spec.fns ?? []) {
       assert.equal(typeof mod[name], 'function', `${spec.path} must export function ${name}`);
+      if (spec.implemented) continue; // DEC-005: implemented modules keep the export check only
       assert.throws(
         () => mod[name](),
         (err) => err instanceof Error && err.message === `not implemented: ${name}` && /not implemented: /.test(err.message),

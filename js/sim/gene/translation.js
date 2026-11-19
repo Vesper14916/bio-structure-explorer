@@ -11,6 +11,7 @@
  * Contract (PLAN.md §8.2, §10 R3-S2/R3-S4):
  * - Plug point invoked by `stateAt(story, t, out)`.
  * - Pure deterministic function of `(story, t)`; mutates `out` in place.
+ * - Currently a pass-through that returns `out` unchanged; S4 replaces it.
  *
  * @param {object} story - Story built by `buildStory`.
  * @param {number} t - Story time in seconds at 1x.
@@ -18,5 +19,5 @@
  * @returns {object} Updated `out` WorldState.
  */
 export function contributeTl(story, t, out) {
-  throw new Error('not implemented: contributeTl');
+  return out; // pass-through until S4 (task R3-S4) replaces this plug point
 }

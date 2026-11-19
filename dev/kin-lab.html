@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Kinematics lab</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #03060d; color: #dfe9f7; overflow: hidden; font: 13px system-ui, sans-serif; }
+  #stage { position: fixed; inset: 0; }
+  #hud { position: fixed; left: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 5; opacity: .8; pointer-events: none; font: 11px/1.5 ui-monospace, monospace; white-space: pre; text-shadow: 0 0 3px #000, 0 0 6px #000; }
+  #hud b { color: #9fd0ff; font-weight: 600; }
+  #err { position: fixed; left: 10px; top: 10px; z-index: 6; color: #ff8a8a; font: 12px ui-monospace, monospace; white-space: pre-wrap; }
+  #panel { position: fixed; right: 10px; top: 10px; z-index: 5; width: 260px; max-width: calc(100vw - 20px); box-sizing: border-box; padding: 10px 12px; border-radius: 8px;
+    background: rgba(8, 14, 28, .78); border: 1px solid #1d2c4a; backdrop-filter: blur(4px); }
+  #panel label { display: grid; grid-template-columns: 62px 1fr 48px; gap: 6px; align-items: center; margin: 4px 0; }
+  #panel label.row { grid-template-columns: 62px 1fr; }
+  #panel output { font: 11px ui-monospace, monospace; text-align: right; color: #9fd0ff; }
+  #panel input[type=range] { width: 100%; margin: 0; }
+  #panel input[type=text], #panel select { width: 100%; box-sizing: border-box; background: #0b1426; color: #dfe9f7; border: 1px solid #25375c; border-radius: 4px; padding: 2px 4px; font: inherit; }
+  #panel h1 { margin: 0 0 6px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: #8aa4cf; font-weight: 600; }
+</style>
+<script type="importmap">{"imports":{"three":"../js/vendor/three.module.min.js","three/addons/":"../js/vendor/addons/"}}</script>
+</head>
+<body>
+<div id="stage"></div>
+<div id="hud"></div>
+<div id="err"></div>
+<div id="panel">
+  <h1>Duplex kinematics lab</h1>
+  <label><span>register</span><input id="register" type="range" min="0" max="200" step="0.25"><output id="registerV"></output></label>
+  <label><span>bend</span><input id="bend" type="range" min="0" max="1" step="0.01"><output id="bendV"></output></label>
+  <label><span>relax</span><input id="relax" type="range" min="0" max="1" step="0.01"><output id="relaxV"></output></label>
+  <label class="row"><span>bubble</span><input id="bubble" type="text" placeholder="-11,2 or empty" spellcheck="false"></label>
+  <label class="row"><span>lod</span><select id="lod"><option>auto</option><option>l0</option><option>l1</option><option>l2</option></select></label>
+  <label class="row"><span>cutaway</span><input id="cutaway" type="checkbox"></label>
+</div>
+<script type="module">
+import { Assembly, TRUE_SCALE_GENE_CONSTRUCT as CONSTRUCT } from '../js/science/index.js';
+import { decodeAsset } from '../js/assets/format.js';
+import { createViewer } from '../js/render/viewer.js';
+import { readFrame16 } from '../js/kin/frames.js';
+import { poseDuplex, machinePoseForRegister, duplexBackboneGaps } from '../js/kin/duplex.js';
+
+// Kinematics lab (task R3-K1, docs/tasks/R3-ST3-design.md §3.7): the rnap-ec actor at machinePoseForRegister and the
+// 248-bp duplex from poseDuplex shown through an Assembly. Dev page; the render layer is used read-only.
+// URL params:
+//   register  gene index of template register 0, 0..200 (default 45)
+//   bend      beta in [0, 1] (default 1)
+//   relax     [0, 1]; effective beta = bend * (1 - relax) (default 0)
+//   bubble    lo,hi registers relative to template register 0, for example -11,2 (default none)
+//   lod       auto | l0 | l1 | l2 (default auto)      cutaway  0 | 1 (default 0)
+//   quality   auto | low | medium | high               rotate   0 | 1 (default 0)
+//   zoom      framing radius as a multiple of the machine radius (default 1)
+const q = new URLSearchParams(location.search);
+const flag = (k, d = false) => (q.has(k) ? q.get(k) !== '0' && q.get(k) !== 'false' : d);
+const num = (k, d, lo, hi) => { const v = q.has(k) ? parseFloat(q.get(k)) : d; return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
+const hud = document.getElementById('hud'), errBox = document.getElementById('err');
+const showError = e => { errBox.textContent += `${e && e.message || e}\n`; console.error(e); };
+addEventListener('error', e => showError(e.error || e.message));
+addEventListener('unhandledrejection', e => showError(e.reason));
+
+const state = {
+  register: num('register', 45, 0, 200), bend: num('bend', 1, 0, 1), relax: num('relax', 0, 0, 1),
+  bubble: (q.get('bubble') || '').split(',').map(Number).filter(Number.isFinite).slice(0, 2),
+  lod: ['auto', 'l0', 'l1', 'l2'].includes(q.get('lod')) ? q.get('lod') : 'auto',
+  cutaway: flag('cutaway'),
+};
+if (state.bubble.length < 2) state.bubble = [];
+const zoom = Math.max(0.05, num('zoom', 1, 0.05, 20));
+
+/** The 248-bp duplex as an Assembly: coding strand 0, template strand 1; pose by poseDuplex frame buffer. */
+function buildGeneAssembly(construct) {
+  const asm = new Assembly(), n = construct.codingDna.length, I = [], II = [];
+  const id = () => ({ o: [0, 0, 0], R: [1, 0, 0, 0, 1, 0, 0, 0, 1] });
+  for (let g = 0; g < n; g++) {
+    I.push(asm.addNucleotide({ base: construct.codingDna[g], sugar: 'deoxyribose', strand: 0, frame: id() }));
+    II.push(asm.addNucleotide({ base: construct.templateDna[g], sugar: 'deoxyribose', strand: 1, frame: id() }));
+    asm.addPair(I[g], II[g]);
+  }
+  asm.strands[1].reverse();
+  II.forEach((nu, g) => { nu.index = n - 1 - g; });
+  for (let g = 0; g + 1 < n; g++) { asm.addLink(I[g], I[g + 1]); asm.addLink(II[g + 1], II[g]); }
+  asm.meta = { kind: 'kin-lab', nucleicAcid: 'dna', sequence: construct.codingDna, length: n, axis: [[0, 0, 0], [0, 0, 1]] };
+  return asm.finalize();
+}
+
+try {
+  const res = await fetch('../assets/rnap-ec.asset.json');
+  if (!res.ok) throw new Error(`cannot load assets/rnap-ec.asset.json: HTTP ${res.status}`);
+  const asset = decodeAsset(await res.json());
+  const assets = { 'rnap-ec': asset };
+  const N = CONSTRUCT.codingDna.length, frames = new Float32Array(32 * N), asm = buildGeneAssembly(CONSTRUCT);
+  window.asset = asset; window.asm = asm; window.frames = frames; window.kin = state;
+
+  const viewer = createViewer(document.getElementById('stage'), { quality: q.get('quality') || 'auto' });
+  window.viewer = viewer;
+  viewer.setStyle({ representation: 'ballstick', color: 'element', hbonds: true, autoRotate: flag('rotate', false) });
+  viewer.setAssembly(asm);
+
+  let info = { ms: 0, gapAll: 0, gapArm: 0 };
+  const apply = ({ refocus = false } = {}) => {
+    const M = machinePoseForRegister(asset, state.register);
+    const t0 = performance.now();
+    poseDuplex(CONSTRUCT, { machineId: 'rnap', register: state.register, bend: state.bend, relax: state.relax, bubble: state.bubble.length ? state.bubble : [0, 0] },
+      assets, frames, { machine: { assetId: 'rnap-ec', transform: M } });
+    info.ms = performance.now() - t0;
+    for (let g = 0; g < N; g++) {
+      for (const [nu, i] of [[asm.nucleotides[2 * g], g], [asm.nucleotides[2 * g + 1], N + g]]) readFrame16(frames, i, nu.frame);
+    }
+    asm.updatePositions();
+    viewer.sync();
+    viewer.setActors([{ id: 'rnap-ec', asset, transform: M, lod: state.lod, cutaway: state.cutaway, label: asset.name }]);
+    // backbone gaps: worst step overall, and worst step outside the track range (the K1 arms)
+    const gaps = duplexBackboneGaps(CONSTRUCT, frames);
+    const r0 = asset.tracks.template.registers[0], r1 = asset.tracks.template.registers.at(-1);
+    let all = 0, arm = 0;
+    for (let g = 0; g + 1 < N; g++) {
+      const gv = Math.max(gaps[g], gaps[N - 1 + g]); all = Math.max(all, gv);
+      const a = g - state.register, b = g + 1 - state.register;
+      if (b <= r0 - 1 || a >= r1 + 1) arm = Math.max(arm, gv);
+    }
+    info.gapAll = all; info.gapArm = arm;
+    if (refocus) {
+      const c = asset.bounds.center;
+      const p = [M.R[0] * c[0] + M.R[1] * c[1] + M.R[2] * c[2] + M.o[0], M.R[3] * c[0] + M.R[4] * c[1] + M.R[5] * c[2] + M.o[1], M.R[6] * c[0] + M.R[7] * c[1] + M.R[8] * c[2] + M.o[2]];
+      viewer.focus({ center: p, radius: asset.bounds.radius * zoom }, { duration: 0 });
+    }
+    refreshHud();
+  };
+  const refreshHud = () => {
+    const beta = state.bend * (1 - state.relax);
+    hud.innerHTML = `<b>${asset.name}</b> + ${N}-bp duplex (construct v${CONSTRUCT.version})\n` +
+      `register <b>${state.register}</b> · beta <b>${beta.toFixed(2)}</b> (bend ${state.bend}, relax ${state.relax}) · bubble ${state.bubble.length ? state.bubble.join('..') : 'closed'}\n` +
+      `poseDuplex ${info.ms.toFixed(2)} ms · O3'-P max ${info.gapAll.toFixed(2)} A (arms ${info.gapArm.toFixed(2)} A)\n` +
+      `${viewer.getState().fps} fps`;
+  };
+
+  // controls
+  const $ = id => document.getElementById(id);
+  const sync = () => {
+    $('register').value = state.register; $('registerV').textContent = state.register;
+    $('bend').value = state.bend; $('bendV').textContent = state.bend.toFixed(2);
+    $('relax').value = state.relax; $('relaxV').textContent = state.relax.toFixed(2);
+    $('bubble').value = state.bubble.join(','); $('lod').value = state.lod; $('cutaway').checked = state.cutaway;
+  };
+  sync();
+  const on = (id, ev, fn) => $(id).addEventListener(ev, () => { fn($(id)); sync(); apply({ refocus: id === 'register' }); });
+  on('register', 'input', e => { state.register = +e.value; });
+  on('bend', 'input', e => { state.bend = +e.value; });
+  on('relax', 'input', e => { state.relax = +e.value; });
+  on('bubble', 'change', e => { const v = e.value.split(',').map(Number).filter(Number.isFinite); state.bubble = v.length >= 2 ? v.slice(0, 2) : []; });
+  on('lod', 'change', e => { state.lod = e.value; });
+  on('cutaway', 'change', e => { state.cutaway = e.checked; });
+
+  apply({ refocus: true });
+  let acc = 1;
+  viewer.on('frame', dt => { if ((acc += dt) > 0.5) { acc = 0; refreshHud(); } });
+  window.kinReady = true;
+} catch (e) {
+  showError(e);
+}
+</script>
+</body>
+</html>
