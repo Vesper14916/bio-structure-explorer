@@ -15,6 +15,7 @@ const STUBS = [
   // Kinematics (js/kin/)
   {
     path: 'js/kin/frames.js',
+    implemented: true, // DEC-005: implemented in R3-K1 step 1; export check only, behaviour in tests/kin-frames.test.mjs
     fns: [
       'matToQuat',
       'quatToMat',
@@ -29,7 +30,7 @@ const STUBS = [
     ],
   },
   { path: 'js/kin/duplex.js', fns: ['poseDuplex'] },
-  { path: 'js/kin/track.js', fns: ['sampleTrack', 'blendTrackFrame'] },
+  { path: 'js/kin/track.js', implemented: true, fns: ['sampleTrack', 'blendTrackFrame'] },
   { path: 'js/kin/chain.js', fns: ['buildFreeChain', 'poseFreeChain'] },
   { path: 'js/kin/hairpin.js', fns: ['poseHairpin'] },
   { path: 'js/kin/peptide-path.js', fns: ['posePeptideOnPath'] },
@@ -63,6 +64,7 @@ for (const spec of STUBS) {
 
     for (const name of spec.fns ?? []) {
       assert.equal(typeof mod[name], 'function', `${spec.path} must export function ${name}`);
+      if (spec.implemented) continue; // DEC-005: implemented modules keep the export check only
       assert.throws(
         () => mod[name](),
         (err) => err instanceof Error && err.message === `not implemented: ${name}` && /not implemented: /.test(err.message),
