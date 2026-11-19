@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Helix — Express v2 panel dev page</title>
+  <meta name="theme-color" content="#04070f">
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    #mock-stage-info {
+      position: absolute;
+      left: 16px;
+      bottom: 16px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(9, 14, 27, 0.72);
+      color: var(--text-3);
+      font: 500 11.5px/1.45 var(--mono);
+      pointer-events: none;
+    }
+    .loading.is-off { transition: none; display: none; }
+    @media (max-width: 699px) {
+      #mock-stage-info { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <div id="mock-stage-info" aria-hidden="true">Express v2 panel dev harness (no WebGL viewer)</div>
+  </div>
+  <div id="ui"></div>
+
+  <script type="module">
+    import { createUI } from '../js/ui/ui.js';
+    import { TRUE_SCALE_GENE_CONSTRUCT, codonTable } from '../js/science/scenario.js';
+    import { buildStory, stateAt } from '../js/sim/gene/story.js';
+    import { loadAsset } from '../js/assets/registry.js';
+
+    const params = new URLSearchParams(location.search);
+    if (params.get('scene') !== 'v2') {
+      params.set('scene', 'v2');
+      history.replaceState(null, '', `${location.pathname}?${params.toString()}${location.hash}`);
+    }
+    try { localStorage.setItem('helix.hint.v1', '1'); } catch {}
+
+    const fixture = params.get('fixture') || 'ch1';
+    const initialMode = params.get('mode') === 'coupled' ? 'coupled' : 'sequential';
+    const inspectParam = params.get('inspect') || 'empty';
+    const tierParam = params.get('tier') || 'high';
+    const sheetParam = params.get('sheet');
+
+    const INSPECT_FIXTURE_FILLED = {
+      name: '30S subunit',
+      role: 'Binds the mRNA and checks codon–anticodon pairing in the decoding centre.',
+      source: 'PDB 7K00',
+      pdbId: '7K00',
+      rcsbUrl: 'https://www.rcsb.org/structure/7K00',
+      organism: 'Escherichia coli',
+      method: 'Cryo-EM, 1.98 Å',
+      chainsShown: '16S rRNA and 21 ribosomal proteins (chains a–u)',
+      detailLevel: 'Residues',
+      simplifications: [
+        'Rigid; head swivel not shown',
+        'Ligands, antibiotics and waters omitted except active-site Mg²⁺',
+      ],
+    };
+
+    const actions = [];
+    window.__actions = actions;
+
+    let story = null;
+    let assets = {};
+    let storyMini = null;
+    let worldStateFixture = null;
+    const codonsV3 = codonTable(TRUE_SCALE_GENE_CONSTRUCT);
+
+    const state = {
+      mode: initialMode,
+      speed: 1,
+      playing: false,
+      cameraOption: 'auto',
+      toggles: { cutaway: true, labels: true, crowding: tierParam !== 'low' },
+      t: 0,
+      selectedCodon: null,
+      inspect: inspectParam === 'filled' ? INSPECT_FIXTURE_FILLED : null,
+    };
+
+    const infoEl = document.getElementById('mock-stage-info');
+
+    function pushStateFromWorld(ws) {
+      const ch = ws.chapter || story.chapters[0];
+      const dur = story.duration || 1;
+      const groupLevel = { T: 'closed', I: 'mid', E: 'open', O: 'closed' };
+      const uiState = {
+        progress: dur > 0 ? Math.min(1, Math.max(0, ws.t / dur)) : 0,
+        playing: state.playing,
+        speed: state.speed,
+        mode: state.mode,
+        duration: dur,
+        chapterIndex: ch.index ?? 0,
+        chapters: story.chapters,
+        caption: ws.caption || ch.caption || '',
+        phaseLevel: groupLevel[ch.group] || 'closed',
+        cameraOption: state.cameraOption,
+        toggles: { ...state.toggles },
+        tier: tierParam,
+        counters: ws.counters ? { ...ws.counters } : { mrna: 0, hybrid: 0, codon: 0, peptide: 0 },
+        codons: codonsV3,
+        activeCodon: ws.counters ? ws.counters.codon : 0,
+        selectedCodon: state.selectedCodon,
+        inspect: state.inspect,
+      };
+      ui.setExpressState(uiState);
+      infoEl.textContent = `fixture=${fixture} · mode=${state.mode} · ch=${(ch.index ?? 0) + 1}/${story.chapters.length} · t=${ws.t.toFixed(2)}s · inspect=${state.inspect ? state.inspect.name : 'empty'}`;
+    }
+
+    function evaluateAndPush() {
+      if (!story) return;
+      if (fixture === 'world' && worldStateFixture && state.t === worldStateFixture.t) {
+        pushStateFromWorld(worldStateFixture);
+        return;
+      }
+      const ws = stateAt(story, state.t);
+      pushStateFromWorld(ws);
+    }
+
+    function rebuildStory(mode) {
+      if (fixture === 'mini' && storyMini) {
+        story = buildStory(TRUE_SCALE_GENE_CONSTRUCT, assets, { mode: storyMini.mode || mode, timeline: storyMini });
+      } else {
+        story = buildStory(TRUE_SCALE_GENE_CONSTRUCT, assets, { mode });
+      }
+      window.__story = story;
+    }
+
+    const ui = createUI(document.getElementById('ui'), {
+      onMode() {},
+      onExpression(evt) {
+        actions.push(evt);
+        const { action, value } = evt;
+        if (action === 'play') {
+          state.playing = true;
+        } else if (action === 'pause') {
+          state.playing = false;
+        } else if (action === 'restart') {
+          state.t = 0;
+          evaluateAndPush();
+        } else if (action === 'seek') {
+          state.t = Math.min(1, Math.max(0, Number(value) || 0)) * (story ? story.duration : 1);
+          evaluateAndPush();
+        } else if (action === 'speed') {
+          state.speed = Number(value) || 1;
+          evaluateAndPush();
+        } else if (action === 'mode') {
+          state.mode = value === 'coupled' ? 'coupled' : 'sequential';
+          rebuildStory(state.mode);
+          state.t = Math.min(state.t, story.duration);
+          evaluateAndPush();
+        } else if (action === 'camera') {
+          state.cameraOption = value || 'auto';
+        } else if (action === 'toggle' && value && typeof value === 'object') {
+          Object.assign(state.toggles, value);
+        } else if (action === 'chapter') {
+          const ch = story && story.chapters[value];
+          if (ch) {
+            state.t = ch.t0;
+            evaluateAndPush();
+          }
+        } else if (action === 'selectCodon') {
+          state.selectedCodon = value;
+        } else if (action === 'clearInspect') {
+          state.inspect = null;
+          evaluateAndPush();
+        }
+      },
+    });
+    window.ui = ui;
+
+    async function init() {
+      const [riboAsset, miniJson, wsJson] = await Promise.all([
+        loadAsset('ribosome-70s').catch(() => null),
+        fetch('../tests/fixtures/story-mini.json').then(r => (r.ok ? r.json() : null)).catch(() => null),
+        fetch('../tests/fixtures/world-state.json').then(r => (r.ok ? r.json() : null)).catch(() => null),
+      ]);
+      if (riboAsset) assets['ribosome-70s'] = riboAsset;
+      storyMini = miniJson;
+      worldStateFixture = wsJson;
+
+      rebuildStory(state.mode);
+
+      // Select initial time from ?fixture=
+      if (fixture === 'ch1') {
+        state.t = story.chapters[0].t0;
+      } else if (fixture === 'ch6') {
+        const ch = story.chapters[Math.min(5, story.chapters.length - 1)];
+        state.t = (ch.t0 + ch.t1) / 2;
+      } else if (fixture === 'ch14') {
+        const ch = story.chapters[Math.min(13, story.chapters.length - 1)];
+        state.t = (ch.t0 + ch.t1) / 2;
+      } else if (fixture === 'ch16') {
+        const ch = story.chapters[story.chapters.length - 1];
+        state.t = ch.t0 + (ch.t1 - ch.t0) * 0.5;
+      } else if (fixture === 'mini') {
+        state.t = story.chapters[0].t0;
+      } else if (fixture === 'world' && worldStateFixture) {
+        state.t = worldStateFixture.t;
+      } else {
+        state.t = 0;
+      }
+
+      ui.setMode('express');
+      ui.setLoading(false);
+      if (sheetParam) ui.setSheet(sheetParam, false);
+      evaluateAndPush();
+
+      const scrollTarget = params.get('scroll');
+      if (scrollTarget) {
+        const map = {
+          chapters: '.chapter-card',
+          codons: '.codon-card',
+          inspect: '.inspect-card',
+          legend: '.legend',
+          explain: '.explain',
+        };
+        const sel = map[scrollTarget];
+        const target = sel && document.querySelector(`#view-express ${sel}`);
+        if (target) target.scrollIntoView({ block: 'start', behavior: 'instant' });
+      }
+
+      window.__storyReady = true;
+    }
+
+    init();
+  </script>
+</body>
+</html>
