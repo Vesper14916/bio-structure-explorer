@@ -42,10 +42,10 @@ Model selection across multi-agent workflows follows a structured 4-tier matrix 
 
 ### Operational allocation policy
 
-Current access (2026-11-19): the highest available model is **Gemini 4 Neon** at high effort. Gemini 4 Carbon and Argon are not used. The agent tool (Antigravity) cannot choose a model or effort per subagent.
+Revised 2026-11-19. `PLAN.md` §9.1 and §11 are the binding detail; this is the summary.
 
-1. **Chief (Neon, high)**: the main conversation runs on Gemini 4 Neon at high effort and is the **Integration Owner**: stage planning, contract freezing (`docs/CONTRACTS.md`), merges, gates, root-cause analysis, and every task the plan marks Carbon or Argon that the Chief chooses to keep.
-2. **Subagents (Hydrogen, or Neon if the tool cannot select)**: every subagent runs on **Gemini 4 Hydrogen** where the tool allows it; otherwise subagents inherit Neon. Subagents execute bounded, well-specified tasks with explicit file ownership.
-3. **Tier labels in `PLAN.md` §10** map as follows: Carbon and Argon → Chief or a Neon subagent; Hydrogen and Flash → a Hydrogen subagent. Flash-Lite sentinel work (re-running gates, parsing logs) is done by any subagent.
-4. **Rhythm**: one stage per working session. Stages run strictly in series; tasks inside one stage may run in parallel, with at most five subagents at once (`PLAN.md` §11).
-
+1. **Two executors, ten serial stages.** Claude (Claude Code) owns stages ST2, ST3 and ST7: ribosome and tRNA assets, kinematics core and story engine, translation choreography. Gemini (Antigravity) owns ST1, ST4, ST5, ST6, ST8, ST9 and ST10. Stages never run at the same time.
+2. **Gemini Chief: Gemini 4 Neon, high.** The main conversation is the Integration Owner: briefs, contracts, merges, gates, integration tasks, and intake of Claude stages.
+3. **Gemini subagents: Gemini 4 Hydrogen.** One bounded task each, at most five at once, inside one stage. If Antigravity cannot select a model, subagents inherit Neon and the Chief records that.
+4. **Gemini 4 Argon: at most 30 minutes per stage.** Started only by the Chief for the single review or diagnosis job named in `PLAN.md` §11. Unused time does not carry over. Never a long-running implementer.
+5. **Hand-over:** after every stage the owner pushes its result to `origin` (Gemini: `main` and the stage tag; Claude: a branch named in its handoff). The next stage starts from that.

@@ -1,6 +1,6 @@
 # Helix Gene Expression: Completion Plan (Round 3)
 
-Status: Approved scope, not started. Written 2026-11-18 by the Round 2 integration owner. Team and schedule revised 2026-11-19 (D10, §9.1, §11): serial stages, Neon Chief.
+Status: Approved scope, not started. Written 2026-11-18 by the Round 2 integration owner. Team and schedule revised 2026-11-19 (D10, §9.1, §9.3, §11): ten serial stages; Claude owns ST2, ST3 and ST7; Gemini owns the rest with a Neon Chief, Hydrogen subagents and a 30-minute Argon job per stage.
 Base commit: `main` after it is fast-forwarded to `claude/admiring-cray-fdre6q` (`481d681`, Round 2 Wave 1 closed).
 History: the Round 1 and Round 2 plans are archived in `docs/history/PLAN-round1-2.md`. That file is a record only; this plan replaces it for all forward work.
 
@@ -45,7 +45,7 @@ Helix is a static website, with a single-file offline build, that shows one bact
 | D7 | **tRNA bodies:** one initiator body (tRNA^fMet) and one elongator body reused for all 19 elongator amino acids. Only the anticodon nucleotides 34–36 are rebuilt for each codon, as the exact Watson–Crick complement. Wobble pairing and modified nucleosides are disclosed, not modelled. |
 | D8 | **Motion model:** deterministic, a pure function of story time. No physics, no random numbers at run time except those seeded from the scenario. Conformational changes are discrete labelled poses with interpolation. |
 | D9 | **The new scene is developed at `index.html?mode=express&scene=v2`.** The Round 1 Express scene stays the default until gate G4. At G4 the new scene becomes Express and the Round 1 Express code is removed, with its tests ported. Other modes (Explore, Pairs, Melt, Copy, X-ray) are not changed except where a task says so. |
-| D10 | **Team (revised 2026-11-19):** Gemini 4 Neon (high) is the Chief and integration owner; it is the highest model available. Subagents run on Gemini 4 Hydrogen where the agent tool allows a model choice, otherwise on Neon. Tier labels in §10 are mapped by `AGENTS.md` (Operational allocation policy). |
+| D10 | **Team (revised 2026-11-19):** two executors. **Gemini** (Antigravity): Gemini 4 Neon (high) is the Chief and integration owner; subagents run on Gemini 4 Hydrogen; Gemini 4 Argon is a scarce reviewer with at most 30 minutes per stage. **Claude** (Claude Code) owns the three hardest parts as whole stages: ST2, ST3 and ST7. §9.1 and §11 are binding; tier labels inside §10 tasks are superseded by them. |
 | D11 | **Branches:** `main` is the integration branch. Each task works on its own branch `r3/<task-id>`, in its own clone or worktree, and pushes only that branch. Only the Chief merges into `main` (§9.3). |
 | D12 | **Ribosome colours change** from the Round 1 teal and mint (`0x38d9a9`, `0x63e6be`) to warm neutrals (§4.3). The old 30S teal is almost identical to the mRNA colour `0x2fd9b9`, and at true scale the mRNA runs through the 30S. |
 | D13 | **Story length** at 1× is about 164 s in Step by step mode and about 123 s in Coupled mode (for D = 48). Speeds: 0.5×, 1×, 2×, 4×. |
@@ -651,17 +651,34 @@ Viewer additions (owned by R1 and R2, wired by the Chief): `viewer.setDetailFocu
 
 ## 9. Team, process and gates
 
-### 9.1 Roles
+### 9.1 Executors, models and roles (revised 2026-11-19)
 
-| Role | Model (thinking level) | Responsibility |
-| --- | --- | --- |
-| Chief (integration owner) | Gemini 4 Neon (high) | W0 setup and contracts; owns `js/main.js`, `docs/CONTRACTS.md`, `docs/TASKS.md`, `docs/VALIDATION.md`, `docs/ASSETS.md`, `PLAN.md`, `AGENTS.md`, `dist/`; merges; runs gates; tunes values marked "initial"; decides design gaps |
-| Critical lanes | Neon subagent if selectable, else Hydrogen (high); the Chief reviews these first | A1, S2, K1, S3, S4, S5, V1 |
-| Workhorse lanes | Gemini 4 Hydrogen subagent | A2, A3, A4, S1, K2, K3, R1, R2, R3, R4, U1, U2, U3, P1 |
-| Utility | Gemini 4 Hydrogen subagent | Q1, Q2, Q3, V2, D1 |
-| Sentinel | Any subagent | Re-run gates on request, parse logs, check handoffs for the required sections |
+Two executors share Round 3. Each stage in §11 belongs to exactly one executor. No stage is shared.
 
-At most **5** subagents run at once, and only inside one stage. Stages run in series (§11). Where §10 says "Wave", read the stage that contains the task in §11.
+**Claude (Claude Code session).** Owns the three hardest parts, each as a whole stage:
+
+| Part | Stage | Tasks | Why it is hard |
+| --- | --- | --- | --- |
+| C1 Ribosome and tRNA assets | ST2 | A1, A2 | 7K00 is the largest structure in the project; three superpositions, the tunnel search, a 32-register mRNA track and tight budgets; everything in translation depends on it (critical path) |
+| C2 Kinematics core and story engine | ST3 | K1, S2 | The duplex algorithm and the event engine define the determinism, continuity and allocation guarantees that every later choreography relies on |
+| C3 Translation choreography | ST7 | K3, S4 | The densest choreography: four tRNA slots, six factors, mRNA sliding, codon pairing, peptide growth through the tunnel, §5.3 items 3–6 and 8 |
+
+Claude runs on its own models and decides its own subagent use. Claude follows §9.2 rules 2–8, this plan, `docs/CONTRACTS.md` and the stage's exit check exactly like any task agent. Claude does not change contracts; requests go into its handoff.
+
+**Gemini (Antigravity).** Owns every other stage: ST1, ST4, ST5, ST6, ST8, ST9 and ST10. Model rules:
+
+| Role | Model and effort | Use | Limits |
+| --- | --- | --- | --- |
+| Chief (integration owner) | **Gemini 4 Neon, high** (main conversation) | Stage briefs, contracts (`docs/CONTRACTS.md`), merges, gates, integration tasks (INT2–INT5), tuning "initial" values, design gaps, root-cause analysis, intake of Claude stages. Owns `js/main.js`, `docs/CONTRACTS.md`, `docs/TASKS.md`, `docs/VALIDATION.md`, `docs/ASSETS.md`, `docs/DECISIONS.md`, `PLAN.md`, `AGENTS.md`, `dist/` | Does not write feature code that a subagent task owns |
+| Implementation subagents | **Gemini 4 Hydrogen** (if Antigravity cannot select a model, subagents inherit Neon; record which in `docs/TASKS.md`) | Every §10 task in a Gemini stage, one task per subagent, in its own worktree | At most 5 at once; only the files in the task's "Owns" list |
+| Scarce reviewer | **Gemini 4 Argon** | One time-boxed job per stage, named in §11 "Argon job". Output is a written review or a diagnosis with a proposed patch, saved as `docs/reviews/R3-<stage>-argon.md`; the Chief or a subagent applies it | **At most 30 minutes per stage**; unused time does not carry over. Never used as a long-running implementer. Only the Chief starts it. When the quota is spent the Chief continues on Neon |
+
+Rules for the Argon job:
+1. The Chief prepares the input before starting Argon: the exact question, the files to read, and the evidence (test output, screenshots, handoffs). Argon does not explore the repository on its own.
+2. Priority if a stage needs more than one job: a failing gate first, then the job listed in §11.
+3. The Chief records start time, end time and outcome in `docs/TASKS.md`.
+
+Tier labels written inside §10 tasks (Carbon, Argon, Hydrogen, Flash) are historical and are superseded by this section.
 
 ### 9.2 Rules for every agent (repeat at the top of every brief)
 
@@ -678,7 +695,8 @@ At most **5** subagents run at once, and only inside one stage. Stages run in se
 
 - The Chief merges with `git merge --no-ff r3/<task-id>`, in the order given in §11 for each wave. After each merge: `npm test`, `npm run smoke`, and `node tools/build-assets.mjs --check` when assets changed.
 - A failed gate is fixed on the task branch by the task's agent, not on `main`, unless the fix is a one-line integration change in a Chief-owned file.
-- After each wave the Chief tags `r3-w<n>` on `main` and updates `docs/TASKS.md` and `docs/VALIDATION.md`.
+- After each stage the Chief tags the stage tag from §11 on `main`, updates `docs/TASKS.md` and `docs/VALIDATION.md`, and **pushes `main` and the tag to `origin`**, because a Claude stage starts from that tag on GitHub.
+- **Intake of a Claude stage** (start of the next Gemini stage): Claude delivers one branch on `origin` (name given in its handoff) based on the previous stage tag, with one `--no-ff` merge commit per task already made in task order, and handoffs `docs/handoffs/R3-<task-id>.md`. The Chief fetches it, runs `npm test`, `npm run smoke` and `node tools/build-assets.mjs --check`, reads the handoffs, merges it into `main` with `git merge --no-ff`, tags the Claude stage tag, and pushes. A failed check goes back to Claude with the exact output; the Chief does not fix Claude-owned files.
 
 ### 9.4 Contract changes
 
@@ -690,13 +708,15 @@ A task that needs a contract change stops that part, writes the proposal under "
 
 Each task lists **Tier**, **Base**, **Depends**, **Owns**, **Steps**, and **Acceptance**. "Base" is the `main` tag to branch from.
 
+**Superseded grouping (2026-11-19):** the wave headings, "Tier" lines, "Base" lines and "Merge order" lines below are kept for reference only. Which stage a task belongs to, who executes it, which model runs it, what it branches from and its merge order are set by §9.1 and §11.
+
 ### Wave 0 (Chief only; serial)
 
 #### R3-W0 — Setup and contracts
 - **Tier:** Carbon, high. **Base:** `claude/admiring-cray-fdre6q` at `481d681`.
 - **Steps:**
   1. Already done when this plan landed: `main` was fast-forwarded to the base commit and this plan committed on top. Branch from that commit.
-  2. Done on 2026-11-19: `AGENTS.md` "Operational allocation policy" names Gemini 4 Neon (high) as the Chief and Hydrogen as the subagent model. Check it and continue.
+  2. Done on 2026-11-19: `AGENTS.md` "Operational allocation policy" matches §9.1. Check it and continue.
   3. Refactor `tools/build-assets.mjs` into the driver and recipes (§7.1). Move the RNAP logic into `tools/assets/rnap.mjs`. `--check` MUST still print identical output for `rnap-ec` and `rnap-holo`.
   4. Add `tools/lib/superpose.mjs`, `tools/lib/match.mjs`, `tools/fetch-sources.mjs` and the `npm run fetch-sources` script; add the §7.2 entries to `tools/sources.lock.json` with SHA-256 values.
   5. Asset format v2 in `js/assets/format.js`, with tests; regenerate the fixture as v2 with one `path` and two `lod2.sites`.
@@ -921,25 +941,34 @@ Each task lists **Tier**, **Base**, **Depends**, **Owns**, **Steps**, and **Acce
 
 ---
 
-## 11. Schedule: serial stages (revised 2026-11-19)
+## 11. Schedule: ten serial stages (revised 2026-11-19)
 
-The waves in §10 are re-sliced into nine stages. **Stages run strictly in series**, one stage per working session (about five hours; two or three stages per session only if a stage closes early). Inside a stage, tasks run in parallel with at most five subagents; the Chief merges them in the listed order, then runs the exit check. The next stage starts only from the tag of the previous one: every task branches from the previous stage's tag, which replaces the "Base" line in §10.
+**Stages run strictly in series.** One stage per working session (about five hours). Inside a stage, tasks run in parallel (Gemini: at most five Hydrogen subagents) and merge in the listed order. Every task branches from the previous stage's tag, which replaces the "Base" line in §10. A Gemini stage begins by taking in the preceding Claude stage, if any (§9.3).
 
-| Stage | Tasks (§10 ids), merge order | Subagents | Exit check | Tag |
-| --- | --- | --- | --- | --- |
-| ST1 | W0 by the Chief. Helpers: step 4 (`fetch-sources`, lock SHA-256), step 7 (module stubs), step 8 (fixtures) | 3 | W0 acceptance | `r3-w0` |
-| ST2 | S1 → Q1 → A2 → A1 | 4 | Tests pass; `ribosome-70s`, `trna-init`, `trna-aa` validate and meet budgets | `r3-st2` |
-| ST3 | R1 → K1 → S2 → U1 | 4 | **G1** | `r3-w1` |
-| ST4 | A4 → A3 → K2 → R2 | 4 | Tests pass; factor and RNAP assets validate | `r3-st4` |
-| ST5 | R3 → U2 → S3, then INT2 by the Chief | 3 | **G2** (first playable new scene: chapters 1–7) | `r3-w2` |
-| ST6 | K3 → R4 → Q2 → S4 | 4 | Tests pass | `r3-st6` |
-| ST7 | U3 → V2, then INT3 by the Chief | 2 | **G3** (full Step by step story) | `r3-w3` |
-| ST8 | P1 → D1 → S5 → V1, then INT4 by the Chief | 4 | **G4** (cutover) | `r3-w4` |
-| ST9 | Q3, then INT5 by the Chief and a human | 1 | **G5**; tag `v1.0.0` | `v1.0.0` |
+| Stage | Executor | Tasks, merge order | Argon job (≤ 30 min) | Exit check | Tag |
+| --- | --- | --- | --- | --- | --- |
+| ST1 | Gemini | W0 (Chief). Subagents: W0 step 4 (`fetch-sources`, SHA-256 lock), step 7 (module stubs), step 8 (fixtures); **S1** (construct v3, residues; it touches no W0 file, so it may start from `6c9553b` and merges after W0) | Review the frozen `docs/CONTRACTS.md` §7 and asset format v2 against §7–§8 before the tag | W0 acceptance and S1 acceptance | `r3-w0` |
+| ST2 | **Claude (C1)** | A1 → A2 | — | A1 and A2 acceptance; budgets | `r3-st2` |
+| ST3 | **Claude (C2)** | K1 → S2 | — | K1 and S2 acceptance | `r3-st3` |
+| ST4 | Gemini | Intake ST2, ST3. Q1 → R1 → U1 | Check the G1 evidence for the Claude assets (colour samples, budgets, pairing tests) | **G1** | `r3-w1` |
+| ST5 | Gemini | A4 → A3 → K2 → R2 | Review A3 superposition RMSDs and the A4 value of `D` with its counting method | Task acceptance; assets validate | `r3-st5` |
+| ST6 | Gemini | R3 → U2 → S3, then INT2 | Before S3 starts: review the S3 brief against §5.3 and the K1 API; if G2 fails: diagnose | **G2** (first playable new scene, chapters 1–7) | `r3-w2` |
+| ST7 | **Claude (C3)** | K3 → S4 | — | K3 and S4 acceptance | `r3-st7` |
+| ST8 | Gemini | Intake ST7. R4 → Q2 → U3 → V2, then INT3 | Full-story review of the INT3 build against §6.1 and §6.2 | **G3** (full Step by step story) | `r3-w3` |
+| ST9 | Gemini | P1 → D1 → S5, then V1, then INT4 | V1 science review (read-only, high-severity issues first) | **G4** (cutover) | `r3-w4` |
+| ST10 | Gemini | Q3, then INT5 and a human reviewer | Only if G5 fails: diagnose | **G5**; human visual acceptance | `v1.0.0` |
 
-Soft dependencies inside a stage: S2 and U1 in ST3 use the W0 fixtures; S3 in ST5 codes against the W0 stubs of `js/kin/chain.js` and `js/kin/hairpin.js` (K2 merged in ST4); S4 in ST6 codes against the stub of `js/kin/trna.js` and merges after K3.
+Dependency notes:
+- ST2 needs W0 (`superpose.mjs`, `match.mjs`, `fetch-sources`, format v2, sources lock).
+- ST3: K1's lab page and tests use construct v3 from S1 (merged in ST1). S2 uses `codonTable` from S1 and the W0 fixtures.
+- ST4: U1 and R1 use the W0 fixtures; Q1 uses `js/assets/registry.js` from W0.
+- ST6: S3 uses K1 and S2 (ST3), K2 and A4 (ST5).
+- ST7: S4 uses S2 (ST3), K2 and A3 (ST5), A1 and A2 (ST2); K3 merges first.
+- ST8: R4 uses A1, A3 (EF-Tu) and R2.
 
-Critical path: ST1 → A1 (ST2) → A3 (ST4) → S4 (ST6) → INT3 → S5 → INT4 → G5. A1 starts first in ST2 because it is the largest single risk.
+Critical path: ST1 → ST2 (A1) → ST5 (A3) → ST7 (S4) → ST8 (INT3) → ST9 (S5, INT4) → ST10.
+
+Expected pace: one stage per session gives ten sessions. A session that closes its stage early may start the next stage only if it belongs to the same executor.
 
 ---
 
