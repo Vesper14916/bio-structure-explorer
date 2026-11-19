@@ -29,7 +29,7 @@ const STUBS = [
       'sampleCatmullRom',
     ],
   },
-  { path: 'js/kin/duplex.js', fns: ['poseDuplex'] },
+  { path: 'js/kin/duplex.js', implemented: true, fns: ['poseDuplex'] }, // DEC-005: implemented in R3-K1 step 2; behaviour in tests/kin-duplex.test.mjs
   { path: 'js/kin/track.js', implemented: true, fns: ['sampleTrack', 'blendTrackFrame'] },
   { path: 'js/kin/chain.js', fns: ['buildFreeChain', 'poseFreeChain'] },
   { path: 'js/kin/hairpin.js', fns: ['poseHairpin'] },
