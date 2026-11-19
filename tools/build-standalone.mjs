@@ -55,6 +55,27 @@ function rewriteImports(code, selfSpec) {
   });
 }
 
+function safeInlineJson(value) {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+const assetsDir = path.join(root, 'assets');
+const manifestPath = path.join(assetsDir, 'manifest.json');
+const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+const inlinedAssets = { __manifest__: manifest };
+const manifestEntries = Array.isArray(manifest.assets) ? manifest.assets : [];
+for (const entry of manifestEntries) {
+  const assetPath = path.join(assetsDir, entry.file);
+  const raw = JSON.parse(fs.readFileSync(assetPath, 'utf8'));
+  if (raw.id !== entry.id) {
+    throw new Error(`Manifest id mismatch for ${entry.file}: manifest has "${entry.id}", asset has "${raw.id}"`);
+  }
+  inlinedAssets[entry.id] = raw;
+}
+
 const importsMap = {};
 for (const [spec, code] of Object.entries(rawModules)) {
   const rewritten = rewriteImports(code, spec);
@@ -71,8 +92,10 @@ const html = `<!doctype html>
   <meta name="description" content="Interactive 3D molecular explorer for B-DNA, A-DNA, Z-DNA, A-RNA, base pairing, thermal melting, semiconservative replication, and coupled bacterial transcription-translation.">
   <meta name="theme-color" content="#04070f">
   <meta name="color-scheme" content="dark">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2304070f'/%3E%3Cpath d='M10 4c0 7 12 7 12 12S10 21 10 28' fill='none' stroke='%238fd3ff' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M22 4c0 7-12 7-12 12s12 5 12 12' fill='none' stroke='%23a99bff' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M12.500 9h7M11 16h10M12.500 23h7' stroke='%23ffc233' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E">
   <style>${css}</style>
-  <script type="importmap">${JSON.stringify({ imports: importsMap })}</script>
+  <script type="importmap">${safeInlineJson({ imports: importsMap })}</script>
+  <script>window.__HELIX_ASSETS__=${safeInlineJson(inlinedAssets)};</script>
 </head>
 <body>
   <div id="stage" aria-label="3D view of DNA, RNA and bacterial gene expression" role="img"></div>
@@ -90,4 +113,8 @@ const html = `<!doctype html>
 
 fs.mkdirSync(path.dirname(outDist), { recursive: true });
 fs.writeFileSync(outDist, html, 'utf8');
-console.log('Built standalone single-file explorer:', outDist, `(${(Buffer.byteLength(html) / 1024).toFixed(1)} KB)`);
+const bytes = Buffer.byteLength(html, 'utf8');
+console.log(
+  `Built standalone single-file explorer: ${outDist} (${bytes} bytes / ${(bytes / 1024).toFixed(1)} KB / ${(bytes / 1e6).toFixed(2)} MB; ${manifestEntries.length} assets inlined)`
+);
+
