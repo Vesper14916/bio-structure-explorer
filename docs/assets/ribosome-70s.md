@@ -203,7 +203,7 @@ The 7ST2 chain fills registers -14 to -4, where 7K00 has no mRNA. Where both ent
 | +3 | 5.195 | 70.4 |
 | +4 | 3.143 | 41.8 |
 
-Interpretation: the two entries hold different mRNA sequences at the E-site codon (7K00 `AAA`, 7ST2 `AUG`) and the mRNA is kinked between codons, so the deviation is large at the codon boundaries (registers -2, -1, +3, +4) and small inside the P-site codon (registers 0 to 2: 1.2, 0.9, 0.8 Å). The track mixes two physical mRNAs; its bases at registers -14 to -4 are those of 7ST2, at -3 to +8 those of 7K00. Consumers that need a gene-specific sequence must replace the bases (the frames are base-independent only approximately). Because the origin of the standard base frame lies about 5 Å from C1′ on the base side, frame origins of consecutive nucleotides are 13 to 16 Å apart at the codon boundaries (C1′ to C1′ 7.8 and 8.8 Å at the 7K00 boundaries -1/0 and 2/3); consecutive-register origin spacing (`source.mrna.originSpacingA`) is 3.2 to 5.9 Å inside the 7K00 codons, 2.81 Å in the synthetic stretches, up to 11.7 and 9.8 Å at the end of the Shine-Dalgarno stretch of 7ST2 (registers -9/-8 and -8/-7), and 16.5 Å across the 7ST2/7K00 junction (-4/-3, the E/P boundary kink).
+Interpretation: the two entries hold different mRNA sequences at the E-site codon (7K00 `AAA`, 7ST2 `AUG`) and the mRNA is kinked between codons, so the deviation is large at the codon boundaries (registers -2, -1, +3, +4) and small inside the P-site codon (registers 0 to 2: 1.2, 0.9, 0.8 Å). The track mixes two physical mRNAs; its bases at registers -14 to -4 are those of 7ST2, at -3 to +8 those of 7K00. Consumers that need a gene-specific sequence must replace the bases (the frames are base-independent only approximately). Because the origin of the standard base frame lies about 5 Å from C1′ on the base side, frame origins of consecutive nucleotides are 13.4 and 16.2 Å apart at the codon boundaries (C1′ to C1′ 7.8 and 8.8 Å at the 7K00 boundaries -1/0 and 2/3); consecutive-register origin spacing (`source.mrna.originSpacingA`) is 3.2 to 5.9 Å inside the 7K00 codons, 2.81 Å in the synthetic stretches, up to 11.7 and 9.8 Å at the end of the Shine-Dalgarno stretch of 7ST2 (registers -9/-8 and -8/-7), and 16.5 Å across the 7ST2/7K00 junction (-4/-3, the E/P boundary kink).
 
 ## 8. Levels of detail
 
@@ -231,9 +231,9 @@ Sites: `decoding` and `ptc`, 12 Å each (the figures in this paragraph are for t
 | L0 triangles, total | 70,000 | 48,064 |
 | L1 beads | 15,000 | 9,978 |
 | L2 atoms | 4,000 | 756 (307 with the decoding site only) |
-| File size | 1,200,000 bytes | 725,027 bytes (with step 3) |
+| File size | 1,200,000 bytes | 724,804 bytes (with step 3 and the stage-lead base fix) |
 
-Largest blocks of the JSON (bytes): `lod0` 577,330; `lod1` 106,482; `source` 11,484; `chains` 6,788; `lod2` 5,187; `tracks` 4,392; `anchors` 1,189.
+Largest blocks of the JSON (bytes, UTF-8, compact): `lod0` 577,330; `lod1` 106,482; `source` 14,541; `lod2` 12,628; `chains` 6,788; `tracks` 4,392; `anchors` 1,398; `paths` 753.
 
 ## 10. Interpretations and deviations
 
@@ -253,7 +253,7 @@ Largest blocks of the JSON (bytes): `lod0` 577,330; `lod1` 106,482; `source` 11,
 Algorithm (design 5.6, `PLAN.md` 7.4), implemented in `computeTunnel` and `tunnelProfile` of `tools/assets/ribosome.mjs`; deterministic (ties broken by voxel index).
 
 1. Grid: 140 Å cube, 1.0 Å voxels (141 per side), centred on `ptc` (O3′ of A76 of 7K00 chain `Z`, ribo frame [74.135, 9.871, -10.315]). Atoms: the 86,447 50S heavy atoms returned by `largeSubunitAtoms` (23S, 5S, L proteins; no ions, waters or ligands). A voxel is blocked when its centre is within 3.0 Å of any of them. The grid stores the exact distance to the nearest atom centre, capped at 10 Å (cap above the 8 Å solvent threshold).
-2. Target: centroid of the Cα atoms of uL23 (chain `s`) and uL29 (chain `x`) = [123.583, -48.627, -55.828]. The nearest unblocked voxel with a solvent-side ray (162 Fibonacci directions, 1 Å samples read from the nearest voxel, all unblocked, every sample beyond 8 Å from the voxel with clearance above the threshold) was searched among the 25,738 unblocked voxels within 30 Å of the centroid. Threshold used: **8 Å (no relaxation needed)**. Target voxel [130.135, -54.129, -55.315] (clearance 3.096 Å, 96.213 Å from `ptc`, 8.597 Å from the centroid).
+2. Target: centroid of the Cα atoms of uL23 (chain `s`) and uL29 (chain `x`) = [123.583, -48.627, -55.828]. The nearest unblocked voxel with a solvent-side ray (162 Fibonacci directions, 1 Å samples read from the nearest voxel, all unblocked, every sample beyond 8 Å from the voxel with clearance above the threshold) was searched among the 25,738 unblocked voxels within 30 Å of the centroid. Threshold used: **8 Å (no relaxation needed)**. Target voxel [130.135, -54.129, -55.315] (clearance 3.096 Å, 96.213 Å from `ptc`, 8.571 Å from the centroid).
 3. Start: nearest unblocked voxel to `ptc` + 5 Å along ribo −x: [69.135, 9.871, -10.315] (clearance 5.352 Å, 5 Å from `ptc`). Dijkstra over 26 neighbours, cost = step length / clearance(destination)². The route has 117 voxels.
 4. Three Chaikin passes (end points kept), resampled at 1.0 Å arc length, then rounded to the 0.05 Å storage step so that the anchors and the recorded numbers refer to the stored points.
 5. Gates: length 75 to 110 Å; clearance of every point beyond the first 6 Å of arc ≥ 3.0 Å, using exact distances to atom centres.

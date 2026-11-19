@@ -7,7 +7,7 @@ Task R3-A2 (stage ST2). Recipe: `tools/assets/trna.mjs`. Tests: `tests/assets-tr
 | Asset | Source | Chain | Entity description | Role in 7K00 | Anticodon (34-36) | Paired codon |
 | --- | --- | --- | --- | --- | --- | --- |
 | `trna-init` | PDB 7K00 (`tools/sources.lock.json`) | `Z` | P-site tRNA-fMet | P site | `CAU` | `AUG` (mRNA chain `X`, author 16-18) |
-| `trna-aa` | PDB 7K00 | `Y` | A-site tRNA-Val | A site | `UAC` | `GUA` (mRNA chain `X`, author 19-21) |
+| `trna-aa` | PDB 7K00 | `Y` | A-site tRNA-val | A site | `UAC` | `GUA` (mRNA chain `X`, author 19-21) |
 
 7K00: "Structure of the Bacterial Ribosome at 2 Angstrom Resolution", electron microscopy, 1.98 Å, revision 2026-09-23, *Escherichia coli*, CC0 (wwPDB). Both files are loaded with `ctx.loadSource('7K00')`; model 1, altloc `.` or `A`, no hydrogens, waters excluded. The recipe checks the entity description, then checks that the reverse complement of the codon read from chain `X` equals the anticodon read from the tRNA (complementarity check, as required by `PLAN.md` R3-A2). Both checks throw on failure.
 
