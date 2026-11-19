@@ -60,17 +60,37 @@ Model note (`PLAN.md` §9.1): Antigravity `invoke_subagent` inherits the parent 
 - **Report:** `docs/reviews/R3-ST1-argon.md`
 - **Outcome:** `PASS WITH MINOR FIXES` — 1 High (`format.js` v2 `lod2.sites` bypass & v1 `lod2` validation), 4 Medium (`tracks.*.synthetic` validation + `tracks.*.sources`, `WorldState.dna.trackBlend` + restored §7.3–§7.4 semantics, ribosome `(partId, chain.class)` L1 fallback, `build-assets.mjs --only` manifest merge), 3 Low (`decodeAsset` part role default, `registry.js` inlined guard, cycle guard & docs). All 8 findings accepted and applied prior to tagging `r3-w0` (`DEC-007`, `DEC-008`).
 
-### Upcoming Stages (ST2–ST10)
+### Stage ST2 — Ribosome and tRNA Assets (Claude C1; tag `r3-st2` at `2d9512c`)
+
+| Task ID | Status | Owner / Executor | Branch | Deliverable & Handoff |
+| :--- | :--- | :--- | :--- | :--- |
+| **R3-A1** | `DONE` | Claude (C1) | `claude/bold-mayer-j248mg` (merged `--no-ff`) | `tools/assets/ribosome.mjs`, `assets/ribosome-70s.asset.json` (v2, 724.8 kB, 48,064 tri, 9,978 beads, 756 L2 atoms, 86.71 Å tunnel), `tests/assets-ribosome.test.mjs`, `docs/assets/ribosome-70s.md`, `docs/evidence/r3/A1/` (6 captures), `docs/handoffs/R3-A1.md`. Rulings: `DEC-009`–`DEC-012`. |
+| **R3-A2** | `DONE` | Claude (C1) | `claude/bold-mayer-j248mg` (merged `--no-ff`) | `tools/assets/trna.mjs`, `assets/trna-init.asset.json` (50.9 kB, span 76.15 Å), `assets/trna-aa.asset.json` (50.9 kB, span 81.71 Å), `tests/assets-trna.test.mjs`, `docs/assets/trna.md`, `docs/evidence/r3/A2/` (6 captures), `docs/handoffs/R3-A2.md`. Ruling: `DEC-013`. |
+
+### Stage ST3 — Kinematics Core and Story Engine (Claude C2; tag `r3-st3`)
+
+| Task ID | Status | Owner / Executor | Branch | Deliverable & Handoff |
+| :--- | :--- | :--- | :--- | :--- |
+| **R3-K1** | `DONE` | Claude (C2) | `claude/bold-mayer-j248mg` (merged `--no-ff`) | `js/kin/frames.js`, `js/kin/track.js`, `js/kin/duplex.js`, `dev/kin-lab.html`, `tests/kin-frames.test.mjs`, `tests/kin-duplex.test.mjs`, `docs/evidence/r3/K1/` (6 captures), `docs/handoffs/R3-K1.md`. Rulings: `DEC-014`–`DEC-016`. |
+| **R3-S2** | `DONE` | Claude (C2) | `claude/bold-mayer-j248mg` (merged `--no-ff`) | `js/sim/gene/timeline.js`, `js/sim/gene/shots.js`, `js/sim/gene/story.js`, pass-through plug points (`transcription.js`, `translation.js`, `coupled.js`), `tests/timeline.test.mjs`, `tests/story.test.mjs`, `docs/handoffs/R3-S2.md`. Rulings: `DEC-017`–`DEC-018`. |
+
+### Stage ST4 — Standalone Gates, Detail Sphere, Express v2 Panel & Gate G1 (Gemini; target tag `r3-w1`)
+
+| Task ID | Status | Owner / Executor | Branch | Deliverable & Handoff |
+| :--- | :--- | :--- | :--- | :--- |
+| **R3-Q1** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/q1` | Standalone inlined assets (`window.__HELIX_ASSETS__`), `?scene=v2` smoke + broken-import diagnostics, `tests/asset-budgets.test.mjs`. |
+| **R3-R1** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/r1` | Detail-sphere cross-fade (`molecule.js`, `cartoon.js`), `AtomGroupLayer` (`atom-groups.js`), `viewer.setDetailFocus`/`setAtomGroups`, `tests/render-detail.browser.mjs`, `docs/evidence/r3/R1/`. |
+| **R3-U1** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/u1` | Express v2 panel (`js/ui/view-story.js`, `ui.js` `?scene=v2` wiring, `css/style.css` §4.8 block), `dev/ui-story.html`, `tests/ui-story.browser.mjs`, `docs/evidence/r3/U1/`. |
+
+### Upcoming Stages (ST5–ST10)
 
 | Stage | Executor | Tasks (merge order) | Base Tag | Target Tag | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ST2** | **Claude (C1)** | `R3-A1` → `R3-A2` (ribosome & tRNA assets) | `r3-w0` | `r3-st2` | `READY` |
-| **ST3** | **Claude (C2)** | `R3-K1` → `R3-S2` (duplex/track kinematics & story engine) | `r3-st2` | `r3-st3` | `PENDING` |
-| **ST4** | Gemini | Intake ST2 & ST3; `R3-Q1` → `R3-R1` → `R3-U1`; Gate **G1** | `r3-st3` | `r3-w1` | `PENDING` |
 | **ST5** | Gemini | `R3-A4` → `R3-A3` → `R3-K2` → `R3-R2` | `r3-w1` | `r3-st5` | `PENDING` |
 | **ST6** | Gemini | `R3-R3` → `R3-U2` → `R3-S3` → `R3-INT2`; Gate **G2** | `r3-st5` | `r3-w2` | `PENDING` |
 | **ST7** | **Claude (C3)** | `R3-K3` → `R3-S4` (translation choreography) | `r3-w2` | `r3-st7` | `PENDING` |
 | **ST8** | Gemini | Intake ST7; `R3-R4` → `R3-Q2` → `R3-U3` → `R3-V2` → `R3-INT3`; Gate **G3** | `r3-st7` | `r3-w3` | `PENDING` |
 | **ST9** | Gemini | `R3-P1` → `R3-D1` → `R3-S5` → `R3-V1` → `R3-INT4`; Gate **G4** | `r3-w3` | `r3-w4` | `PENDING` |
 | **ST10** | Gemini + Human | `R3-Q3` → `R3-INT5` + Human visual acceptance; Gate **G5** | `r3-w4` | `v1.0.0` | `PENDING` |
+
 
