@@ -89,7 +89,7 @@ export function shotSegments(timeline) {
 /**
  * Resolve the active shot state for a chapter at story time `t`, handling mid-chapter shot
  * switches. Uses `chapter.shots` (`[{ id, t0 }]`, attached by `buildTimeline`) when present, else the
- * single segment `chapter.shot`. `from` is the previous segment id (null for the first) and
+ * single segment `chapter.shot`. `from` is the previous segment id; for a chapter's first segment it is `segments[0].from` (the previous chapter's last shot, set by `buildTimeline`; null for the first chapter) and
  * `blend = clamp((t - segment.t0) / 1.2)`.
  *
  * @param {object} chapter - Active Chapter descriptor.
@@ -101,5 +101,5 @@ export function resolveChapterShot(chapter, t) {
   let i = 0;
   for (let k = 1; k < segs.length; k++) if (t >= segs[k].t0) i = k;
   const u = (t - segs[i].t0) / SHOT_BLEND_SECONDS;
-  return { id: segs[i].id, from: i > 0 ? segs[i - 1].id : null, blend: u < 0 ? 0 : u > 1 ? 1 : u };
+  return { id: segs[i].id, from: i > 0 ? segs[i - 1].id : (segs[0].from != null ? segs[0].from : null), blend: u < 0 ? 0 : u > 1 ? 1 : u };
 }

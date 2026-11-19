@@ -477,7 +477,7 @@ test('shots: chapter 14 and 15 segments and resolveChapterShot', () => {
   assert.deepEqual(shotSegments(cpl).map(s => s.length), Array(12).fill(1));
 
   const t24 = c14.shots[1].t0;
-  assert.deepEqual(resolveChapterShot(c14, c14.t0), { id: 'ribo-tunnel', from: null, blend: 0 });
+  assert.deepEqual(resolveChapterShot(c14, c14.t0), { id: 'ribo-tunnel', from: 'ribo-side', blend: 0 });
   assert.equal(resolveChapterShot(c14, t24 - 0.01).id, 'ribo-tunnel');
   let r = resolveChapterShot(c14, t24);
   assert.deepEqual([r.id, r.from, r.blend], ['ribo-exit', 'ribo-tunnel', 0]);

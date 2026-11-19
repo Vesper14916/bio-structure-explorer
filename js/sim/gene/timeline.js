@@ -498,5 +498,11 @@ export function buildTimeline(scenario, assets, { mode = 'sequential', seed = 19
   };
   const segs = shotSegments(timeline);
   for (const ch of chapters) ch.shots = segs[ch.index];
+  // The first segment of a chapter records the shot the camera comes from (the previous chapter's last shot),
+  // so `shot.from` is defined across chapter boundaries; null only for the first chapter.
+  for (let i = 0; i < chapters.length; i++) {
+    const prev = i > 0 ? chapters[i - 1].shots : null;
+    chapters[i].shots[0].from = prev ? prev[prev.length - 1].id : null;
+  }
   return timeline;
 }

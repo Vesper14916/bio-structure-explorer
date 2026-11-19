@@ -3,11 +3,13 @@
  * Round 3 coupled transcription-translation mode stub (PLAN.md §6.4, §8.1, task R3-S5).
  * Builds and evaluates the 12-chapter bacterial expressome timeline.
  */
+import { buildTimeline } from './timeline.js';
 
 /**
  * Build the 12-chapter timeline and sorted event list for Coupled (`coupled`) mode.
  *
  * Contract (PLAN.md §6.4, §10 R3-S5):
+ * - Currently delegates to `buildTimeline(..., { mode: 'coupled' })` (S2); S5 may replace it.
  * - Uses coupling distance `D` from the 6ZTJ expressome asset.
  * - Chapters 1–5 match Step by step mode; chapters 6–12 model early ribosome binding,
  *   NusG expressome locking, coupled elongation (3 nt per codon), termination, and finale.
@@ -18,7 +20,7 @@
  * @returns {{ duration: number, chapters: object[], events: object[], meta: object }} Coupled timeline structure.
  */
 export function buildCoupledTimeline(scenario, assets, opts = {}) {
-  throw new Error('not implemented: buildCoupledTimeline');
+  return buildTimeline(scenario, assets, { ...opts, mode: 'coupled' });
 }
 
 /**
@@ -34,5 +36,5 @@ export function buildCoupledTimeline(scenario, assets, opts = {}) {
  * @returns {object} Updated `out` WorldState.
  */
 export function contributeCoupled(story, t, out) {
-  throw new Error('not implemented: contributeCoupled');
+  return out; // pass-through until S5 (task R3-S5) replaces this plug point
 }
