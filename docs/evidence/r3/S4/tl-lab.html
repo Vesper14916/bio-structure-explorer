@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Translation Lab (R3-S4 evidence harness)</title>
+<link rel="stylesheet" href="../../../../css/style.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #03060d; color: #dfe9f7; overflow: hidden; font: 13px system-ui, sans-serif; }
+  #stage { position: fixed; inset: 0; }
+  #cap { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 5; max-width: 760px; width: calc(100vw - 32px); box-sizing: border-box;
+    padding: 9px 13px; border-radius: 8px; background: rgba(8, 14, 28, .82); border: 1px solid #1d2c4a; pointer-events: none; }
+  #cap b { display: block; font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: #a99bff; margin-bottom: 3px; }
+  #hud { position: fixed; left: 12px; bottom: 12px; z-index: 5; font: 11px/1.5 ui-monospace, monospace; white-space: pre; background: rgba(6, 11, 22, .72);
+    padding: 7px 9px; border-radius: 6px; border: 1px solid #1b2b48; pointer-events: none; }
+  #err { position: fixed; left: 12px; top: 90px; z-index: 10; color: #ff8a8a; font: 12px ui-monospace, monospace; white-space: pre-wrap; }
+</style>
+<script type="importmap">{"imports":{"three":"../../../../js/vendor/three.module.min.js","three/addons/":"../../../../js/vendor/addons/"}}</script>
+</head>
+<body>
+<div id="stage"></div>
+<div id="cap"><b id="capT">Loading…</b><span id="capX"></span></div>
+<div id="hud"></div>
+<div id="err"></div>
+<script type="module">
+// Evidence harness for task R3-S4 (not part of the app): runs the real StoryScene pipeline (stateAt, poser,
+// camera rails, labels, FX) with the translation assets and without the W2 chapter-7 clamp (maxTime 1e9 is capped to story.duration).
+// Query: ?t=<seconds> or ?chapter=<1..16>&frac=<0..1>; &quality=low|medium|high.
+import { TRUE_SCALE_GENE_CONSTRUCT } from '../../../../js/science/index.js';
+import { loadAssets } from '../../../../js/assets/registry.js';
+import { createViewer } from '../../../../js/render/viewer.js';
+import { createStoryScene } from '../../../../js/scene/story-scene.js';
+
+const q = new URLSearchParams(location.search);
+const err = document.getElementById('err');
+const show = e => { err.textContent += `${(e && e.stack) || e}\n`; console.error(e); };
+addEventListener('error', e => show(e.error || e.message));
+addEventListener('unhandledrejection', e => show(e.reason));
+try {
+  const ids = ['rnap-holo', 'rnap-ec', 'nusg', 'ribosome-70s', 'trna-init', 'trna-aa', 'ef-tu', 'ef-g', 'if1', 'if2', 'if3', 'rf1'];
+  const assets = await loadAssets(ids, { baseUrl: new URL('../../../../assets/', import.meta.url).href });
+  const viewer = createViewer(document.getElementById('stage'), { quality: q.get('quality') || 'high' });
+  let st = null;
+  const scene = createStoryScene(viewer, {
+    scenario: TRUE_SCALE_GENE_CONSTRUCT, assets, mode: 'sequential', tier: q.get('quality') || 'high',
+    maxTime: 1e9, onStateChange: s => { st = s; },
+  });
+  const story = scene.story;
+  function render() {
+    const w = scene.world;
+    const ch = w.chapter;
+    document.getElementById('capT').textContent = `${String(ch.index + 1).padStart(2, '0')} / 16 · ${ch.title} · shot ${w.shot.id}`;
+    document.getElementById('capX').textContent = w.caption;
+    document.getElementById('hud').textContent =
+      `t = ${w.t.toFixed(2)} s · P-site codon ${w.ribosome.codon.toFixed(2)} · peptide ${w.peptide.length} (${w.peptide.attach}, release ${w.peptide.release.toFixed(2)})\n` +
+      `machines: ${w.machines.map(m => m.id).join(', ')}\n` +
+      `tRNAs: ${w.trnas.map(x => `${x.aa || 'tRNA'}#${x.codon} ${x.from}→${x.site} ${(x.blend * 100).toFixed(0)}% pair ${x.pair.toFixed(2)}`).join(' · ')}`;
+  }
+  const t = q.has('t') ? parseFloat(q.get('t'))
+    : (() => { const c = story.chapters[Math.max(0, Math.min(15, (parseInt(q.get('chapter') || '8', 10) || 8) - 1))]; return c.t0 + (parseFloat(q.get('frac') || '0.5')) * (c.t1 - c.t0); })();
+  scene.seek(t, { instantCamera: true });
+  render();
+  viewer.on?.('frame', () => { if (scene.state().playing) render(); });
+  window.__tlLab = { scene, viewer, story, render, seek: (x) => { scene.seek(x, { instantCamera: true }); render(); } };
+  window.tlLabReady = true;
+} catch (e) { show(e); }
+</script>
+</body>
+</html>
