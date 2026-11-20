@@ -30,6 +30,11 @@
       "id": "trna-aa",
       "file": "trna-aa.asset.json",
       "synthetic": false
+    },
+    {
+      "id": "nusg",
+      "file": "nusg.asset.json",
+      "synthetic": false
     }
   ]
 }
