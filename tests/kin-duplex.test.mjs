@@ -352,8 +352,8 @@ test('trackBlend: holo and ec tracks are slerped per register (synthetic holo co
   const assets = { 'rnap-ec': EC, 'rnap-holo': holo };
   const base = pose(45, 1, { trackBlend: 1, assets });
   const alone = pose(45, 1, { assets: { 'rnap-ec': EC } });
-  const real = pose(45, 1, { trackBlend: 0 }); // real holo asset has no tracks: ec tracks
-  for (let i = 0; i < base.length; i++) { assert.equal(base[i], alone[i]); assert.equal(base[i], real[i]); }
+  const noHoloTracks = pose(45, 1, { trackBlend: 0, assets: { 'rnap-ec': EC, 'rnap-holo': { ...HOLO, tracks: {} } } }); // holo without tracks falls back to ec tracks
+  for (let i = 0; i < base.length; i++) { assert.equal(base[i], alone[i]); assert.equal(base[i], noHoloTracks[i]); }
   const zero = pose(45, 1, { trackBlend: 0, assets });
   const half = pose(45, 1, { trackBlend: 0.5, assets });
   const g = 45 + 3; // register 3 (inside the track)

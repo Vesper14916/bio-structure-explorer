@@ -185,4 +185,77 @@ Branch: `main` (tag `r3-w1`). Scope: ST2 intake (`r3-st2` at `2d9512c`, `R3-A1`,
 - Physical iOS/Android touch gestures (tested under Playwright `iPhone 13` emulation).
 - Live 3D `StoryScene` playback, ST5 factor assets (`A3`), RNAP v2 (`A4`), transcription choreography (`S3`), and translation choreography (`S4`) — scheduled for ST5–ST10.
 
+---
+
+## 7. Round 3 Stage ST5 exit check (`r3-st5`, 2026-11-20)
+
+Branch: `main` (tag `r3-st5`). Scope: Chief `DEC-011` pre-ST5 helper update (`50716d1`, `tools/lib/match.mjs` `{ key: 'authSeq', matchComp: true }`), ST5 tasks merged in exact `PLAN.md` §11 order (`--no-ff`) `R3-A4 → R3-A3 → R3-K2 → R3-R2`, ST5 Argon independent review (`docs/reviews/R3-ST5-argon.md`), Chief rulings `DEC-022`–`DEC-026`, `docs/ASSETS.md` rows `A07`–`A08` (v2) & `A12`–`A18`, updated `tests/stubs.test.mjs` and v2 asset test adaptations, and rebuilt `dist/helix-standalone.html`.
+
+**Stage ST5 Exit Verdict: `PASS`**
+
+### 7.1 Automated Gates
+
+- **Asset pipeline reproducibility (`node tools/build-assets.mjs --check --quiet`):** Exit `0` — **`identical`** across all **13 committed files**: `rf1`, `ef-tu`, `ef-g`, `if1`, `if2`, `if3`, `nusg`, `ribosome-70s`, `rnap-ec`, `rnap-holo`, `trna-init`, `trna-aa`, and `assets/manifest.json`.
+- **Syntax check & unit tests (`npm test`):**
+  ```text
+  checked 63 files, 0 failed
+  ℹ tests 272
+  ℹ suites 0
+  ℹ pass 272
+  ℹ fail 0
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 0
+  ℹ duration_ms 15100.7623
+  ```
+  Covers `tests/assets-rnap-v2.test.mjs` (7 tests), `tests/assets-factors.test.mjs` (32 tests), `tests/kin-chain.test.mjs` (11 tests), `tests/asset-budgets.test.mjs` (all 13 manifest assets + standalone bundle), `tests/tools-superpose.test.mjs` (`DEC-011` `authSeq`/`matchComp`), `tests/stubs.test.mjs` (15 of 23 Round 3 modules now implemented), plus all pre-existing science, sim, asset, story, and kinematics tests.
+- **Browser smoke gate (`npm run smoke`):**
+  ```text
+  SMOKE PASS
+  ```
+  Verified `index.html` and offline `dist/helix-standalone.html` (**4,513,409 B / 4.51 MB ≤ 7.5 MB**; all **13 assets** inlined in `window.__HELIX_ASSETS__`; `?mode=express&scene=v2` decodes all 12 real assets with zero network requests).
+- **Actor extensions, FX timing & 200-crowder browser suite (`node tests/render-actors.browser.mjs`):**
+  ```text
+  RENDER ACTORS PASSED
+  ```
+  - Test 1: all Wave 1 assets load with 0 errors; `fixture-machine` `path:channel` diff 0.63%; `ribosome-70s` `path:tunnel` (88 pts) rendered.
+  - Test 2: `DEC-019` L3 `chainColor` guard verified for `rf1`/`ef-tu`/`ef-g`/`if2`/`nusg` & RNAP; per-part sigma transform diff 2.89% & hide diff 0.98%; `pickable: false -> null`; `setFar` `12000 → 20000 → 12000`; multi-site L2 (`decoding` & `ptc`) verified.
+  - Test 3: real-time `FxLayer` timing verified within ±1 frame (pulse peak `253.5 ms` `scale=1.323`, end `520.2 ms` @ 266.7 ms/frame; GTP fade-in `252.7 ms`, steady hold @ `1.0`, fade-out `1369.3 ms`, end `1619.4 ms` @ 250.1 ms/frame); `fx-pulse-gtp.jpg` pulse diff `0.23%` & `GTP → GDP` visible.
+  - Test 4: **200 crowders** verified via `renderer.info.render.calls` delta (`200 rnap-ec = +1`, `200 ribosome-70s = +2`, `200 trna-aa = +2` — strictly 1 draw call per asset part); crowder `pick = null`; GPU geometries restored cleanly (`8 → 8`, standalone `0`).
+
+### 7.2 ST5 Assets & §7.5 Budgets (All 12 Real Assets Validated)
+
+| Asset | Format | L0 tris (budget) | L1 beads (budget) | L2 atoms (budget) | File size (budget) | Superposition RMSD / Kept (`DEC-010`) |
+| --- | :---: | ---: | ---: | ---: | ---: | --- |
+| `rnap-ec` | v2 | 7,596 (preserved) | 3,174 (preserved) | 314 (preserved) | 147.4 kB (≤ 220 kB) | `7YPA` 1.161 Å / 72.9%; `6ZTJ` RNAP 1.021 Å / 82.2%, ribo 0.625 Å / 98.3% |
+| `rnap-holo` | v2 | 9,964 (preserved) | 3,685 (preserved) | 291 (preserved) | 184.1 kB (≤ 220 kB) | `6CA0 → 6C9Y` 1.014 Å / 83.9% (`DEC-023`) |
+| `nusg` | v2 | 2,600 (≤ 8k) | 161 (≤ 900) | — | 35.8 kB (≤ 120 kB) | `6ZTJ` RNAP 1.021 Å / 82.2% |
+| `rf1` | v2 | 2,876 (≤ 8k) | 349 (≤ 900) | 70 (≤ 400) | 44.7 kB (≤ 120 kB) | `8FZH` 23S 1.408 Å / 79.7% (`DEC-022`) |
+| `ef-tu` | v2 | 2,060 (≤ 8k) | 393 (≤ 900) | — | 33.0 kB (≤ 120 kB) | `5WE4` 16S+23S 0.606 Å / 96.9% |
+| `ef-g` | v2 | 3,624 (≤ 8k) | 703 (≤ 900) | — | 55.8 kB (≤ 120 kB) | `7PJV` 23S 0.777 Å / 94.6% (`DEC-010`) |
+| `if1` | v2 | 1,140 (≤ 8k) | 72 (≤ 900) | — | 18.5 kB (≤ 120 kB) | `9ZN2` 16S+23S 1.291 Å / 50.7% |
+| `if2` | v2 | 3,932 (≤ 8k) | 595 (≤ 900) | — | 57.8 kB (≤ 120 kB) | `9ZN2` 16S+23S 1.291 Å / 50.7% |
+| `if3` | v2 | 1,540 (≤ 8k) | 102 (≤ 900) | — | 23.4 kB (≤ 120 kB) | `9FDA` 16S 0.985 Å / 93.4% |
+| **All 12 real assets** | v2 | — | — | — | **1.46 MB** (≤ 3.0 MB) | All pass |
+| `dist/helix-standalone.html` | — | — | — | — | **4.51 MB** (≤ 7.5 MB) | 13 assets inlined |
+
+### 7.3 ST5 Argon Independent Review (`docs/reviews/R3-ST5-argon.md`)
+
+- **Window (UTC):** `2026-11-20T02:03:57Z` – `2026-11-20T02:09:04Z` (5 min 7 s / 30 min budget).
+- **Verdict:** `PASS WITH MINOR NOTES` (0 High, 0 Medium, 5 Low).
+- Independently reproduced all 6 A3 superpositions and `6ZTJ` chain `AV` coupling distance `D = 53 - 16 + 1 = 38` nt (0 unmodelled in `[16, 53]`, zero off-by-one discrepancy with `24 + D` in `js/sim/gene/timeline.js`, 0 clashes at `expressome`). Chief ratified `DEC-022`–`DEC-024`, fixed Argon doc notes L1 and L2 on `main`, and flagged L3 (`remainingCodons = 0` at `D = 38`, coupled duration `121.30 s`) for ST9.
+
+### 7.4 Visual Evidence Audited by Chief (17 2× JPEG q90 Captures)
+
+- `docs/evidence/r3/A4/` (3 captures): `rnap-ec-tracks-anchors.jpg`, `rnap-holo-rpo-tracks.jpg` (visible open promoter bubble), `nusg-l1-anchors.jpg` (`#15aabf`, `ntd`/`ctd` lobes).
+- `docs/evidence/r3/A3/` (6 captures): `rf1-l1-l2.jpg` (`#ff6b6b` + `ggq` L2), `ef-tu-l1.jpg` (`#f783ac`), `ef-g-l1.jpg` (`#a9e34b`), `if1-l1.jpg` (`#d0bfff`), `if2-l1.jpg` (`#b197fc`), `if3-l1.jpg` (`#9775fa`).
+- `docs/evidence/r3/K2/` (4 captures): `free-chain-mrna.jpg`, `terminator-hairpin.jpg` (8-bp A-form stem + WC H-bonds + GAAA loop), `peptide-tunnel-ribosome.jpg`, `peptide-released-closeup.jpg`.
+- `docs/evidence/r3/R2/` (4 captures): `actor-card-ribosome-tunnel.jpg` (`paths.tunnel` + multi-site L2 cutaway), `part-release-sigma.jpg`, `fx-pulse-gtp.jpg` (`GTP → GDP` + bond pulse), `crowd-200-instances.jpg` (200 fog-blended translucent crowders around central 70S ribosome).
+
+### 7.5 Not Verified in ST5
+
+- Hardware-GPU desktop/phone frame times (all ST5 browser tests ran on headless Chromium SwiftShader).
+- Live `StoryScene` chapter playback (ST6 `R3-R3` → `R3-U2` → `R3-S3` → `R3-INT2`, Gate G2).
+
+
 

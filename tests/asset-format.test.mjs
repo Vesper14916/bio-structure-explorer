@@ -10,6 +10,20 @@ import {
 const fixture = JSON.parse(fs.readFileSync(new URL('../assets/fixture-machine.asset.json', import.meta.url), 'utf8'));
 const rnapEc = JSON.parse(fs.readFileSync(new URL('../assets/rnap-ec.asset.json', import.meta.url), 'utf8'));
 
+function makeV1Sample(v2Asset) {
+  const v1 = structuredClone(v2Asset);
+  v1.version = 1;
+  delete v1.paths;
+  for (const p of v1.parts) delete p.role;
+  if (v1.lod2 && Array.isArray(v1.lod2.sites) && v1.lod2.sites.length) {
+    v1.lod2.anchor = v1.lod2.sites[0].anchor;
+    v1.lod2.radius = v1.lod2.sites[0].radius;
+    delete v1.lod2.sites;
+  }
+  return v1;
+}
+const v1Sample = makeV1Sample(rnapEc);
+
 test('positions round-trip within half a quantisation step', () => {
   const xyz = [0, 1.234, -77.77, 512.3, -1000.01, 3.38];
   const back = decodePositions(encodePositions(xyz));
@@ -42,14 +56,14 @@ test('v2 fixture asset validates and decodes paths, multi-site lod2, and part ro
 });
 
 test('v1 assets remain valid and decode with normalized lod2.sites and empty paths', () => {
-  assert.equal(rnapEc.version, 1);
-  assert.deepEqual(validateAsset(rnapEc), []);
-  const d = decodeAsset(rnapEc);
+  assert.equal(v1Sample.version, 1);
+  assert.deepEqual(validateAsset(v1Sample), []);
+  const d = decodeAsset(v1Sample);
   assert.equal(d.version, 1);
   assert.deepEqual(d.paths, {});
   assert.equal(d.lod2.sites.length, 1);
-  assert.equal(d.lod2.sites[0].anchor, rnapEc.lod2.anchor);
-  assert.equal(d.lod2.sites[0].radius, rnapEc.lod2.radius);
+  assert.equal(d.lod2.sites[0].anchor, v1Sample.lod2.anchor);
+  assert.equal(d.lod2.sites[0].radius, v1Sample.lod2.radius);
   assert.equal(d.parts[0].role, 'body');
 });
 
@@ -88,7 +102,7 @@ test('validator rejects broken v1 and v2 assets', () => {
   assert.ok(validateAsset(v2EmptySites).some(m => m.includes('non-empty array')));
 
   // v1 invalid lod2.anchor / lod2.radius rejected
-  const v1BadLod2 = structuredClone(rnapEc);
+  const v1BadLod2 = structuredClone(v1Sample);
   v1BadLod2.lod2.anchor = 'missingAnchor';
   v1BadLod2.lod2.radius = 0;
   const v1Problems = validateAsset(v1BadLod2);

@@ -155,6 +155,52 @@ This log records accepted contract changes, pre-approved fallbacks from `PLAN.md
   3. **Closed-CSS design gaps:** Accepted all three as non-blocking for Gate G1 without mutating §4.8 CSS: (a) `"Step by step"` pill overflowing its 50% `.seg-thumb` by ~6–10 px beside `Speed` inside `div.group.row-between` (deferred to ST6 `R3-U2` / ST10 `R3-Q3` polish if a layout adjustment is approved); (b) inline `ol` list reset and `.chapter-row` `width: 100%` in `js/ui/view-story.js`; (c) mobile `PEEK_H = 112` showing line 1 of caption until expanded.
 - **Impact:** Freezes the `view-story.js` ↔ `StoryScene` toggle interface ahead of ST5 `R3-R2`, fixes `?mode=express&scene=v2` legend rendering immediately, and preserves strict §4.8 CSS compliance for Gate G1.
 
+## DEC-022: `8FZH` (`rf1`) `23S`-only superposition scope (extending `DEC-010`) and `ef-g` anchor definitions
+
+- **Date:** 2026-11-20
+- **Source:** `docs/handoffs/R3-A3.md`, `docs/assets/factors.md`, ST5 Argon independent review (`docs/reviews/R3-ST5-argon.md` §§1.2–1.4)
+- **Context:** In `8FZH` (`rf1`), a +2.68% isotropic cryo-EM magnification offset relative to `7K00` pushes outer P atoms past the 2.0 Å iterative cutoff under `16S+23S`, leaving `2,069 / 4,272 = 48.4%` kept (failing `DEC-010` `≥ 50%`). Rigid `23S`-only superposition retains `2,195 / 2,753 = 79.7%` at `1.408 Å` RMSD, agrees with `16S+23S` within `0.738 Å` Cα RMSD, places `ggq` `5.961 Å` from `ptc`, and improves `codonReader (PAT)` → `siteA` codon alignment to `7.610 Å` (≤ 10 Å). Separately, *E. coli* EF-G (`7PJV` chain `x`, Met1 cleaved) carries a canonical Ala16 substitution in its Walker A P-loop (`AHIDAGKT`, author 16–23) and standard Domain IV core span `481–603` (UniProt P0A6M8 `482–604`).
+- **Decision:**
+  1. **Ratified `8FZH` (`rf1`) `23S`-only rigid superposition** (extending `DEC-010`; no isotropic rescaling). `9ZN2` (`if1`/`if2`) keeps literal `16S+23S` (`50.7%` kept, `1.291 Å` RMSD), preserving exact experimental `if1`–`if2` relative geometry (`0` clashes on `if2`, `if1` `12.290 Å` from `decoding`).
+  2. **Ratified `ef-g` anchors:** `gDomain` = `AHIDAGKT` (author 16–23, `[GA]xxxxGK[ST]`, `15.313 Å` from 23S SRL, `6.576 Å` from GDP) and `domainIV` = author `481–603` (123 Cα atoms).
+- **Impact:** All six ST5 factor assets (`rf1`, `ef-tu`, `ef-g`, `if1`, `if2`, `if3`) pass both `DEC-010` gates and biological placement gates cleanly.
+
+## DEC-023: `6CA0` as RPo open-promoter DNA track source for `rnap-holo`
+
+- **Date:** 2026-11-20
+- **Source:** `docs/handoffs/R3-A4.md`, `docs/assets/rnap.md`, ST5 Argon independent review (`docs/reviews/R3-ST5-argon.md` §2.3)
+- **Context:** `PLAN.md` §§7.2 and 10 mention "6C9Y RPo DNA tracks", but `6C9Y.cif` is the DNA-free σ⁷⁰ holoenzyme (protein chains `A–F` only). The companion open-promoter complex from the same study (Narayanan et al., 2018) is PDB `6CA0` (already pinned in `tools/sources.lock.json`).
+- **Decision:** **Ratified.** `rnap-holo` keeps `6C9Y` as its primary protein structure (preserving pre-ST5 L0, L1, and L2 byte-for-byte) and derives its RPo `template`/`nontemplate` tracks (`−45..+11`, open bubble `−11..+2`, max L1 penetration `0.95 Å ≤ 1.0 Å`) from `6CA0` superposed onto `6C9Y` on `β+β′` Cα (`83.9%` kept, `1.014 Å` RMSD ≤ 2.5 Å).
+- **Impact:** Supplies real open-promoter DNA tracks for chapters 2–5 without modifying `rnap-holo`'s existing protein geometry.
+
+## DEC-024: Exact coupling distance `D = 38` nt (`PLAN.md` §13 pre-approved fallback)
+
+- **Date:** 2026-11-20
+- **Source:** `docs/handoffs/R3-A4.md`, `docs/assets/rnap.md` §6.2, ST5 Argon independent review (`docs/reviews/R3-ST5-argon.md` §§2.1–2.2, L3)
+- **Context:** Independent verification of `6ZTJ.cif` chain `AV` (continuous residues `14..53`, `label_seq_id === auth_seq_id`, 0 unmodelled in `[16, 53]`) confirms P-site `AUG` at `AV:16..18` and RNAP RNA 3′ end at `AV:53`, giving inclusive count `D = 53 - 16 + 1 = 38` nt (matching the `6ZTJ` PDB title verbatim). Although 2 nt below the illustrative 40–60 nt estimate in `PLAN.md` §6.4, `ribosome-70s` at `expressome` has zero steric clash with `rnap-ec` L1 (`7.389 Å`) or 248-bp DNA (`18.15 Å`), and `js/sim/gene/timeline.js` agrees algebraically with `24 + D = 62` nt with zero off-by-one discrepancy (`cycles = 39`, `remainingNt = 0`, `remainingCodons = 0`, total coupled duration `121.30 s`).
+- **Decision:** **Ratified `D = 38` nt** per `PLAN.md` §13 (*"Use the computed `D` anyway if there is no clash"*), with zero synthetic offset, stored in `rnap-ec.source.coupling.D`. Flag Argon note L3 (`remainingCodons = 0` in ch 10–11, total duration `121.30 s`) for ST9 (`R3-S5` / `R3-V1`) caption verification.
+- **Impact:** Freezes experimental `D = 38` and `expressome` / `coupledMrna` geometry for ST9 coupled mode.
+
+## DEC-025: Backwards-compatible helper exports in R3-K2 kinematics (`chain.js`, `hairpin.js`)
+
+- **Date:** 2026-11-20
+- **Source:** `docs/handoffs/R3-K2.md`
+- **Context:** `R3-K2` preserved all contracted W0 exports (`buildFreeChain`, `poseFreeChain`, `poseHairpin`, `posePeptideOnPath`) and added optional 4th argument `opts` on `poseHairpin(anchor, foldProgress, outFrames, opts = {})` plus named helper exports `generateTailControlPoints` (`js/kin/chain.js`) and `hairpinPairFold` (`js/kin/hairpin.js`) to support ST6 `R3-S3` progressive hairpin folding and deterministic mRNA tails.
+- **Decision:** **Accepted.** Recorded as backwards-compatible additions available to ST6 `R3-S3` and ST7 `R3-K3`/`R3-S4`.
+- **Impact:** Zero breaking contract change; simplifies ST6 transcription choreography.
+
+## DEC-026: R3-R2 per-part transform frame and crowder `transforms` buffer layout
+
+- **Date:** 2026-11-20
+- **Source:** `docs/handoffs/R3-R2.md` (Design gaps & Requests)
+- **Context:** `PLAN.md` §8.2–§8.4 leaves the frame convention of `spec.parts[partId].transform` and the 16-float matrix ordering of `viewer.setCrowd([{ assetId, transforms: Float32Array }])` implicit.
+- **Decision:**
+  1. **Per-part transform frame:** `spec.parts[partId].transform` (`{ o, R }`) is applied in the **actor's local frame** (prior to the actor's world transform) across that part's L0 mesh, L1 beads, and L2 atoms/bonds, keeping release offsets (e.g. σ⁷⁰ release in ST6 `R3-S3`) independent of actor world orientation.
+  2. **Crowder buffer layout:** `transforms: Float32Array` holds 16 **column-major Three.js `Matrix4`** floats per instance (`THREE.Matrix4.toArray(buf, i * 16)`), matching `THREE.InstancedMesh.instanceMatrix` directly with zero per-frame transpose.
+- **Impact:** Freezes exact conventions for ST6 `R3-S3` (`part.release`) and ST8 `R3-R4` (`js/scene/crowd.js`).
+
+
+
 
 
 

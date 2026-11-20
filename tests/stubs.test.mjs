@@ -32,9 +32,9 @@ const STUBS = [
   },
   { path: 'js/kin/duplex.js', implemented: true, fns: ['poseDuplex'] }, // DEC-005: implemented in R3-K1 step 2; behaviour in tests/kin-duplex.test.mjs
   { path: 'js/kin/track.js', implemented: true, fns: ['sampleTrack', 'blendTrackFrame'] },
-  { path: 'js/kin/chain.js', fns: ['buildFreeChain', 'poseFreeChain'] },
-  { path: 'js/kin/hairpin.js', fns: ['poseHairpin'] },
-  { path: 'js/kin/peptide-path.js', fns: ['posePeptideOnPath'] },
+  { path: 'js/kin/chain.js', implemented: true, fns: ['buildFreeChain', 'poseFreeChain'] }, // DEC-005: implemented in R3-K2; behaviour in tests/kin-chain.test.mjs
+  { path: 'js/kin/hairpin.js', implemented: true, fns: ['poseHairpin'] }, // DEC-005: implemented in R3-K2; behaviour in tests/kin-chain.test.mjs
+  { path: 'js/kin/peptide-path.js', implemented: true, fns: ['posePeptideOnPath'] }, // DEC-005: implemented in R3-K2; behaviour in tests/kin-chain.test.mjs
   { path: 'js/kin/trna.js', fns: ['poseTrnaAnticodon', 'poseAminoacylEnd'] },
   { path: 'js/kin/ntp.js', fns: ['poseNtp', 'posePpi'] },
   { path: 'js/kin/pose.js', fns: ['createPoser'] },
@@ -47,7 +47,7 @@ const STUBS = [
 
   // Render (js/render/)
   { path: 'js/render/atom-groups.js', implemented: true, browserOnly: true, classes: ['AtomGroupLayer'] }, // DEC-005: implemented in R3-R1 (imports 'three' via browser importmap); behaviour in tests/render-detail.browser.mjs
-  { path: 'js/render/fx.js', classes: ['FxLayer'] },
+  { path: 'js/render/fx.js', implemented: true, browserOnly: true, classes: ['FxLayer'] }, // DEC-005/DEC-020: implemented in R3-R2 (imports 'three' via browser importmap); behaviour in tests/render-actors.browser.mjs
 
   // UI (js/ui/)
   { path: 'js/ui/view-story.js', implemented: true, fns: ['createStoryView'] }, // DEC-005: implemented in R3-U1; behaviour in tests/ui-story.browser.mjs

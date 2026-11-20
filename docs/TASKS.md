@@ -91,22 +91,31 @@ Model note (`PLAN.md` §9.1): Antigravity `invoke_subagent` inherits the parent 
 - **Report:** `docs/reviews/R3-ST4-argon.md`
 - **Outcome:** `PASS WITH MINOR NOTES` (0 High, 0 Medium, 3 Low) — recommended Gate G1 PASS. Recorded `DEC-019` clarifying Gate G1 colour sampling on resolved albedo / unlit renders or ACES-matched reference swatches (L1), flagging the `js/render/actors.js:chainColor()` RNAP substring watch item for ST5 factors (L3), and noting optional test-hardening items (L2).
 
-### Stage ST5 — RNAP v2 & NusG, Factors, Free Chains/Hairpin/Peptide Path, and Actor/FX Extensions (Gemini; target tag `r3-st5`)
+### Stage ST5 — RNAP v2 & NusG, Factors, Free Chains/Hairpin/Peptide Path, and Actor/FX Extensions (Gemini; tag `r3-st5`)
 
-Base: `r3-w1` + Chief `DEC-011` `tools/lib/match.mjs` update. Merge order (`PLAN.md` §11): `R3-A4 → R3-A3 → R3-K2 → R3-R2`.
+Base: `r3-w1` + Chief `DEC-011` `tools/lib/match.mjs` update (`50716d1`). Merged in exact `PLAN.md` §11 order (`--no-ff`): `R3-A4 → R3-A3 → R3-K2 → R3-R2`.
 
 | Task ID | Status | Owner / Executor | Branch | Deliverable & Handoff |
 | :--- | :--- | :--- | :--- | :--- |
-| **R3-A4** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/a4` | `tools/assets/rnap.mjs` (additions only), `tools/assets/nusg.mjs`, `assets/rnap-ec.asset.json` (`ntpEntry`, `hairpin`, `expressome`, `coupledMrna`), `assets/rnap-holo.asset.json` (`ntpEntry`, 6C9Y RPo tracks), `assets/nusg.asset.json`, `tests/assets-rnap-v2.test.mjs`, `docs/assets/rnap.md` (with `D` & counting method), `docs/evidence/r3/A4/`. |
-| **R3-A3** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/a3` | `tools/assets/factors.mjs`, 6 factor assets (`rf1`, `ef-tu`, `ef-g`, `if1`, `if2`, `if3`), `tests/assets-factors.test.mjs`, `docs/assets/factors.md` (superposition RMSDs, kept fractions, clash report), `docs/evidence/r3/A3/`. |
-| **R3-K2** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/k2` | `js/kin/chain.js`, `js/kin/hairpin.js`, `js/kin/peptide-path.js`, `tests/kin-chain.test.mjs`, `docs/evidence/r3/K2/`. |
-| **R3-R2** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/r2` | `js/render/actors.js` (per-part transforms/opacity, `pickable`, multi-site L2, crowders, `DEC-019` L3 `chainColor` guard), `js/render/fx.js`, `js/render/viewer.js` (`setFx`, `setFar`, `setCrowd`, `setActors` updates), `dev/actor-card.html` (v2 paths), `tests/render-actors.browser.mjs`, `docs/evidence/r3/R2/`. |
+| **R3-A4** | `DONE` | Gemini subagent (inherited model) | `r3/a4` (merged `--no-ff`) | `tools/assets/rnap.mjs`, `tools/assets/nusg.mjs`, Format v2 `rnap-ec` (`ntpEntry`, `hairpin`, `expressome`, `coupledMrna`, `D = 38`), `rnap-holo` (`ntpEntry`, `6CA0` RPo tracks `−45..+11`, pre-ST5 L0/L1/L2 preserved byte-for-byte), `nusg` (`center`/`ntd`/`ctd`, 35.8 kB), `tests/assets-rnap-v2.test.mjs`, `docs/assets/rnap.md`, `docs/evidence/r3/A4/` (3 captures), `docs/handoffs/R3-A4.md`. Rulings: `DEC-023`, `DEC-024`. |
+| **R3-A3** | `DONE` | Gemini subagent (inherited model) | `r3/a3` (merged `--no-ff`) | `tools/assets/factors.mjs`, 6 Format v2 factor assets (`rf1`, `ef-tu`, `ef-g`, `if1`, `if2`, `if3`, total 233.2 kB), `tests/assets-factors.test.mjs` (32 tests), `docs/assets/factors.md` (RMSDs, kept fractions, `< 3.0 Å` clash report), `docs/evidence/r3/A3/` (6 captures), `docs/handoffs/R3-A3.md`. Ruling: `DEC-022`. |
+| **R3-K2** | `DONE` | Gemini subagent (inherited model) | `r3/k2` (merged `--no-ff`) | `js/kin/chain.js`, `js/kin/hairpin.js`, `js/kin/peptide-path.js`, `tests/kin-chain.test.mjs` (11 tests), `docs/evidence/r3/K2/` (4 captures), `docs/handoffs/R3-K2.md`. Ruling: `DEC-025`. |
+| **R3-R2** | `DONE` | Gemini subagent (inherited model) | `r3/r2` (merged `--no-ff`) | `js/render/actors.js` (per-part transforms/opacity, `pickable: false`, multi-site L2, 1-draw-call-per-part instanced crowders, `DEC-019` L3 `chainColor` guard), `js/render/fx.js`, `js/render/viewer.js` (`setFx`, `setFar`, `setCrowd`, `setActors` updates), `dev/actor-card.html` (v2 paths), `tests/render-actors.browser.mjs`, `docs/evidence/r3/R2/` (4 captures), `docs/handoffs/R3-R2.md`. Ruling: `DEC-026`. |
+
+#### ST5 Argon Job Log (`PLAN.md` §9.1 & §11)
+
+- **Job:** Independent audit of R3-A3 factor superposition RMSDs / kept fractions and R3-A4 coupling distance `D` with its exact counting method (`6ZTJ` chain `AV` vs `PLAN.md` §6.4 `24 + D` and §13).
+- **Start (UTC):** `2026-11-20T02:03:57Z`
+- **End (UTC):** `2026-11-20T02:09:04Z` (5 min 7 s / 30 min budget)
+- **Executor note:** Read-only `research` subagent (inherited session model).
+- **Report:** `docs/reviews/R3-ST5-argon.md`
+- **Outcome:** `PASS WITH MINOR NOTES` (0 High, 0 Medium, 5 Low). Independently reproduced all 6 A3 superpositions and `D = 53 - 16 + 1 = 38` nt with zero off-by-one discrepancy in `timeline.js`. Ratified `DEC-022`–`DEC-024`; fixed L1 (`docs/assets/rnap.md` revision dates) and L2 (`docs/assets/factors.md` L0 input prose) on `main`; flagged L3 (`remainingCodons = 0` at `D = 38`, coupled duration `121.30 s`) for ST9 `R3-S5`/`R3-V1`.
 
 ### Upcoming Stages (ST6–ST10)
 
 | Stage | Executor | Tasks (merge order) | Base Tag | Target Tag | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ST6** | Gemini | `R3-R3` → `R3-U2` → `R3-S3` → `R3-INT2`; Gate **G2** | `r3-st5` | `r3-w2` | `PENDING` |
+| **ST6** | Gemini | `R3-R3` → `R3-U2` → `R3-S3` → `R3-INT2`; Gate **G2** | `r3-st5` | `r3-w2` | `READY` |
 | **ST7** | **Claude (C3)** | `R3-K3` → `R3-S4` (translation choreography) | `r3-w2` | `r3-st7` | `PENDING` |
 | **ST8** | Gemini | Intake ST7; `R3-R4` → `R3-Q2` → `R3-U3` → `R3-V2` → `R3-INT3`; Gate **G3** | `r3-st7` | `r3-w3` | `PENDING` |
 | **ST9** | Gemini | `R3-P1` → `R3-D1` → `R3-S5` → `R3-V1` → `R3-INT4`; Gate **G4** | `r3-w3` | `r3-w4` | `PENDING` |

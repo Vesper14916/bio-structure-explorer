@@ -18,7 +18,7 @@ test('registry loads manifest and decodes assets from disk in Node', async () =>
   assert.deepEqual(Object.keys(loaded).sort(), ['fixture-machine', 'rnap-ec']);
   assert.equal(loaded['fixture-machine'].version, 2);
   assert.equal(loaded['fixture-machine'].paths.channel.count, 16);
-  assert.equal(loaded['rnap-ec'].version, 1);
+  assert.equal(loaded['rnap-ec'].version, 2);
   assert.ok(loaded['rnap-ec'].lod1.positions instanceof Float32Array);
 
   // Cache returns identical object reference on repeat load

@@ -224,5 +224,5 @@ test('rnap-holo: core and sigma parts in the rnap-ec frame', () => {
   for (const s of h.bounds.size) assert.ok(s >= 80 && s <= 200, `size ${s}`);
   assert.ok(dist(h.anchors.activeSite.o, ec.anchors.activeSite.o) < 5);
   assert.ok(h.lod2.count <= 3000);
-  assert.equal(h.tracks, undefined);
+  assert.ok(h.tracks && h.tracks.template && h.tracks.nontemplate);
 });

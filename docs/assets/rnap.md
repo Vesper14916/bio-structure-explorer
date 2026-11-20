@@ -12,11 +12,11 @@ All structures are loaded through `ctx.loadSource(pdbId)` (SHA-256 and byte leng
 
 | PDB | Title | Method, resolution | Revision | Role in A4 |
 | --- | --- | --- | --- | --- |
-| **6ALF** (primary `rnap-ec`) | CryoEM structure of crosslinked *E. coli* RNA polymerase elongation complex | cryo-EM, 4.1 Å | 2023-11-08 | `rnap` frame, core L0/L1/L2, `rnap-ec` tracks (`template`, `nontemplate`, `rna`), base anchors (`center`, `activeSite`, `dnaEntry`, `dnaExit`, `rnaExit`) |
-| **6C9Y** (primary `rnap-holo`) | Cryo-EM structure of *E. coli* RNAP σ⁷⁰ holoenzyme | cryo-EM, 4.25 Å | 2024-03-06 | `rnap-holo` core + σ⁷⁰ L0/L1/L2, `center`, `activeSite` |
-| **6CA0** (`rnap-holo` RPo DNA) | Cryo-EM structure of *E. coli* RNAP σ⁷⁰ open complex | cryo-EM, 5.75 Å | 2024-03-06 | `rnap-holo` open-promoter (RPo) DNA tracks (`template`, `nontemplate`) — see note below |
-| **7YPA** (`rnap-ec` hairpin) | Cryo-EM structure of *E. coli* transcription termination complex with hairpin | cryo-EM, 3.05 Å | 2023-07-12 | `rnap-ec` `hairpin` anchor (closing base pair and 10-bp stem axis) |
-| **6ZTJ** (`rnap-ec` coupling & `nusg`) | Cryo-EM structure of the NusG-coupled expressome with 38 nt intervening mRNA | cryo-EM, 3.4 Å | 2024-03-06 | `rnap-ec` `expressome` anchor, `coupledMrna` path, coupling distance `D`, and `nusg` asset |
+| **6ALF** (primary `rnap-ec`) | CryoEM structure of crosslinked *E. coli* RNA polymerase elongation complex | cryo-EM, 4.1 Å | 2024-03-13 | `rnap` frame, core L0/L1/L2, `rnap-ec` tracks (`template`, `nontemplate`, `rna`), base anchors (`center`, `activeSite`, `dnaEntry`, `dnaExit`, `rnaExit`) |
+| **6C9Y** (primary `rnap-holo`) | Cryo-EM structure of *E. coli* RNAP σ⁷⁰ holoenzyme | cryo-EM, 4.25 Å | 2024-03-13 | `rnap-holo` core + σ⁷⁰ L0/L1/L2, `center`, `activeSite` |
+| **6CA0** (`rnap-holo` RPo DNA) | Cryo-EM structure of *E. coli* RNAP σ⁷⁰ open complex | cryo-EM, 5.75 Å | 2024-03-13 | `rnap-holo` open-promoter (RPo) DNA tracks (`template`, `nontemplate`) — see note below |
+| **7YPA** (`rnap-ec` hairpin) | Cryo-EM structure of *E. coli* transcription termination complex with hairpin | cryo-EM, 3.05 Å | 2024-07-03 | `rnap-ec` `hairpin` anchor (closing base pair and 10-bp stem axis) |
+| **6ZTJ** (`rnap-ec` coupling & `nusg`) | *E. coli* 70S–RNAP expressome complex in NusG-coupled state (38 nt intervening mRNA) | cryo-EM, 3.4 Å | 2026-06-24 | `rnap-ec` `expressome` anchor, `coupledMrna` path, coupling distance `D`, and `nusg` asset |
 | **7K00** (ribosome reference) | Structure of the Bacterial Ribosome at 2 Angstrom Resolution | cryo-EM, 1.98 Å | 2026-09-23 | `ribo` frame reference via `tools/assets/ribosome.mjs#frameAtoms` for 6ZTJ ribosome alignment |
 
 ### Confirmed chain IDs (verified directly against downloaded mmCIF files)
