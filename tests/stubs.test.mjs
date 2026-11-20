@@ -35,7 +35,7 @@ const STUBS = [
   { path: 'js/kin/chain.js', implemented: true, fns: ['buildFreeChain', 'poseFreeChain'] }, // DEC-005: implemented in R3-K2; behaviour in tests/kin-chain.test.mjs
   { path: 'js/kin/hairpin.js', implemented: true, fns: ['poseHairpin'] }, // DEC-005: implemented in R3-K2; behaviour in tests/kin-chain.test.mjs
   { path: 'js/kin/peptide-path.js', implemented: true, fns: ['posePeptideOnPath'] }, // DEC-005: implemented in R3-K2; behaviour in tests/kin-chain.test.mjs
-  { path: 'js/kin/trna.js', fns: ['poseTrnaAnticodon', 'poseAminoacylEnd'] },
+  { path: 'js/kin/trna.js', implemented: true, fns: ['poseTrnaAnticodon', 'poseAminoacylEnd'] }, // DEC-005: implemented in R3-K3; behaviour in tests/kin-trna.test.mjs
   { path: 'js/kin/ntp.js', implemented: true, fns: ['poseNtp', 'posePpi'] }, // DEC-005: implemented in R3-S3; behaviour in tests/story-tx.test.mjs
   { path: 'js/kin/pose.js', implemented: true, fns: ['createPoser'] }, // DEC-005: implemented in R3-S3; behaviour in tests/story-tx.test.mjs
 
