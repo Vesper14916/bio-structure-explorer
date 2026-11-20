@@ -625,7 +625,7 @@ export function createStoryView(ctx) {
       return;
     }
 
-    setText(inspectTitle, info.name || info.label || 'Inspect');
+    setText(inspectTitle, info.name || info.title || info.label || 'Inspect');
     inspectClearBtn.hidden = false;
     inspectEmpty.hidden = true;
     inspectFilled.hidden = false;
@@ -641,6 +641,7 @@ export function createStoryView(ctx) {
       || (pdbId ? `PDB ${pdbId}` : 'Procedural');
     const rcsbUrl = info.rcsbUrl
       || info.sourceUrl
+      || info.url
       || (srcObj && srcObj.url)
       || (pdbId ? `https://www.rcsb.org/structure/${encodeURIComponent(pdbId)}` : null);
     inspectSourceDd.append(srcText);
