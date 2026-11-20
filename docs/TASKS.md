@@ -122,6 +122,15 @@ Base: `r3-st5` + Chief `js/render/viewer.js` `setLabels` / `controlstart` / `Ato
 | **R3-S3** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/s3` | `js/sim/gene/transcription.js`, `js/kin/ntp.js`, `js/kin/pose.js` (transcription parts), `dev/story-lab.html`, `tests/story-tx.test.mjs`, `docs/evidence/r3/S3/`. |
 | **R3-INT2** | `PENDING` | Gemini Chief | `main` | `js/scene/story-scene.js` + `js/main.js` wiring for chapters 1–7 behind `?scene=v2`; desktop & phone chapter review; shot tuning; Gate **G2**; tag `r3-w2`. |
 
+#### ST6 Argon Job Log (`PLAN.md` §9.1 & §11)
+
+- **Job:** Pre-S3 review of the `R3-S3` brief against `PLAN.md` §5.3 and the K1/K2/S2 APIs (`js/sim/gene/transcription.js`, `js/kin/ntp.js`, `js/kin/pose.js`, `dev/story-lab.html`, `tests/story-tx.test.mjs`).
+- **Start (UTC):** `2026-11-20T06:33:05Z`
+- **End (UTC):** `2026-11-20T06:41:41Z` (8 min 36 s / 30 min budget)
+- **Executor note:** Read-only `research` subagent (inherited session model).
+- **Report:** `docs/reviews/R3-ST6-argon.md`
+- **Outcome:** `READY TO LAUNCH R3-S3 WITH 6 CONCRETE BRIEF ADJUSTMENTS (C1–C6)`. Identified and solved: (C1) `rnap-holo` (`r1 = 11`) vs `rnap-ec` (`r1 = 13`) downstream anchor jump (`55.20 Å` → `0.000 Å` via `machinePoseForRegister(assets['rnap-ec'], reg)` and `effectiveTrackBlend = Math.max(1e-6, world.dna.trackBlend)` in `pose.js`); (C2) reading `tracks.rna`, `anchors.rnaExit`, and `anchors.hairpin` from `assets['rnap-ec']` with an outward 5′ free-chain exit tangent; (C3) exact 675-nt `Assembly` topology and `PPI_TEMPLATE` constant import; (C4) register stepping (`45 + n - 1` → `min(223, 45 + n)`), frozen register `223` relaxation with departing RNAP in Chapter 7, and §5.3 item 8 active slot-track check; (C5) two-stage local-frame $\sigma^{70}$ displacement along `uSigma = [-0.797, -0.518, 0.309]` (`0 → 12 Å` pre-displacement during early Chapter 5 to prevent the 1.48 Å RNA·$\sigma_{3.2}$ finger clash, then `12 → 60 Å` during `part.release` with seamless `rnap-holo → rnap-ec` transition); and (C6) centroid-guided `poseNtp` along the secondary-channel ray (`maxPen = 0.400 Å ≤ 1.0 Å`).
+
 ### Upcoming Stages (ST7–ST10)
 
 | Stage | Executor | Tasks (merge order) | Base Tag | Target Tag | Status |
