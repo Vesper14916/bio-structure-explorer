@@ -30,6 +30,36 @@
       "id": "trna-aa",
       "file": "trna-aa.asset.json",
       "synthetic": false
+    },
+    {
+      "id": "rf1",
+      "file": "rf1.asset.json",
+      "synthetic": false
+    },
+    {
+      "id": "ef-tu",
+      "file": "ef-tu.asset.json",
+      "synthetic": false
+    },
+    {
+      "id": "ef-g",
+      "file": "ef-g.asset.json",
+      "synthetic": false
+    },
+    {
+      "id": "if1",
+      "file": "if1.asset.json",
+      "synthetic": false
+    },
+    {
+      "id": "if2",
+      "file": "if2.asset.json",
+      "synthetic": false
+    },
+    {
+      "id": "if3",
+      "file": "if3.asset.json",
+      "synthetic": false
     }
   ]
 }
