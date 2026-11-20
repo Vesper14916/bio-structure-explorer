@@ -428,10 +428,43 @@ export function createStoryView(ctx) {
   }, 'Clear');
   const codonReadout = h('p', { class: 'codon-readout' },
     'Tap a codon to highlight its mRNA triplet, tRNA anticodon, and amino acid in 3D.');
-  const peptideChainEl = h('div', { class: 'peptide-chain', 'aria-label': 'Nascent polypeptide chain' });
+  const peptideChainEl = h('div', { class: 'peptide-chain', role: 'group', 'aria-label': 'Nascent polypeptide chain' });
 
   let codonCells = [];
   let residuePills = [];
+
+  // Roving tabindex (R3-U3): the codon strip and the peptide chain are each ONE Tab stop; Left/Right,
+  // Home and End move focus inside them (focus never selects; Enter/Space select). Without this the
+  // 41 codon cells and 40 residue pills would add 81 Tab stops. The handler calls preventDefault, which
+  // the global shortcut handler in ui.js respects, so arrows do not also step chapters.
+  function setTabStop(items, idx) {
+    const at = clamp(idx, 0, Math.max(0, items.length - 1));
+    items.forEach((b, i) => { const want = i === at ? 0 : -1; if (b.tabIndex !== want) b.tabIndex = want; });
+  }
+  function attachRoving(container, getItems) {
+    container.addEventListener('keydown', e => {
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const items = getItems();
+      const i = items.indexOf(e.target);
+      if (i < 0) return;
+      let n = -1;
+      if (e.key === 'ArrowRight') n = Math.min(items.length - 1, i + 1);
+      else if (e.key === 'ArrowLeft') n = Math.max(0, i - 1);
+      else if (e.key === 'Home') n = 0;
+      else if (e.key === 'End') n = items.length - 1;
+      else return;
+      e.preventDefault();
+      setTabStop(items, n);
+      items[n].focus();
+    });
+    container.addEventListener('focusin', e => {
+      const items = getItems();
+      const i = items.indexOf(e.target);
+      if (i >= 0) setTabStop(items, i);
+    });
+  }
+  attachRoving(codonStrip, () => codonCells);
+  attachRoving(peptideChainEl, () => residuePills);
 
   function senseCodonCount() {
     let n = 0;
@@ -530,6 +563,12 @@ export function createStoryView(ctx) {
     updateCodonReadout();
 
     const targetIdx = selectedCodon !== null ? selectedCodon : activeCodonIdx;
+    // Keep the single Tab stop on the selected or active codon unless focus is already inside.
+    const focusInside = typeof document !== 'undefined' && (codonStrip.contains(document.activeElement) || peptideChainEl.contains(document.activeElement));
+    if (!focusInside) {
+      setTabStop(codonCells, targetIdx >= 0 ? targetIdx : 0);
+      setTabStop(residuePills, targetIdx >= 0 ? targetIdx : 0);
+    }
     if (scroll && targetIdx !== null && targetIdx >= 0 && codonCells[targetIdx]) {
       const c = codonCells[targetIdx];
       const stripRect = codonStrip.getBoundingClientRect();
