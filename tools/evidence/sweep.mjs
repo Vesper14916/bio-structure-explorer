@@ -253,7 +253,9 @@ async function captureDevice({ browser, devicesPreset, baseUrl, opts, device, lo
     }
     log(`[${device}] ${opts.mode}: ${chapters.length} chapters in story`);
 
+    let closed = false;
     for (const n of wanted) {
+      if (closed) break;
       const ch = chapters[n - 1];
       if (!ch) {
         failures.push({ chapter: n, reason: `no chapter ${n} (story has ${chapters.length})` });
@@ -304,7 +306,11 @@ async function captureDevice({ browser, devicesPreset, baseUrl, opts, device, lo
         } catch (err) {
           failures.push({ chapter: n, shot: name, reason: oneLine(err.message).slice(0, 300) });
           log(`[${device}] ch${nn} ${name}: FAILED ${oneLine(err.message).slice(0, 200)}`);
-          if (page.isClosed()) break;
+          if (page.isClosed()) {
+            failures.push({ chapter: n, reason: 'browser or page closed; remaining shots of this device not taken' });
+            closed = true;
+            break;
+          }
         }
       }
     }
@@ -415,22 +421,30 @@ async function main() {
   if (opts.dsf === 1) log('note: dsf 1 is a deliberate deviation from PLAN §9.2 rule 6 (2x software-GL capture takes about 45 s); use --dsf 2 --out <dir> for 2x');
   if (opts.mode === 'coupled') log(`note: coupled choreography after chapter ${COUPLED_LAST_CHAPTER} is a stub (R3-S5, ST9); chapters 6-12 are not captured`);
 
-  const browser = await chromium.launch({ args: LAUNCH_ARGS });
+  // One browser at a time: each device gets its own launch, so a browser crash cannot take the other device down.
   const results = [];
   let exitCode = 0;
   try {
     for (const device of DEVICES) {
-      const r = await captureDevice({ browser, devicesPreset, baseUrl, opts, device, log });
-      results.push(r);
+      const browser = await chromium.launch({ args: LAUNCH_ARGS });
+      try {
+        results.push(await captureDevice({ browser, devicesPreset, baseUrl, opts, device, log }));
+      } finally {
+        await browser.close().catch(() => {});
+      }
     }
-    for (const device of DEVICES) {
-      await buildContactSheet({ browser, opts, mode: opts.mode, device, log }).catch(err => {
-        log(`contact sheet ${opts.mode}/${device} FAILED: ${oneLine(err.message)}`);
-        exitCode = 1;
-      });
+    const browser = await chromium.launch({ args: LAUNCH_ARGS });
+    try {
+      for (const device of DEVICES) {
+        await buildContactSheet({ browser, opts, mode: opts.mode, device, log }).catch(err => {
+          log(`contact sheet ${opts.mode}/${device} FAILED: ${oneLine(err.message)}`);
+          exitCode = 1;
+        });
+      }
+    } finally {
+      await browser.close().catch(() => {});
     }
   } finally {
-    await browser.close().catch(() => {});
     server.close();
   }
 
