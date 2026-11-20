@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Story Lab — Transcription Choreography (Chapters 1–7)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #03060d; color: #dfe9f7; overflow: hidden; font: 13px system-ui, sans-serif; }
+  #stage { position: fixed; inset: 0; }
+  #hud { position: fixed; left: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 5; opacity: .9; pointer-events: none; font: 11px/1.55 ui-monospace, monospace; white-space: pre; text-shadow: 0 0 3px #000, 0 0 6px #000; background: rgba(6, 11, 22, 0.72); padding: 8px 10px; border-radius: 6px; border: 1px solid #1b2b48; }
+  #hud b { color: #9fd0ff; font-weight: 600; }
+  #caption-bar { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 5; max-width: 720px; width: calc(100vw - 320px); padding: 10px 14px; border-radius: 8px; background: rgba(8, 14, 28, .82); border: 1px solid #1d2c4a; backdrop-filter: blur(4px); pointer-events: none; }
+  #caption-title { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #7ec4ff; margin-bottom: 4px; }
+  #caption-text { font-size: 13px; line-height: 1.45; color: #e7effc; }
+  #err { position: fixed; left: 12px; top: 12px; z-index: 10; color: #ff8a8a; font: 12px ui-monospace, monospace; white-space: pre-wrap; }
+  #panel { position: fixed; right: 12px; top: 12px; z-index: 5; width: 270px; max-width: calc(100vw - 24px); box-sizing: border-box; padding: 10px 12px; border-radius: 8px;
+    background: rgba(8, 14, 28, .82); border: 1px solid #1d2c4a; backdrop-filter: blur(4px); }
+  #panel h1 { margin: 0 0 8px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: #8aa4cf; font-weight: 600; }
+  #panel label { display: grid; grid-template-columns: 62px 1fr 48px; gap: 6px; align-items: center; margin: 5px 0; }
+  #panel label.row { grid-template-columns: 62px 1fr; }
+  #panel output { font: 11px ui-monospace, monospace; text-align: right; color: #9fd0ff; }
+  #panel input[type=range] { width: 100%; margin: 0; }
+  #panel select, #panel button { width: 100%; box-sizing: border-box; background: #0b1426; color: #dfe9f7; border: 1px solid #25375c; border-radius: 4px; padding: 4px 6px; font: inherit; cursor: pointer; }
+  #panel .btn-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-top: 6px; }
+</style>
+<script type="importmap">{"imports":{"three":"../js/vendor/three.module.min.js","three/addons/":"../js/vendor/addons/"}}</script>
+</head>
+<body>
+<div id="stage"></div>
+<div id="caption-bar">
+  <div id="caption-title">Loading transcription story...</div>
+  <div id="caption-text"></div>
+</div>
+<div id="hud"></div>
+<div id="err"></div>
+<div id="panel">
+  <h1>Transcription Story Lab (Ch 1–7)</h1>
+  <label class="row"><span>chapter</span><select id="chapterSel"></select></label>
+  <label><span>time (s)</span><input id="timeRange" type="range" min="0" max="66.25" step="0.02"><output id="timeOut">0.00</output></label>
+  <label><span>ch frac</span><input id="fracRange" type="range" min="0" max="1" step="0.005"><output id="fracOut">0.00</output></label>
+  <div class="btn-row">
+    <button id="btnPlay" type="button">Play</button>
+    <button id="btnStart" type="button">Start</button>
+    <button id="btnEnd" type="button">End</button>
+  </div>
+  <label class="row"><span>lod</span><select id="lodSel"><option value="auto">auto</option><option value="l0">l0</option><option value="l1">l1</option><option value="l2">l2</option></select></label>
+  <label class="row"><span>cutaway</span><input id="cutChk" type="checkbox" checked></label>
+</div>
+<script type="module">
+import { TRUE_SCALE_GENE_CONSTRUCT as DEFAULT_SCENARIO, Assembly } from '../js/science/index.js';
+import { decodeAsset } from '../js/assets/format.js';
+import { buildStory, stateAt, createWorldState } from '../js/sim/gene/story.js';
+import { getShot } from '../js/sim/gene/shots.js';
+import { createPoser } from '../js/kin/pose.js';
+import { createViewer } from '../js/render/viewer.js';
+
+const q = new URLSearchParams(location.search);
+const num = (k, d, lo, hi) => {
+  const v = q.has(k) ? parseFloat(q.get(k)) : d;
+  return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d;
+};
+const flag = (k, d = false) => (q.has(k) ? q.get(k) !== '0' && q.get(k) !== 'false' : d);
+
+const hud = document.getElementById('hud');
+const errBox = document.getElementById('err');
+const capTitle = document.getElementById('caption-title');
+const capText = document.getElementById('caption-text');
+const showError = e => { errBox.textContent += `${(e && e.message) || e}\n`; console.error(e); };
+addEventListener('error', e => showError(e.error || e.message));
+addEventListener('unhandledrejection', e => showError(e.reason));
+
+async function loadAsset(id) {
+  const res = await fetch(`../assets/${id}.asset.json`);
+  if (!res.ok) throw new Error(`Failed to fetch ../assets/${id}.asset.json: HTTP ${res.status}`);
+  return decodeAsset(await res.json());
+}
+
+function applyPointTransform(M, pt) {
+  const R = M.R, o = M.o;
+  return [
+    R[0] * pt[0] + R[1] * pt[1] + R[2] * pt[2] + o[0],
+    R[3] * pt[0] + R[4] * pt[1] + R[5] * pt[2] + o[1],
+    R[6] * pt[0] + R[7] * pt[1] + R[8] * pt[2] + o[2],
+  ];
+}
+
+function applyDirTransform(M, dir) {
+  const R = M.R;
+  const x = R[0] * dir[0] + R[1] * dir[1] + R[2] * dir[2];
+  const y = R[3] * dir[0] + R[4] * dir[1] + R[5] * dir[2];
+  const z = R[6] * dir[0] + R[7] * dir[1] + R[8] * dir[2];
+  const l = Math.hypot(x, y, z) || 1;
+  return [x / l, y / l, z / l];
+}
+
+try {
+  const [rnapHolo, rnapEc, nusg] = await Promise.all([
+    loadAsset('rnap-holo'),
+    loadAsset('rnap-ec'),
+    loadAsset('nusg'),
+  ]);
+  const assets = { 'rnap-holo': rnapHolo, 'rnap-ec': rnapEc, nusg };
+
+  const story = buildStory(DEFAULT_SCENARIO, assets);
+  const poser = createPoser({ construct: DEFAULT_SCENARIO, assets });
+  const target = { asm: new Assembly(), groups: [], actors: [], fx: { pulses: [], flashes: [] }, focus: { center: [0, 0, 0], radius: 32 } };
+  const world = createWorldState();
+
+  // Initialize 675-nt Assembly once before attaching to viewer
+  stateAt(story, 0.01, world);
+  poser.pose(world, target);
+
+  const quality = q.get('quality') || 'high';
+  const viewer = createViewer(document.getElementById('stage'), { quality });
+  viewer.setStyle({ representation: 'ballstick', color: 'strand', hbonds: true, autoRotate: false });
+  viewer.setAssembly(target.asm, { keepCamera: true });
+  viewer.controls.maxDistance = 3000;
+
+  const chapterSel = document.getElementById('chapterSel');
+  for (let i = 0; i < 7; i++) {
+    const ch = story.chapters[i];
+    const opt = document.createElement('option');
+    opt.value = String(i + 1);
+    opt.textContent = `0${i + 1} · ${ch.title} (${ch.t0.toFixed(1)}–${ch.t1.toFixed(1)}s)`;
+    chapterSel.appendChild(opt);
+  }
+
+  const timeRange = document.getElementById('timeRange');
+  const timeOut = document.getElementById('timeOut');
+  const fracRange = document.getElementById('fracRange');
+  const fracOut = document.getElementById('fracOut');
+  const lodSel = document.getElementById('lodSel');
+  const cutChk = document.getElementById('cutChk');
+  const btnPlay = document.getElementById('btnPlay');
+
+  if (q.has('lod')) lodSel.value = q.get('lod');
+  if (q.has('cutaway')) cutChk.checked = flag('cutaway', true);
+
+  let currentT = 0.05;
+  let playing = false;
+
+  function resolveCameraForShot(shotId, rnapAct) {
+    let shot;
+    try { shot = getShot(shotId); } catch (_) { shot = getShot('wide'); }
+    if (shot.id === 'wide' || !rnapAct) {
+      // Frame the horizontal 248-bp gene construct (-420..+420 A along +x)
+      return {
+        target: [-100, 10, 0],
+        dist: 760,
+        dir: [0.05, 0.25, 0.97],
+        detailRadius: 0,
+        cut: null,
+      };
+    }
+    const anchorName = (shot.target && shot.target.anchor) || 'center';
+    const localAnchor = (rnapEc.anchors && rnapEc.anchors[anchorName])
+      || (rnapAct.asset && rnapAct.asset.anchors && rnapAct.asset.anchors[anchorName])
+      || rnapEc.anchors.center;
+    const tgt = applyPointTransform(rnapAct.transform, localAnchor.o);
+    const dir = applyDirTransform(rnapAct.transform, shot.dir);
+    return {
+      target: tgt,
+      dist: typeof shot.distance === 'number' ? shot.distance : 240,
+      dir,
+      detailRadius: shot.detailRadius ?? 32,
+      cut: cutChk.checked ? shot.cut : null,
+    };
+  }
+
+  function setTime(t) {
+    const maxTxTime = story.chapters[6].t1; // 66.25 s
+    currentT = Math.max(0.001, Math.min(maxTxTime - 0.001, Number(t) || 0.001));
+    const t0 = performance.now();
+    stateAt(story, currentT, world);
+    poser.pose(world, target);
+    const poseMs = performance.now() - t0;
+
+    const rnapAct = target.actors.find(a => a.id === 'rnap') || null;
+    const cam = resolveCameraForShot(world.shot.id, rnapAct);
+
+    for (const act of target.actors) {
+      act.lod = lodSel.value;
+      act.cutaway = (act.id === 'rnap' && cam.cut) ? cam.cut : false;
+    }
+
+    viewer.setActors(target.actors);
+    viewer.setAtomGroups(target.groups);
+    if (cam.detailRadius > 0) {
+      viewer.setDetailFocus({ center: cam.target, radius: cam.detailRadius });
+    } else {
+      viewer.setDetailFocus(null);
+    }
+    viewer.setFx(world.fx);
+    viewer.sync();
+    viewer.moveCamera(cam.target, cam.dist, 0, cam.dir);
+
+    const ch = world.chapter;
+    const chNum = (ch ? ch.index : 0) + 1;
+    chapterSel.value = String(Math.min(7, chNum));
+    timeRange.value = currentT.toFixed(2);
+    timeOut.textContent = currentT.toFixed(2);
+    fracRange.value = world.chapterProgress.toFixed(3);
+    fracOut.textContent = `${Math.round(world.chapterProgress * 100)}%`;
+
+    capTitle.textContent = `Chapter 0${chNum} / 07 · ${ch ? ch.title : ''} · Shot: ${world.shot.id}`;
+    capText.textContent = world.caption;
+
+    const beta = world.dna.bend * (1 - world.dna.relax);
+    hud.innerHTML =
+      `<b>t = ${currentT.toFixed(2)} s</b> · ch 0${chNum} (${ch ? ch.id : ''}) · progress ${(world.chapterProgress * 100).toFixed(1)}%\n` +
+      `RNAP: <b>${rnapAct ? rnapAct.assetId : 'unbound'}</b> · reg <b>${world.dna.register.toFixed(2)}</b> · β <b>${beta.toFixed(2)}</b> · trackBlend <b>${(world.dna.trackBlend ?? 0).toFixed(2)}</b>\n` +
+      `bubble: <b>[${world.dna.bubble[0]}, ${world.dna.bubble[1]}]</b> · mRNA: <b>${world.rna.length} / 179 nt</b> · hybrid: <b>${world.counters.hybrid} bp</b> · hairpin: <b>${world.rna.hairpin.toFixed(2)}</b>\n` +
+      `NTP: <b>${world.ntp.base || '—'}</b> (${world.ntp.phase}, path ${world.ntp.path.toFixed(2)}) · PPi: <b>${world.ppi.opacity.toFixed(2)}</b> · pose ${poseMs.toFixed(2)} ms`;
+  }
+
+  function setChapter(idx1Based, frac = 0) {
+    const ci = Math.max(0, Math.min(6, Math.floor(Number(idx1Based) - 1)));
+    const ch = story.chapters[ci];
+    const f = Math.max(0.002, Math.min(0.998, Number(frac) || 0));
+    const t = ch.t0 + f * (ch.t1 - ch.t0);
+    setTime(t);
+  }
+
+  function getState() {
+    return {
+      t: currentT,
+      chapterIndex: world.chapter ? world.chapter.index + 1 : 1,
+      chapterId: world.chapter ? world.chapter.id : '',
+      chapterProgress: world.chapterProgress,
+      dna: { ...world.dna, bubble: [...world.dna.bubble] },
+      rna: { ...world.rna },
+      ntp: { ...world.ntp, visible: world.ntp.visible, phase: world.ntp.phase, ppi: world.ntp.ppi },
+      ppi: { ...world.ppi },
+      counters: { ...world.counters },
+      actors: target.actors.map(a => ({ id: a.id, assetId: a.assetId, opacity: a.opacity, transform: a.transform })),
+      groups: target.groups.map(g => ({ id: g.id, count: g.count, opacity: g.opacity })),
+    };
+  }
+
+  chapterSel.addEventListener('change', () => setChapter(Number(chapterSel.value), 0.01));
+  timeRange.addEventListener('input', () => setTime(Number(timeRange.value)));
+  fracRange.addEventListener('input', () => setChapter(Number(chapterSel.value), Number(fracRange.value)));
+  lodSel.addEventListener('change', () => setTime(currentT));
+  cutChk.addEventListener('change', () => setTime(currentT));
+  document.getElementById('btnStart').addEventListener('click', () => setChapter(Number(chapterSel.value), 0.01));
+  document.getElementById('btnEnd').addEventListener('click', () => setChapter(Number(chapterSel.value), 0.99));
+  btnPlay.addEventListener('click', () => {
+    playing = !playing;
+    btnPlay.textContent = playing ? 'Pause' : 'Play';
+  });
+
+  viewer.on('frame', dt => {
+    if (!playing) return;
+    let nextT = currentT + dt;
+    if (nextT >= story.chapters[6].t1) nextT = 0.05;
+    setTime(nextT);
+  });
+
+  // Initial time from URL query params (?chapter=1..7&frac=0..1 or ?t=...)
+  if (q.has('t')) {
+    setTime(num('t', 0.05, 0, 66.25));
+  } else if (q.has('chapter')) {
+    const chNum = num('chapter', 1, 1, 7);
+    const frac = num('frac', 0.5, 0, 1);
+    setChapter(chNum, frac);
+  } else {
+    setChapter(1, 0.5);
+  }
+
+  window.__storyLab = {
+    story,
+    poser,
+    viewer,
+    target,
+    world,
+    setTime,
+    setChapter,
+    getState,
+  };
+  window.storyLabReady = true;
+} catch (err) {
+  showError(err);
+}
+</script>
+</body>
+</html>
