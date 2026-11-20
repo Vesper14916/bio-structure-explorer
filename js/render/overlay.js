@@ -67,6 +67,7 @@ export class OverlayLayer {
     this.resEls = [];
     this.annots = new Map();
     this.blobs = new Map();
+    this.labels = new Map();
     this.blobGeo = new THREE.SphereGeometry(1, 48, 32);
     this.lineGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, false);
     this.dotGeo = new THREE.SphereGeometry(1, 16, 12);
@@ -75,6 +76,7 @@ export class OverlayLayer {
     this.p = { x: 0, y: 0, z: 0, ok: false };
     this._rotM = new THREE.Matrix4();
     this.time = 0;
+    this._lastLabelTime = null;
   }
 
   // ---------- base & residue letters ----------
@@ -303,8 +305,84 @@ export class OverlayLayer {
       if (text !== rec.text) { rec.text = text; rec.el.textContent = text; rec.w = 0; }
       rec.el.style.borderColor = '#' + (b.color ?? 0x7c5cff).toString(16).padStart(6, '0') + 'aa';
     }
-    for (const [id, rec] of this.blobs) if (!keep.has(id)) {
+      for (const [id, rec] of this.blobs) if (!keep.has(id)) {
       this.group.remove(rec.mesh); rec.mat.dispose(); rec.el.remove(); this.blobs.delete(id);
+    }
+  }
+
+  // ---------- priority-capped scene labels (Round 3 PLAN.md §4.6) ----------
+  setLabels(list) {
+    const raw = Array.isArray(list) ? list : [];
+    const sorted = raw
+      .filter(l => l && (l.text || l.label) && Array.isArray(l.at) && l.at.length >= 3)
+      .slice()
+      .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99));
+    const active = sorted.slice(0, 6);
+    const keep = new Set();
+
+    for (let idx = 0; idx < active.length; idx++) {
+      const l = active[idx];
+      const text = String(l.text ?? l.label ?? '');
+      const id = String(l.id ?? text);
+      keep.add(id);
+      let rec = this.labels.get(id);
+      const variant = l.variant || (l.size === 'sm' ? 'sm' : l.kind === 'blob' ? 'blob' : 'label');
+      const cls = 'hx-tag ' + (variant === 'blob' ? 'hx-blob' : variant === 'sm' ? 'hx-sm' : 'hx-label');
+      if (!rec) {
+        const el = document.createElement('div');
+        el.className = cls;
+        el.dataset.labelId = id;
+        // Disable CSS transition on managed labels so updateTags drives exact 250 ms frame fades
+        el.style.transition = 'none';
+        el.style.opacity = '0';
+        this.el.appendChild(el);
+        rec = {
+          id,
+          el,
+          cls,
+          variant,
+          priority: l.priority ?? 9,
+          order: idx,
+          text: '',
+          at: new THREE.Vector3(),
+          radius: 0,
+          fade: 0,
+          targetFade: 1,
+          w: 0,
+          h: 0,
+        };
+        this.labels.set(id, rec);
+      } else {
+        if (rec.cls !== cls) {
+          rec.cls = cls;
+          rec.el.className = cls;
+          rec.w = 0;
+        }
+        rec.variant = variant;
+        rec.priority = l.priority ?? 9;
+        rec.order = idx;
+        rec.targetFade = 1;
+        if (rec.el.style.display === 'none') {
+          rec.el.style.display = '';
+          rec.w = 0;
+        }
+      }
+      if (rec.text !== text) {
+        rec.text = text;
+        rec.el.textContent = text;
+        rec.w = 0;
+      }
+      rec.at.set(l.at[0], l.at[1], l.at[2]);
+      rec.radius = Number(l.radius) || 0;
+      const border = l.borderColor
+        || (typeof l.color === 'number' ? '#' + (l.color >>> 0).toString(16).padStart(6, '0') + 'aa' : (typeof l.color === 'string' ? l.color : ''));
+      if (border) rec.el.style.borderColor = border;
+    }
+
+    for (const rec of this.labels.values()) {
+      if (!keep.has(rec.id)) {
+        rec.targetFade = 0;
+      }
     }
   }
 
@@ -312,6 +390,20 @@ export class OverlayLayer {
    *  nudge apart tags that would overlap (tags that still collide are faded). */
   updateTags(ctx, t) {
     if (this.timeUniform) this.timeUniform.value = t;
+    const nowPerf = typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now() * 0.001
+      : null;
+    const virtualDt = (typeof t === 'number' && this._lastLabelTime !== null)
+      ? Math.max(0, t - this._lastLabelTime)
+      : 0;
+    const wallDt = (nowPerf !== null && this._lastLabelPerf !== null)
+      ? Math.max(0, nowPerf - this._lastLabelPerf)
+      : 0;
+    if (typeof t === 'number') this._lastLabelTime = t;
+    if (nowPerf !== null) this._lastLabelPerf = nowPerf;
+    const rawDt = Math.min(0.25, Math.max(virtualDt, wallDt) || 0.0167);
+    const fadeStep = rawDt / 0.25; // 250 ms fade-in and fade-out (PLAN.md §4.6)
+
     const p = this.p, I = ctx.insets || { top: 0, right: 0, bottom: 0, left: 0 };
     const W = ctx.width || 1e5, Hh = ctx.height || 1e5;
     const items = [];
@@ -337,6 +429,30 @@ export class OverlayLayer {
       const y = rec.anchorLeft ? p.y + rec.dy - rec.h / 2 : rec.below ? p.y + 10 : p.y + rec.dy + 4 - rec.h;
       items.push({ rec, x, y, op: 1 });
     }
+    if (this.labels.size) {
+      const labelRecs = [...this.labels.values()].sort((a, b) => (a.priority - b.priority) || (a.order - b.order));
+      for (const rec of labelRecs) {
+        if (rec.fade < rec.targetFade) {
+          rec.fade = Math.min(rec.targetFade, rec.fade + fadeStep);
+        } else if (rec.fade > rec.targetFade) {
+          rec.fade = Math.max(rec.targetFade, rec.fade - fadeStep);
+        }
+        if (rec.targetFade === 0 && rec.fade <= 0.001) {
+          rec.el.remove();
+          this.labels.delete(rec.id);
+          continue;
+        }
+        if (!rec.text) continue;
+        if (rec.el.style.display === 'none') { rec.el.style.display = ''; rec.w = 0; }
+        this.project(rec.at.x, rec.at.y, rec.at.z, p);
+        if (!p.ok) { rec.el.style.opacity = '0'; continue; }
+        size(rec);
+        const rpx = rec.radius > 0 && ctx.pxPerAAt ? rec.radius * ctx.pxPerAAt(p.z) : 0;
+        const x = p.x - rec.w / 2;
+        const y = p.y - rpx - 6 - rec.h;
+        items.push({ rec, x, y, op: clamp(rec.fade, 0, 1) });
+      }
+    }
     const placed = [];
     const hit = (x, y, w, h) => placed.some(q => x < q.x + q.w + 3 && x + w + 3 > q.x && y < q.y + q.h + 2 && y + h + 2 > q.y);
     for (const it of items) {
@@ -353,7 +469,12 @@ export class OverlayLayer {
     }
   }
 
-  clearAll() { this.setAnnotations([]); this.setBlobs([]); }
+  clearAll() {
+    this.setAnnotations([]);
+    this.setBlobs([]);
+    for (const rec of this.labels.values()) rec.el.remove();
+    this.labels.clear();
+  }
 
   dispose() {
     this.clearAll();
