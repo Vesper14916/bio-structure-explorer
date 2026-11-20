@@ -42,7 +42,7 @@ const STUBS = [
   // Scene (js/scene/)
   { path: 'js/scene/story-scene.js', implemented: true, fns: ['createStoryScene'] }, // DEC-005: implemented in R3-INT2
   { path: 'js/scene/camera-rails.js', implemented: true, fns: ['resolveShot', 'transitionDuration', 'createCameraRails'] }, // DEC-005: implemented in R3-R3; behaviour in tests/camera-rails.test.mjs
-  { path: 'js/scene/crowd.js', fns: ['generateCrowd'] },
+  { path: 'js/scene/crowd.js', implemented: true, fns: ['generateCrowd'] }, // DEC-005: implemented in R3-R4; behaviour in tests/crowd.test.mjs
   { path: 'js/scene/labels.js', implemented: true, fns: ['selectLabels'] }, // DEC-005: implemented in R3-R3; behaviour in tests/camera-rails.test.mjs
 
   // Render (js/render/)
