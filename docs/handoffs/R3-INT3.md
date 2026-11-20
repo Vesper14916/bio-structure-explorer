@@ -16,7 +16,7 @@ Stage: ST8 · Branch: `claude/project-thread-weimhy` (ST8 owner: Claude, assigne
 | Wording | `js/ui/inspect.js`, `js/ui/about.js`, `tests/ui-inspect.browser.mjs`, `PLAN.md` | RNAP DNA provenance (6CA0 for the promoter DNA, 6ALF for elongation), DNA rotation no longer "twin-domain", IF1/IF2/IF3 role sentences, anticodon nt 34–36, About sheet describes construct v3, PLAN §2 D13 and §6.4 state D = 38 and about 121 s. |
 | Phone and focus | `css/style.css`, `js/ui/sheet.js`, `js/ui/view-story.js` | See `docs/handoffs/R3-U3.md` and DEC-031. |
 | Tests | `tests/story-speed.test.mjs` (new, 4 tests) | Speed independence (0.5×, 1×, 4× and a direct seek agree at four story times), end of story, Crowding toggle, peptide emergence. |
-| Evidence | `tools/evidence/sweep.mjs`, `docs/evidence/r3/sweep/`, `docs/evidence/r3/INT3/` | See `docs/handoffs/R3-V2.md`. INT3 has five desktop frames from the real app (chapters 8, 11, 12, 14, 15) and the cutaway on/off pair. |
+| Evidence | `tools/evidence/sweep.mjs`, `docs/evidence/r3/sweep/` (96 sequential shots, 30 coupled), `docs/evidence/r3/INT3/` | See `docs/handoffs/R3-V2.md`. INT3 has five desktop frames from the real app (chapters 8, 11, 12, 14, 15) and the cutaway on/off pair. |
 
 The stage-wide audit is `docs/reviews/R3-ST8-audit.md` (raw reports beside it). Rulings: DEC-030, DEC-031.
 

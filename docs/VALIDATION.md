@@ -320,7 +320,7 @@ ST8 (owner: Claude, reassigned by the user) covered `R3-R4`, `R3-Q2`, `R3-U3`, `
 | `node tests/ui-story.browser.mjs` | `UI-STORY PASS (50 checks)` |
 | `node tests/ui-inspect.browser.mjs` | `UI-INSPECT PASS (141 checks)` |
 | `node tests/ui-phone.browser.mjs` | `UI-PHONE PASS (269 checks, 2 known defects)` |
-| `node tools/evidence/sweep.mjs` (16 chapters, desktop, mid) | 16 / 16 shots, 0 console errors, 0 page errors |
+| `node tools/evidence/sweep.mjs` (16 chapters, start/mid/end, desktop and iPhone 13) | 96 / 96 shots, 0 console errors, 0 page errors; coupled chapters 1–5: 30 / 30 |
 | `node tools/build-assets.mjs --check` | **Not run**: the sandbox cannot reach RCSB (403). No asset or recipe changed in ST7 or ST8. |
 
 ### 9.2 Gate G3 criteria (PLAN §12)
@@ -342,6 +342,6 @@ ST8 (owner: Claude, reassigned by the user) covered `R3-R4`, `R3-Q2`, `R3-U3`, `
 
 - Hardware-GPU frame time (G4) and real phones (G5).
 - RCSB titles and citations; `build-assets --check`.
-- Full 96-shot sweep and 2× captures (see `docs/handoffs/R3-V2.md`).
+- 2× captures (the sweep is 1×; see `docs/handoffs/R3-V2.md`).
 - Coupled mode beyond chapter 5 (ST9).
 - Tags `r3-st7` and `r3-w3`: the session git proxy refuses tag pushes, so the Chief creates them.
