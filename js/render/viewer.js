@@ -191,6 +191,7 @@ class Viewer {
 
     this.controls.addEventListener('start', this.onCtlStart = () => {
       this.interacting = true; this.controls.autoRotate = false; this.anim = null; this.autoFramed = false;
+      this.emit('controlstart');
     });
     this.controls.addEventListener('end', this.onCtlEnd = () => {
       this.interacting = false; this.resumeAt = performance.now() + 3000;
@@ -438,6 +439,12 @@ class Viewer {
 
   setCrowd(instances, assetsById) {
     this.actors.setCrowd(instances || [], assetsById);
+    this.dirty = true;
+  }
+
+  setLabels(list) {
+    if (typeof this.overlay.setLabels === 'function') this.overlay.setLabels(list || []);
+    else this.overlay.setAnnotations(list || []);
     this.dirty = true;
   }
 
@@ -780,6 +787,40 @@ class Viewer {
         if (th < bestResT) { bestResT = th; bestRes = res; }
       }
     }
+    let bestGroupHit = null;
+    if (this.atomGroups && Array.isArray(this.atomGroups.groups)) {
+      for (const grp of this.atomGroups.groups) {
+        if (!grp || !grp.pos || !(grp.count > 0) || (grp.opacity ?? 1) <= 0.05) continue;
+        const gpos = grp.pos;
+        const r = Math.max(0.75, minR);
+        const r2 = r * r;
+        for (let i = 0; i < grp.count; i++) {
+          const wx = gpos[i * 3] - ox, wy = gpos[i * 3 + 1] - oy, wz = gpos[i * 3 + 2] - oz;
+          const tc = wx * dx + wy * dy + wz * dz;
+          if (tc <= 0) continue;
+          const d2 = wx * wx + wy * wy + wz * wz - tc * tc;
+          if (d2 > r2) continue;
+          const th = tc - Math.sqrt(r2 - d2);
+          if (th < bestResT) {
+            bestResT = th;
+            const resIdx = grp.residue ? grp.residue[i] : (grp.kind === 'peptide' ? 0 : -1);
+            bestGroupHit = {
+              atomGroup: grp.id,
+              kind: grp.kind || grp.id,
+              groupAtom: i,
+              residue: grp.kind === 'peptide' ? resIdx : -1,
+              codon: grp.kind === 'peptide' && resIdx >= 0 ? resIdx : -1,
+              nucleotide: -1,
+              atom: -1,
+              pair: -1,
+              clientX,
+              clientY,
+            };
+          }
+        }
+      }
+    }
+    if (bestGroupHit) return bestGroupHit;
     if (bestRes) {
       return {
         residue: bestRes.id ?? bestRes.index ?? 0,
@@ -934,11 +975,18 @@ class Viewer {
         v.recolor();
       },
       focus: (sel, o) => v.focus(sel, o),
+      moveCamera: (target, dist, duration, dir) => v.moveCamera(
+        Array.isArray(target) ? new THREE.Vector3(target[0], target[1], target[2]) : target,
+        dist,
+        duration,
+        Array.isArray(dir) ? new THREE.Vector3(dir[0], dir[1], dir[2]).normalize() : dir,
+      ),
       setFollowTarget: spec => v.setFollowTarget(spec),
       setDetailFocus: focus => v.setDetailFocus(focus),
       setAtomGroups: groups => v.setAtomGroups(groups),
       setFx: list => v.setFx(list),
       setCrowd: (instances, assetsById) => v.setCrowd(instances, assetsById),
+      setLabels: list => v.setLabels(list),
       setFar: far => v.setFar(far),
       setAnnotations: list => v.overlay.setAnnotations(list || []),
       setBlobs: list => v.overlay.setBlobs(list || []),
@@ -969,6 +1017,10 @@ class Viewer {
       }),
       get canvas() { return v.canvas; },
       get camera() { return v.camera; },
+      get controls() { return v.controls; },
+      get reducedMotion() { return v.reducedMotion; },
+      set reducedMotion(val) { v.reducedMotion = Boolean(val); },
+      pick: (clientX, clientY) => v.pick(clientX, clientY),
       dispose: () => v.dispose(),
     };
   }
