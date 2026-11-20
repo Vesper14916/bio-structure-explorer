@@ -410,8 +410,11 @@ export function selectLabels(worldState, assets = {}, opts = {}) {
     });
   }
 
-  // Priority 2: `σ⁷⁰` — when σ part visible and opacity > 0.5
-  if (rnapState.visible && rnapState.machine) {
+  // Priority 2: `σ⁷⁰` — when σ part visible and opacity > 0.5. Not in chapter 1 (`establish`): the six-tag cap
+  // there goes to `RNA polymerase`, the DNA ends and the promoter tags (ST8 DEC-030).
+  const establishing = Boolean(worldState.chapter && worldState.chapter.id === 'establish')
+    && !((worldState.rna && worldState.rna.length > 0) || (worldState.machines || []).some(m => m && m.id === 'ribosome'));
+  if (rnapState.visible && rnapState.machine && !establishing) {
     const m = rnapState.machine;
     const sigmaPart = m.parts && m.parts.sigma;
     const hasSigmaInAsset = rnapState.asset && Array.isArray(rnapState.asset.parts)
@@ -483,8 +486,13 @@ export function selectLabels(worldState, assets = {}, opts = {}) {
   }
 
   // Priority 4: `mRNA 5′` and `mRNA 3′` (ends of the transcript) — when mRNA length >= 12
+  // ST8 DEC-030: while the ribosome decodes (chapters 11-15, `decode` to `release`) the two mRNA-end tags are
+  // dropped so that the six-tag cap reaches the factor, region (UAA) and peptide tags of those chapters.
+  const chIdx = Number(worldState?.chapter?.index);
+  const decodingChapters = riboState.visible && worldState?.chapter?.group === 'E' && chIdx >= 10 && chIdx <= 14
+    && worldState?.chapter?.id !== undefined && (worldState.rna?.layout === 'ribosome');
   const mrnaLen = Number(worldState?.rna?.length ?? worldState?.counters?.mrna ?? 0);
-  if (mrnaLen >= 12) {
+  if (mrnaLen >= 12 && !decodingChapters) {
     let mrna5At;
     let mrna3At;
     const layout = worldState?.rna?.layout || 'rnap';

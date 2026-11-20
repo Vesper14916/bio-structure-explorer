@@ -115,7 +115,7 @@ const EXPECTED_MACHINES = [
     pick: { actor: 'rnap-ec', part: 'core', chain: 'J' },
     expectedName: 'RNA polymerase',
     expectedRole: 'Copies the template DNA strand into RNA, 5′→3′.',
-    expectedSimp: 'Rigid structure; DNA bend from one structure (6ALF)',
+    expectedSimp: 'Rigid structure; promoter DNA bend from 6CA0 (5.75 Å), elongation DNA from 6ALF',
     expectedPdb: '6ALF',
   },
   {
@@ -123,7 +123,7 @@ const EXPECTED_MACHINES = [
     pick: { actor: 'rnap-holo', part: 'core', chain: 'D' },
     expectedName: 'RNA polymerase',
     expectedRole: 'Copies the template DNA strand into RNA, 5′→3′.',
-    expectedSimp: 'Rigid structure; DNA bend from one structure (6ALF)',
+    expectedSimp: 'Rigid structure; promoter DNA bend from 6CA0 (5.75 Å), elongation DNA from 6ALF',
     expectedPdb: '6C9Y',
   },
   {
@@ -194,7 +194,7 @@ const EXPECTED_MACHINES = [
     label: 'if1',
     pick: { actor: 'if1', part: 'body', chain: 'y' },
     expectedName: 'IF1',
-    expectedRole: 'Guide the initiator tRNA to the start codon and control subunit joining.',
+    expectedRole: 'Binds the 30S A site, keeping elongator tRNAs out, and supports IF2 and IF3.',
     expectedSimp: 'Canonical order only',
     expectedPdb: '9ZN2',
   },
@@ -202,7 +202,7 @@ const EXPECTED_MACHINES = [
     label: 'if2',
     pick: { actor: 'if2', part: 'body', chain: 'x' },
     expectedName: 'IF2',
-    expectedRole: 'Guide the initiator tRNA to the start codon and control subunit joining.',
+    expectedRole: 'Delivers the initiator fMet-tRNA to the P site and, as a GTPase, helps the 50S subunit join.',
     expectedSimp: 'Canonical order only',
     expectedPdb: '9ZN2',
   },
@@ -210,7 +210,7 @@ const EXPECTED_MACHINES = [
     label: 'if3',
     pick: { actor: 'if3', part: 'body', chain: 'J' },
     expectedName: 'IF3',
-    expectedRole: 'Guide the initiator tRNA to the start codon and control subunit joining.',
+    expectedRole: 'Favours the initiator tRNA on the start codon and keeps the subunits apart until the 50S subunit joins.',
     expectedSimp: 'Canonical order only',
     expectedPdb: '9FDA',
   },
@@ -476,19 +476,20 @@ async function runTests() {
 
     // ---- 3. Verify About dialog "Sources" section (? key, Escape close, button click) ----
     const appPage = await desktopCtx.newPage();
+    appPage.setDefaultTimeout(120000); // the real app renders software-GL frames of several seconds
     attachMonitors(appPage, 'about-sources', localHost, extCounter);
     await appPage.goto(`${base}/index.html?mode=express&scene=v2`, { waitUntil: 'load' });
     await appPage.waitForFunction(() => {
       const l = document.querySelector('.loading');
       return l && l.classList.contains('is-off');
-    }, { timeout: 10000 });
+    }, { timeout: 90000 });
 
     // Open About dialog with '?' key
     await appPage.keyboard.press('?');
     await appPage.waitForFunction(() => {
       const scrim = document.querySelector('.scrim');
       return scrim && !scrim.hidden && scrim.classList.contains('is-open');
-    }, { timeout: 5000 });
+    }, { timeout: 120000 });
 
     const aboutInfo = await appPage.evaluate(() => {
       const dlg = document.querySelector('.modal[role="dialog"]');
@@ -529,12 +530,12 @@ async function runTests() {
       const phoneAbout = await phoneCtx.newPage();
       attachMonitors(phoneAbout, 'phone-about-sources', localHost, extCounter);
       await phoneAbout.goto(`${base}/dev/ui-story.html?fixture=ch1&inspect=empty`, { waitUntil: 'load' });
-      await phoneAbout.waitForFunction(() => window.__storyReady === true, { timeout: 10000 });
+      await phoneAbout.waitForFunction(() => window.__storyReady === true, { timeout: 90000 });
       await phoneAbout.click('button[aria-label="About, references and shortcuts"]');
       await phoneAbout.waitForFunction(() => {
         const scrim = document.querySelector('.scrim');
         return scrim && !scrim.hidden && scrim.classList.contains('is-open');
-      }, { timeout: 5000 });
+      }, { timeout: 120000 });
       await phoneAbout.evaluate(() => {
         const srcHeading = Array.from(document.querySelectorAll('.modal h3')).find(h => h.textContent === 'Sources');
         if (srcHeading) srcHeading.scrollIntoView({ block: 'start', behavior: 'instant' });
@@ -549,12 +550,13 @@ async function runTests() {
     }
 
     // Focus inside the modal dialog and close with Escape, then verify opening via button click
-    await appPage.focus('.modal[role="dialog"]');
+    await appPage.waitForSelector('.modal[role="dialog"]', { timeout: 120000 });
+    await appPage.focus('.modal[role="dialog"]', { timeout: 120000 });
     await appPage.keyboard.press('Escape');
     await appPage.waitForFunction(() => {
       const scrim = document.querySelector('.scrim');
       return scrim && scrim.hidden === true;
-    }, { timeout: 5000 });
+    }, { timeout: 120000 });
     check(true, 'Escape closes the About dialog cleanly');
 
     await appPage.evaluate(() => {
@@ -563,7 +565,7 @@ async function runTests() {
     await appPage.waitForFunction(() => {
       const scrim = document.querySelector('.scrim');
       return scrim && !scrim.hidden && scrim.classList.contains('is-open');
-    }, { timeout: 5000 });
+    }, { timeout: 120000 });
     check(true, 'About button click opens the About dialog cleanly');
     await appPage.close();
 

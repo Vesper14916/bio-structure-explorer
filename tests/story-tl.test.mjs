@@ -209,11 +209,13 @@ test('§5.3 items 5 and 6: fMet-tRNA never in A/T or A; no pairs drawn in E or i
 test('§5.3 item 8: mRNA in the ribosome track and resting anticodons stay within 1.0 Å of the L1 beads (64 samples per chapter)', () => {
   let worst = -Infinity, where = '';
   for (const c of TL_CHAPTERS) {
+    let checked = 0;
     for (let i = 0; i < 64; i++) {
       const t = c.t0 + ((i + 0.5) / 64) * (c.t1 - c.t0);
       const { asm } = poseAt(t);
-      if (!world.ribosome.bound) continue;
       const rm = world.machines.find(m => m.id === 'ribosome');
+      if (!rm) continue; // ST8 audit F02: no `bound` gate, so chapter 8 (30S docking) is checked too
+      checked++;
       const beads = l1Beads(rm, ribo);
       const p0 = 24 + 3 * (world.ribosome.codon - 1);
       for (let j = 0; j < 179; j++) {
@@ -230,6 +232,7 @@ test('§5.3 item 8: mRNA in the ribosome track and resting anticodons stay withi
         }
       }
     }
+    assert.ok(checked > 0, `chapter ${c.index + 1}: no sample had a ribosome machine to check against`);
   }
   assert.ok(worst <= 1.0, `max penetration ${worst.toFixed(3)} Å at ${where}`);
 });

@@ -350,8 +350,9 @@ export function contributeTx(story, t, out) {
       pApproach = uMove;
     }
   } else {
-    // Chapter 1 (establish): gene only; RNAP enters when machine.move:1 begins in Chapter 2.
-    rnapPresent = false;
+    // Chapter 1 (establish): the holoenzyme waits 400 Å from the promoter (PLAN.md §6.1 row 1; ST8 audit F03)
+    // and starts moving when machine.move begins in Chapter 2.
+    rnapPresent = true;
     isApproaching = true;
     pApproach = 0;
   }
@@ -374,11 +375,11 @@ export function contributeTx(story, t, out) {
   copyFrame(M, pool.rnapTransform);
 
   if (isApproaching && pApproach < 1) {
-    // Smooth approach from M(45).o + [-140, 80, 40] to M(45).o across Chapter 2 (Argon C4)
+    // Smooth approach from M(45).o + 400 Å along [-0.8434, 0.4819, 0.2410] to M(45).o across Chapter 2 (Argon C4)
     const w = 1 - pApproach;
-    pool.rnapTransform.o[0] += -140 * w;
-    pool.rnapTransform.o[1] += 80 * w;
-    pool.rnapTransform.o[2] += 40 * w;
+    pool.rnapTransform.o[0] += -337.4 * w;
+    pool.rnapTransform.o[1] += 192.8 * w;
+    pool.rnapTransform.o[2] += 96.4 * w;
   } else if (pLeave > 0) {
     // Smooth departure into solvent along [0, +150, -40] across Chapter 7 [10.15, 13.15] s (Argon C4)
     pool.rnapTransform.o[1] += 150 * pLeave;
@@ -389,7 +390,7 @@ export function contributeTx(story, t, out) {
   if (rnapPresent) {
     const rnap = pool.rnapMachine;
     rnap.assetId = assetId;
-    rnap.opacity = pLeave > 0 ? Math.max(0, 1 - pLeave * 0.85) : (isApproaching ? Math.max(0.15, clamp01(pApproach * 4)) : 1);
+    rnap.opacity = pLeave > 0 ? Math.max(0, 1 - pLeave * 0.85) : 1;
     rnap.visible = true;
     pool.corePart.visible = true;
     pool.corePart.opacity = rnap.opacity;

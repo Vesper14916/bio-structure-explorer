@@ -48,7 +48,7 @@ Helix is a static website, with a single-file offline build, that shows one bact
 | D10 | **Team (revised 2026-11-19):** two executors. **Gemini** (Antigravity): Gemini 4 Neon (high) is the Chief and integration owner; subagents run on Gemini 4 Hydrogen; Gemini 4 Argon is a scarce reviewer with at most 30 minutes per stage. **Claude** (Claude Code) owns the three hardest parts as whole stages: ST2, ST3 and ST7. §9.1 and §11 are binding; tier labels inside §10 tasks are superseded by them. |
 | D11 | **Branches:** `main` is the integration branch. Each task works on its own branch `r3/<task-id>`, in its own clone or worktree, and pushes only that branch. Only the Chief merges into `main` (§9.3). |
 | D12 | **Ribosome colours change** from the Round 1 teal and mint (`0x38d9a9`, `0x63e6be`) to warm neutrals (§4.3). The old 30S teal is almost identical to the mRNA colour `0x2fd9b9`, and at true scale the mRNA runs through the 30S. |
-| D13 | **Story length** at 1× is about 164 s in Step by step mode and about 123 s in Coupled mode (for D = 48). Speeds: 0.5×, 1×, 2×, 4×. |
+| D13 | **Story length** at 1× is about 164 s in Step by step mode and about 121 s in Coupled mode (D = 38, DEC-024). Speeds: 0.5×, 1×, 2×, 4×. |
 | D14 | **Runtime makes no third-party requests.** Optional links to RCSB in the inspection card open only when the user clicks them. |
 
 ---
@@ -177,6 +177,8 @@ Style: existing `hx-tag` with the `hx-blob` variant for machines and `hx-label` 
 | 7 | `Peptide N-terminus` | peptide length ≥ 1 |
 | 8 | `DNA 5′`, `DNA 3′` (coding strand ends) | overview shots only |
 | 9 | `−35`, `−10`, `+1`, `SD`, `AUG`, `UAA`, `Terminator` (region tags, `hx-sm`) | chapters 1–3 and 8–9 for promoter and SD tags; chapter 7 for `Terminator`; chapter 15 for `UAA` |
+
+ST8 amendments (DEC-030): in chapter 1 the `σ⁷⁰` tag is not shown, so the six tags are `RNA polymerase`, `DNA 5′`, `DNA 3′`, `−35`, `−10` and `+1`; in chapters 11–15 the two `mRNA` end tags are not shown while the ribosome decodes, so the cap reaches `EF-Tu`, `EF-G`, `RF1`, `UAA` and `Peptide N-terminus`; `SD`, `AUG` and `UAA` are placed on the mRNA codons once the ribosome is in the scene.
 
 ### 4.7 Camera
 
@@ -321,11 +323,11 @@ Design checks already applied, which task S1 MUST turn into tests: no in-frame s
 | Step | Modelled as | Simplification to disclose |
 | --- | --- | --- |
 | Promoter search | Holoenzyme approaches along a straight path and binds at −35/−10 | Real search combines 3D diffusion and 1D sliding |
-| Open complex | DNA melts registers −11 to +2; upstream DNA bends to the RPo geometry of 6C9Y | Intermediates between closed and open complex are not shown |
+| Open complex | DNA melts registers −11 to +2; upstream DNA bends to the RPo geometry of 6CA0 (DEC-023) | Intermediates between closed and open complex are not shown |
 | Initiation | NTPs 1–3 enter by the secondary channel; each bond releases PPi | Abortive initiation is not shown |
 | Promoter escape | σ⁷⁰ released after nucleotide 12 | σ⁷⁰ is often retained for longer in cells |
 | Elongation | One bp per step, about nine-bp hybrid, bubble re-closes behind | Pausing and backtracking are not shown; the step rate is a teaching speed |
-| DNA rotation | DNA spins about its own axis as it threads through RNAP; RNAP does not rotate | One of two equivalent views (twin-domain model) |
+| DNA rotation | DNA spins about its own axis as it threads through RNAP; RNAP does not rotate | Equivalent to RNAP tracking the helix; supercoiling (twin-domain model) is not shown |
 | Termination | Hairpin folds in the exit channel as the U-tract is copied; RNA and DNA released | Hairpin pose follows 7YPA; release is shown as a single step |
 | Translation initiation | 30S·IF1·IF3 binds SD; IF2 delivers fMet-tRNA to P; 50S joins; IFs leave | Factor order is the textbook canonical path; kinetic branching is not shown |
 | Decoding | EF-Tu·GTP·aa-tRNA in A/T state; codon recognition; GTP hydrolysis; accommodation | Proofreading and near-cognate rejection are not shown; anticodon is an exact complement |
@@ -351,7 +353,7 @@ Design checks already applied, which task S1 MUST turn into tests: no in-frame s
 
 | Actor | Role sentence | Simplifications (bullets) |
 | --- | --- | --- |
-| RNA polymerase | Copies the template DNA strand into RNA, 5′→3′. | Rigid structure; DNA bend from one structure (6ALF) |
+| RNA polymerase | Copies the template DNA strand into RNA, 5′→3′. | Rigid structure; promoter DNA bend from 6CA0 (5.75 Å), elongation DNA from 6ALF |
 | σ⁷⁰ | Recognises the −35 and −10 promoter elements and helps open the DNA. | Released at nucleotide 12 here; often retained longer |
 | 30S subunit | Binds the mRNA and checks codon–anticodon pairing in the decoding centre. | Rigid; head swivel not shown |
 | 50S subunit | Joins amino acids in the peptidyl-transferase centre; the peptide leaves through its exit tunnel. | Rigid; L1 stalk movement not shown |
@@ -360,7 +362,9 @@ Design checks already applied, which task S1 MUST turn into tests: no in-frame s
 | EF-Tu | Delivers aminoacyl-tRNAs to the A site and hydrolyses GTP on correct pairing. | Proofreading not shown |
 | EF-G | Uses GTP to move tRNAs and mRNA by one codon. | Hybrid states only where the structure provides them |
 | RF1 | Reads UAA and UAG and releases the finished peptide. | RF3 and recycling not shown |
-| IF1, IF2, IF3 | Guide the initiator tRNA to the start codon and control subunit joining. | Canonical order only |
+| IF1 | Binds the 30S A site, keeping elongator tRNAs out, and supports IF2 and IF3. | Canonical order only |
+| IF2 | Delivers the initiator fMet-tRNA to the P site and, as a GTPase, helps the 50S subunit join. | Canonical order only |
+| IF3 | Favours the initiator tRNA on the start codon and keeps the subunits apart until the 50S subunit joins. | Canonical order only |
 | NusG | Bridges RNA polymerase and the ribosome in coupled expression. | Fixed coupling geometry |
 | DNA, mRNA, tRNA anticodon, peptide, NTP, PPi | (one sentence each, written by U2 from §5.2, ≤ 120 characters) | Procedural; ideal geometry |
 
@@ -436,7 +440,7 @@ The `Overview` camera option uses `wide`. `RNAP` uses `rnap-follow`, or `rnap-si
 
 ### 6.4 Coupled mode (`coupled`)
 
-Coupling distance `D`: the number of nucleotides from the first nucleotide of the ribosome's P-site codon to the RNA 3′-terminal nucleotide in RNAP, in the 6ZTJ expressome. Task A4 computes it from the 6ZTJ mRNA numbering, counting unmodelled nucleotides. It is expected to be roughly 45–55 nt. The ribosome can only bind once the transcript reaches `24 + D` nt, because at that length its footprint and RNAP's no longer overlap. Locking at exactly that length gives the 6ZTJ geometry with no catch-up phase.
+Coupling distance `D`: the number of nucleotides from the first nucleotide of the ribosome's P-site codon to the RNA 3′-terminal nucleotide in RNAP, in the 6ZTJ expressome. Task A4 computes it from the 6ZTJ mRNA numbering, counting unmodelled nucleotides. It was expected to be roughly 45–55 nt; the measured value is D = 38 nt (chain AV of 6ZTJ, DEC-024), the contact end of that range. The ribosome can only bind once the transcript reaches `24 + D` nt, because at that length its footprint and RNAP's no longer overlap. Locking at exactly that length gives the 6ZTJ geometry with no catch-up phase.
 
 Chapters 1–5 are identical to §6.1. Then:
 
@@ -450,7 +454,7 @@ Chapters 1–5 are identical to §6.1. Then:
 | 11 | `release` | Stop codon | E | (remaining codons) × 1.1 s + 11.0 s | As §6.1 chapters 14–15 for the remaining codons | `ribo-exit` |
 | 12 | `finale` | Finished | O | 6.0 s | As §6.1 chapter 16 | `wide` |
 
-The terminator hairpin folds during `couple-run` by the same rule as in Step by step mode (K2). For D = 48 the total is about 123 s.
+The terminator hairpin folds during `couple-run` by the same rule as in Step by step mode (K2). For D = 38 the total is about 121 s, and no codons remain to read after the polymerase finishes (`remainingCodons = 0`, so chapter 11 is the release only).
 
 Coupled-mode captions (exact):
 - 6: The 5′ end of the mRNA, with its Shine–Dalgarno sequence, leaves the polymerase while transcription continues.
@@ -621,7 +625,7 @@ Median ≤ 6 ms per `pose` for the full scene in Node 22 on the CI container.
 
 Duplex algorithm (K1). Notation: `S(x)` is the B-DNA screw step, translation `3.38·x` Å along local z composed with rotation `34.2857·x` degrees about local z. Frame products are right-multiplied: `F·S(1)` is the next base pair 3′-ward on the coding strand.
 1. **Template frames inside a machine.** For template register `r` within the track range `[r0, r1]`: `F_r` is the machine transform times the track frame. For fractional `r`, interpolate origin linearly and rotation by quaternion slerp between `floor(r)` and `ceil(r)`.
-2. **Downstream arm** (`r > r1`): `F_r = M · T_{r1} · S(r − r1)`. Base-pair positions on this arm are stationary in the world while the machine translates along its downstream axis, and the arm spins about its own axis (twin-domain view, §5.2).
+2. **Downstream arm** (`r > r1`): `F_r = M · T_{r1} · S(r − r1)`. Base-pair positions on this arm are stationary in the world while the machine translates along its downstream axis, and the arm spins about its own axis (§5.2 DNA rotation).
 3. **Upstream arm** (`r < r0`): the axis follows a cubic Bézier in the machine frame, with `P0 = o(T_{r0})`, tangent `t0 = −z(T_{r0})`, `tE = −z_d` (the downstream axis direction reversed), `L = 40 × 3.38 Å`, `P1 = P0 + t0·L/3`, `P3 = P0 + (t0 + tE)·L/2`, and `P2 = P3 − tE·L/3`; beyond `P3` the axis is straight along `tE`. Arc-length tables use 512 samples. Frames along the curve are rotation-minimising (double-reflection method), seeded from `T_{r0}`, and apply twist `−34.2857°` per base pair going upstream.
 4. **Bending blend β:** replace `t0` by `slerp(tE, t0, β)` and each track frame by `slerp(ideal straight frame, track frame, β)`. At β = 0 the whole duplex is ideal and straight.
 5. **Strands:** the coding-strand nucleotide frame is `partnerFrame(template frame)` outside the bubble. Inside the bubble it is the `nontemplate` track frame (synthetic where flagged).

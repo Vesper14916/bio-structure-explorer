@@ -390,7 +390,11 @@ function pushExpression(force = false) {
   ui.setExpressState?.(payload);
 }
 
-const STORY_V2_ASSETS = ['rnap-holo', 'rnap-ec', 'nusg'];
+const STORY_V2_ASSETS = [
+  'rnap-holo', 'rnap-ec', 'nusg',
+  'ribosome-70s', 'trna-init', 'trna-aa',
+  'if1', 'if2', 'if3', 'ef-tu', 'ef-g', 'rf1',
+];
 
 function pushStoryState(st) {
   if (!st || app.mode !== 'express' || app.sceneVersion !== 'v2') return;

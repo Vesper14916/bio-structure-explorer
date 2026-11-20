@@ -131,12 +131,34 @@ Base: `r3-st5` + Chief `js/render/viewer.js` `setLabels` / `controlstart` / `Ato
 - **Report:** `docs/reviews/R3-ST6-argon.md`
 - **Outcome:** `READY TO LAUNCH R3-S3 WITH 6 CONCRETE BRIEF ADJUSTMENTS (C1–C6)`. Identified and solved: (C1) `rnap-holo` (`r1 = 11`) vs `rnap-ec` (`r1 = 13`) downstream anchor jump (`55.20 Å` → `0.000 Å` via `machinePoseForRegister(assets['rnap-ec'], reg)` and `effectiveTrackBlend = Math.max(1e-6, world.dna.trackBlend)` in `pose.js`); (C2) reading `tracks.rna`, `anchors.rnaExit`, and `anchors.hairpin` from `assets['rnap-ec']` with an outward 5′ free-chain exit tangent; (C3) exact 675-nt `Assembly` topology and `PPI_TEMPLATE` constant import; (C4) register stepping (`45 + n - 1` → `min(223, 45 + n)`), frozen register `223` relaxation with departing RNAP in Chapter 7, and §5.3 item 8 active slot-track check; (C5) two-stage local-frame $\sigma^{70}$ displacement along `uSigma = [-0.797, -0.518, 0.309]` (`0 → 12 Å` pre-displacement during early Chapter 5 to prevent the 1.48 Å RNA·$\sigma_{3.2}$ finger clash, then `12 → 60 Å` during `part.release` with seamless `rnap-holo → rnap-ec` transition); and (C6) centroid-guided `poseNtp` along the secondary-channel ray (`maxPen = 0.400 Å ≤ 1.0 Å`).
 
+### Stage ST7 — Translation Choreography (Claude C3; tag `r3-st7`)
+
+Delivered on `origin/claude/project-thread-hhdgkv` (`--no-ff` merges `d037442` R3-K3, `ba78ec3` R3-S4). The tag `r3-st7` could not be pushed from the Claude session (HTTP 403 on tag pushes); the user creates it on the ST7 head.
+
+| Task ID | Status | Owner / Executor | Branch | Deliverable & Handoff |
+| :--- | :--- | :--- | :--- | :--- |
+| **R3-K3** | `DONE` | Claude (C3) | `r3/K3` | `js/kin/trna.js`, `tests/kin-trna.test.mjs`; `docs/handoffs/R3-K3.md`. |
+| **R3-S4** | `DONE` | Claude (C3) | `r3/S4` | `js/sim/gene/translation.js`, `js/kin/pose.js` (translation), `tests/story-tl.test.mjs`, `docs/evidence/r3/S4/`; `docs/handoffs/R3-S4.md`. |
+
+### Stage ST8 — Crowders, Performance, Phone/Keyboard, Evidence Sweep, Full Story and Gate G3 (Claude; tag `r3-w3`)
+
+The user reassigned ST8 from Gemini to Claude (this overrides `AGENTS.md` ownership for ST8 only). Branch `claude/project-thread-weimhy`, based on the ST7 head. Models: Sonnet 5.5 high for the main work and judgement tasks, Haiku (high) for mechanical subtasks. Order deviation: the INT3 wiring (asset list, clamp, crowd) was done before U3 and V2 so that their evidence comes from the real app.
+
+| Task ID | Status | Owner / Executor | Deliverable & Handoff |
+| :--- | :--- | :--- | :--- |
+| **R3-R4** | `DONE` | Claude (Sonnet) | `js/scene/crowd.js`, `tests/crowd.test.mjs`, `docs/SCIENCE.md` §5; `docs/handoffs/R3-R4.md`. |
+| **R3-Q2** | `DONE` | Haiku subtask | `tools/perf/*`, `docs/PERF.md`; `docs/handoffs/R3-Q2.md`. |
+| **R3-U3** | `DONE` | Sonnet subtask | `tests/ui-phone.browser.mjs`, `js/ui/view-story.js` keyboard fix, `docs/evidence/r3/U3/`; `docs/handoffs/R3-U3.md`. |
+| **R3-V2** | `DONE` | Haiku subtask | `tools/evidence/sweep.mjs`, `docs/evidence/r3/sweep/`; `docs/handoffs/R3-V2.md`. |
+| **R3-INT3** | `DONE` | Claude (Chief role for ST8) | Full Step by step story in the app, audit fixes, Gate **G3** (`docs/VALIDATION.md` §9); `docs/handoffs/R3-INT3.md`, `DEC-030`, `DEC-031`. |
+| **ST8 audit** | `DONE` | Two read-only Sonnet reviewers + Claude | `docs/reviews/R3-ST8-audit.md` (and two raw reports). Replaces the Argon job for ST8. |
+
 ### Upcoming Stages (ST7–ST10)
 
 | Stage | Executor | Tasks (merge order) | Base Tag | Target Tag | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ST7** | **Claude (C3)** | `R3-K3` → `R3-S4` (translation choreography) | `r3-w2` | `r3-st7` | `READY` |
-| **ST8** | Gemini | Intake ST7; `R3-R4` → `R3-Q2` → `R3-U3` → `R3-V2` → `R3-INT3`; Gate **G3** | `r3-st7` | `r3-w3` | `PENDING` |
+| **ST7** | **Claude (C3)** | `R3-K3` → `R3-S4` (translation choreography) | `r3-w2` | `r3-st7` | `DONE` |
+| **ST8** | Claude (reassigned) | Intake ST7; `R3-R4` → `R3-Q2` → `R3-U3` → `R3-V2` → `R3-INT3`; Gate **G3** | `r3-st7` | `r3-w3` | `DONE` (tag `r3-w3` to be created by the user) |
 | **ST9** | Gemini | `R3-P1` → `R3-D1` → `R3-S5` → `R3-V1` → `R3-INT4`; Gate **G4** | `r3-w3` | `r3-w4` | `PENDING` |
 | **ST10** | Gemini + Human | `R3-Q3` → `R3-INT5` + Human visual acceptance; Gate **G5** | `r3-w4` | `v1.0.0` | `PENDING` |
 

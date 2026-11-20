@@ -992,9 +992,10 @@ function createTranslationKit(cInfo, assets) {
       }
     }
 
-    // Clearance guard (bound ribosome only): mRNA nucleotides within 30 registers of the track.
+    // Clearance guard (whenever the ribosome machine is in the scene, including the 30S docking in chapter 8):
+    // mRNA nucleotides within 30 registers of the track.
     let beadCount = 0;
-    if (rs.bound && NB > 0) {
+    if (NB > 0) {
       let rm = null;
       const ms = world.machines || [];
       for (let i = 0; i < ms.length; i++) if (ms[i] && ms[i].id === 'ribosome') { rm = ms[i]; break; }

@@ -306,3 +306,42 @@ Stage ST6 (`PLAN.md` §11) merged `R3-R3 → R3-U2 → R3-S3` (`--no-ff`) in exa
 
 
 
+
+## 9. Round 3 Stage ST8 / Gate G3 (`r3-w3`, 2026-11-20)
+
+ST8 (owner: Claude, reassigned by the user) covered `R3-R4`, `R3-Q2`, `R3-U3`, `R3-V2`, `R3-INT3` and a stage-wide audit. Details: `docs/handoffs/R3-R4.md`, `R3-Q2.md`, `R3-U3.md`, `R3-V2.md`, `R3-INT3.md`, `docs/reviews/R3-ST8-audit.md`, DEC-030, DEC-031.
+
+### 9.1 Automated checks
+
+| Check | Result |
+| --- | --- |
+| `npm test` | `tests 312 · pass 312 · fail 0` |
+| `npm run smoke` | `SMOKE PASS` |
+| `node tests/ui-story.browser.mjs` | `UI-STORY PASS (50 checks)` |
+| `node tests/ui-inspect.browser.mjs` | `UI-INSPECT PASS (141 checks)` |
+| `node tests/ui-phone.browser.mjs` | `UI-PHONE PASS (269 checks, 2 known defects)` |
+| `node tools/evidence/sweep.mjs` (16 chapters, desktop, mid) | 16 / 16 shots, 0 console errors, 0 page errors |
+| `node tools/build-assets.mjs --check` | **Not run**: the sandbox cannot reach RCSB (403). No asset or recipe changed in ST7 or ST8. |
+
+### 9.2 Gate G3 criteria (PLAN §12)
+
+| Criterion | Evidence | Result |
+| --- | --- | --- |
+| Full Step by step story passes §5.3 | `tests/story-tl.test.mjs` (item 8 now covers every chapter 8–16 sample; fixed chapter-8 penetration of 2.1 Å) plus audit runs over 1,956 poses | PASS |
+| Peptide emerges from `tunnelExit` before chapter 15 ends | `tests/story-speed.test.mjs`: inside at the start of chapter 14, 45 Å beyond the exit at its end, outside at the end of chapter 15; frames in `docs/evidence/r3/INT3/` | PASS |
+| 4× and 0.5× identical at the same story time | `tests/story-speed.test.mjs`: world, atoms, actors and FX equal after 0.5×, 1×, 4× and a direct seek at four times | PASS |
+| Frame-time table for software GL | `docs/PERF.md` §3.2 | PASS (software GL only) |
+
+**Gate G3: PASS.**
+
+### 9.3 Stage-wide audit
+
+`docs/reviews/R3-ST8-audit.md`: 42 findings, none High. Fixed: cutaway never opening the ribosome, chapter-8 clearance, chapter-1 holoenzyme, label placement and starvation, RNAP/DNA/IF/About wording, stale D = 38 text in PLAN. Deferred items are listed there for ST9 and for the user (caption wording, `DEFAULT_D`, hairpin–uS3 clash, test coverage gaps).
+
+### 9.4 Not verified in ST8
+
+- Hardware-GPU frame time (G4) and real phones (G5).
+- RCSB titles and citations; `build-assets --check`.
+- Full 96-shot sweep and 2× captures (see `docs/handoffs/R3-V2.md`).
+- Coupled mode beyond chapter 5 (ST9).
+- Tags `r3-st7` and `r3-w3`: the session git proxy refuses tag pushes, so the Chief creates them.
