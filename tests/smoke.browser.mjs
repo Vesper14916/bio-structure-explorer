@@ -224,7 +224,7 @@ async function populateStandaloneImportMapIndex(page, dataUrlToMod) {
 async function checkModuleImports(page, label, { modules, deps }, { standalone = false } = {}) {
   const results = await page.evaluate(async ({ modList, isStandalone }) => {
     const failures = [];
-    for (const relPath of modList) {
+    await Promise.all(modList.map(async relPath => {
       const spec = isStandalone ? `https://helix.local/${relPath}` : `/${relPath}`;
       try {
         await import(spec);
@@ -232,7 +232,7 @@ async function checkModuleImports(page, label, { modules, deps }, { standalone =
         const msg = err && err.message ? err.message : String(err);
         failures.push({ relPath, msg });
       }
-    }
+    }));
     return failures;
   }, { modList: modules, isStandalone: standalone });
 

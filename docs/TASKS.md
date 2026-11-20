@@ -111,16 +111,16 @@ Base: `r3-w1` + Chief `DEC-011` `tools/lib/match.mjs` update (`50716d1`). Merged
 - **Report:** `docs/reviews/R3-ST5-argon.md`
 - **Outcome:** `PASS WITH MINOR NOTES` (0 High, 0 Medium, 5 Low). Independently reproduced all 6 A3 superpositions and `D = 53 - 16 + 1 = 38` nt with zero off-by-one discrepancy in `timeline.js`. Ratified `DEC-022`–`DEC-024`; fixed L1 (`docs/assets/rnap.md` revision dates) and L2 (`docs/assets/factors.md` L0 input prose) on `main`; flagged L3 (`remainingCodons = 0` at `D = 38`, coupled duration `121.30 s`) for ST9 `R3-S5`/`R3-V1`.
 
-### Stage ST6 — Camera Rails & Labels, Inspection & Sources, Transcription Choreography, and Gate G2 (Gemini; target tag `r3-w2`)
+### Stage ST6 — Camera Rails & Labels, Inspection & Sources, Transcription Choreography, and Gate G2 (Gemini; tag `r3-w2`)
 
-Base: `r3-st5` + Chief `js/render/viewer.js` `setLabels` / `controlstart` / `AtomGroupLayer` picking prep. Merge order (`PLAN.md` §11): `R3-R3 → R3-U2 → R3-S3`, then Chief `R3-INT2` and Gate **G2**.
+Base: `r3-st5` + Chief `js/render/viewer.js` `setLabels` / `controlstart` / `AtomGroupLayer` picking prep (`431f327`). Merged in exact `PLAN.md` §11 order (`--no-ff`): `R3-R3 → R3-U2 → R3-S3`, followed by Chief `R3-INT2` and **Gate G2 PASS**.
 
 | Task ID | Status | Owner / Executor | Branch | Deliverable & Handoff |
 | :--- | :--- | :--- | :--- | :--- |
-| **R3-R3** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/r3` | `js/scene/camera-rails.js`, `js/scene/labels.js`, `js/render/overlay.js` (priority cap 6 and 250 ms fading), `tests/camera-rails.test.mjs`, `docs/evidence/r3/R3/`. |
-| **R3-U2** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/u2` | `js/ui/inspect.js`, `js/ui/about.js` (Sources section §4.10), `js/ui/view-story.js` (inspect card body), `tests/ui-inspect.browser.mjs`. |
-| **R3-S3** | `IN PROGRESS` | Gemini subagent (inherited model) | `r3/s3` | `js/sim/gene/transcription.js`, `js/kin/ntp.js`, `js/kin/pose.js` (transcription parts), `dev/story-lab.html`, `tests/story-tx.test.mjs`, `docs/evidence/r3/S3/`. |
-| **R3-INT2** | `PENDING` | Gemini Chief | `main` | `js/scene/story-scene.js` + `js/main.js` wiring for chapters 1–7 behind `?scene=v2`; desktop & phone chapter review; shot tuning; Gate **G2**; tag `r3-w2`. |
+| **R3-R3** | `DONE` | Gemini subagent (inherited model) | `r3/r3` (merged `--no-ff`) | `js/scene/camera-rails.js`, `js/scene/labels.js`, `js/render/overlay.js` (priority cap 6 and 250 ms fading), `tests/camera-rails.test.mjs` (6/6 pass), `docs/evidence/r3/R3/` (2 captures), `docs/handoffs/R3-R3.md`. |
+| **R3-U2** | `DONE` | Gemini subagent (inherited model) | `r3/u2` (merged `--no-ff`) | `js/ui/inspect.js` (14 machine targets + 6 procedural kinds), `js/ui/about.js` (Sources section §4.10, 13 PDBs), `js/ui/view-story.js` (inspect card body), `tests/ui-inspect.browser.mjs` (141 checks), `docs/evidence/r3/U2/` (5 captures), `docs/handoffs/R3-U2.md`. |
+| **R3-S3** | `DONE` | Gemini subagent (inherited model) | `r3/s3` (merged `--no-ff`) | `js/sim/gene/transcription.js` (Ch 1–7, Argon C1/C4/C5), `js/kin/ntp.js` (Argon C6), `js/kin/pose.js` (675-nt Assembly, Argon C1–C3), `dev/story-lab.html`, `tests/story-tx.test.mjs` (6/6 pass, §5.3 items 1, 2, 7, 8), `docs/evidence/r3/S3/` (21 captures), `docs/handoffs/R3-S3.md`. Ruling: `DEC-027`. |
+| **R3-INT2** | `DONE` | Gemini Chief | `main` | `js/scene/story-scene.js` + `js/main.js` wiring for chapters 1–7 behind `?mode=express&scene=v2` (clamped at Ch 7 end `66.25 s` until ST8/W3), `js/render/colors.js`/`viewer.js` alignment (`DEC-028`), standalone double-boot guard & smoke speedup (`DEC-029`), 14 desktop/phone chapter captures in `docs/evidence/r3/INT2/`, Gate **G2 PASS** (`docs/VALIDATION.md` §8), tag `r3-w2`. |
 
 #### ST6 Argon Job Log (`PLAN.md` §9.1 & §11)
 
@@ -135,7 +135,7 @@ Base: `r3-st5` + Chief `js/render/viewer.js` `setLabels` / `controlstart` / `Ato
 
 | Stage | Executor | Tasks (merge order) | Base Tag | Target Tag | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ST7** | **Claude (C3)** | `R3-K3` → `R3-S4` (translation choreography) | `r3-w2` | `r3-st7` | `PENDING` |
+| **ST7** | **Claude (C3)** | `R3-K3` → `R3-S4` (translation choreography) | `r3-w2` | `r3-st7` | `READY` |
 | **ST8** | Gemini | Intake ST7; `R3-R4` → `R3-Q2` → `R3-U3` → `R3-V2` → `R3-INT3`; Gate **G3** | `r3-st7` | `r3-w3` | `PENDING` |
 | **ST9** | Gemini | `R3-P1` → `R3-D1` → `R3-S5` → `R3-V1` → `R3-INT4`; Gate **G4** | `r3-w3` | `r3-w4` | `PENDING` |
 | **ST10** | Gemini + Human | `R3-Q3` → `R3-INT5` + Human visual acceptance; Gate **G5** | `r3-w4` | `v1.0.0` | `PENDING` |

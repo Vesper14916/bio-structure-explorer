@@ -64,7 +64,7 @@ export class ColorModel {
     if (scheme === 'bfactor' && !this.hasB) scheme = 'element';
     const bt = v => (v - this.bLo) / Math.max(1e-3, this.bHi - this.bLo);
     const repl = asm.meta && asm.meta.kind === 'replication';
-    const expr = asm.meta && asm.meta.kind === 'expression';
+    const expr = asm.meta && (asm.meta.kind === 'expression' || asm.meta.kind === 'gene-expression');
     const strandHex = nu => {
       if (expr) {
         if (nu.role === 'coding') return EXPRESSION_HEX.coding;

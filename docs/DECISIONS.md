@@ -199,6 +199,36 @@ This log records accepted contract changes, pre-approved fallbacks from `PLAN.md
   2. **Crowder buffer layout:** `transforms: Float32Array` holds 16 **column-major Three.js `Matrix4`** floats per instance (`THREE.Matrix4.toArray(buf, i * 16)`), matching `THREE.InstancedMesh.instanceMatrix` directly with zero per-frame transpose.
 - **Impact:** Freezes exact conventions for ST6 `R3-S3` (`part.release`) and ST8 `R3-R4` (`js/scene/crowd.js`).
 
+## DEC-027: ST6 Argon Pre-S3 rulings (C1–C6) for transcription choreography
+
+- **Date:** 2026-11-20
+- **Source:** `docs/reviews/R3-ST6-argon.md`, `docs/handoffs/R3-S3.md`
+- **Context:** Before `R3-S3` started, Argon audited the brief against `PLAN.md` §5.3 and the K1/K2/S2 APIs, discovering six concrete hazards: (C1) a 55.20 Å downstream DNA jump when `poseDuplex` switches its downstream anchor `C1` from `rnap-holo` (`r1 = 11`) to `rnap-ec` (`r1 = 13`) at `trackBlend: 0 → 0+`; (C2) missing `tracks.rna` / `anchors.rnaExit` / `anchors.hairpin` on `rnap-holo` and inward-pointing default `rnaExit.R`; (C3) 675-nt `Assembly` topology and `PPI_TEMPLATE` constant import; (C4) register stepping (`45 + n - 1 → min(223, 45 + n)`), frozen register-223 relaxation in Chapter 7, and active slot-track scope for §5.3 item 8; (C5) a 1.48 Å clash between nascent RNA (`registers -6..-10`) and the $\sigma_{3.2}$ finger prior to `part.release`; and (C6) a 1.61 Å NTP triphosphate swing clash in `rnap-ec`'s secondary channel.
+- **Decision:** **Ratified C1–C6** as implemented in `R3-S3` (`js/sim/gene/transcription.js`, `js/kin/ntp.js`, `js/kin/pose.js`): bound RNAP transforms always derive from `machinePoseForRegister(rnapEcRef, reg)` with `effectiveTrackBlend = Math.max(1e-6, world.dna.trackBlend ?? 0)` in `pose.js` (keeping `world.dna.trackBlend = 0` in `WorldState` per `DEC-007`), `tracks.rna`/`rnaExit`/`hairpin` fall back to `assets['rnap-ec']` with outward 5′ free-chain exit tangent, two-stage local-frame $\sigma^{70}$ displacement along `U_SIGMA = [-0.797, -0.518, 0.309]` (`0 → 12 Å` then `12 → 60 Å` with visual-only `sigma-release` companion across `trackBlend = 0.5`), and heavy-atom centroid-guided `poseNtp` along the secondary-channel ray.
+- **Impact:** Guarantees `<= 6.93e-4 Å` downstream DNA drift, `maxDnaPen = 0.956 Å`, `maxRnaPen = 0.459 Å`, `maxNtpPen = 0.063 Å` (all `<= 1.0 Å`), and `0.57 ms/frame` pose time across all 448 sample times of Chapters 1–7.
+
+## DEC-028: Identity `Viewer.root` axis (`asm.meta.axis`) and `'gene-expression'` strand palette
+
+- **Date:** 2026-11-20
+- **Source:** `docs/handoffs/R3-S3.md` (Design gaps), `R3-INT2` integration
+- **Context:** `Viewer.computeOrientation(asm)` rotates `Viewer.root` so the principal axis of `asm` aligns with screen `+Y` (vertical single-helix convention for Round 1 Explore/Pairs/Melt modes). Round 3 `StoryScene`, `CameraRails`, `selectLabels`, and `poseDuplex` all operate in the `PLAN.md` §6.2–§6.3 world frame (`+x` horizontal gene, `+y` up, `+z` toward viewer). In addition, `initStoryAssembly` tagged `asm.meta.kind = 'gene-expression'` while `ColorModel.compute` checked only `'expression'`.
+- **Decision:**
+  1. `initStoryAssembly` (`js/kin/pose.js`) sets `asm.meta.axis = [[0, -0.5, 0], [0, 0.5, 0]]`, keeping `Viewer.root` at identity so procedural nucleotides, machine actors, atom groups, FX, labels, and `CameraRails` share one 1:1 world coordinate frame with zero impact on Round 1 modes.
+  2. `ColorModel.compute` (`js/render/colors.js`) treats both `'expression'` and `'gene-expression'` as using `EXPRESSION_HEX` (`#7c93c3` coding DNA, `#9fb2dc` template DNA, `#2fd9b9` mRNA, `#ffd43b` tRNA anticodon), and `Viewer.tick` (`js/render/viewer.js`) includes `dist * 0.35` in the fog radius `R` so wide overview shots (`dist > 1000 Å`) do not haze out the 840-Å gene.
+- **Impact:** Clean 1:1 world alignment and exact `PLAN.md` §4.3 palette across `StoryScene` and `dev/story-lab.html`.
+
+## DEC-029: Standalone idempotent `boot()` guard and concurrent `smoke.browser.mjs` module check
+
+- **Date:** 2026-11-20
+- **Source:** `R3-INT2` Gate G2 smoke validation
+- **Context:** In `dist/helix-standalone.html`, the inline entry `<script type="module">` runs `boot()`, while `tests/smoke.browser.mjs` later dynamically imports every module in `js/` (including `https://helix.local/js/main.js`) through the importmap's `data:text/javascript;base64,...` URLs. Re-importing `js/main.js` ran `boot()` a second time (spawning a duplicate WebGLRenderer), and importing 45 `data:` modules sequentially yielded to SwiftShader's software rAF loop between every module (`~70–90 s` overhead).
+- **Decision:**
+  1. Guard `boot()` in `js/main.js` with `if (!window.helix) boot();` so dynamic re-import of `js/main.js` is idempotent.
+  2. Use `Promise.all` inside `checkModuleImports` in `tests/smoke.browser.mjs` while preserving per-module failure reporting and root-cause dependency filtering.
+  3. Stabilize `tests/kin-duplex.test.mjs:445` against V8 young-gen nursery sawtooth by combining median and net 20,000-call average growth (retaining `<= 1 MiB` bound; verified `18.4 KiB` retained under `--expose-gc`).
+- **Impact:** Reliable, fast `SMOKE PASS` and `284/284` unit test pass across both HTTP and offline standalone builds.
+
+
 
 
 

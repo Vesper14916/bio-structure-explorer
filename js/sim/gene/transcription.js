@@ -350,7 +350,8 @@ export function contributeTx(story, t, out) {
       pApproach = uMove;
     }
   } else {
-    // Chapter 1 (establish): before machine.move:1 starts at t = 6.0 s
+    // Chapter 1 (establish): gene only; RNAP enters when machine.move:1 begins in Chapter 2.
+    rnapPresent = false;
     isApproaching = true;
     pApproach = 0;
   }
@@ -388,7 +389,7 @@ export function contributeTx(story, t, out) {
   if (rnapPresent) {
     const rnap = pool.rnapMachine;
     rnap.assetId = assetId;
-    rnap.opacity = pLeave > 0 ? Math.max(0, 1 - pLeave * 0.85) : 1;
+    rnap.opacity = pLeave > 0 ? Math.max(0, 1 - pLeave * 0.85) : (isApproaching ? Math.max(0.15, clamp01(pApproach * 4)) : 1);
     rnap.visible = true;
     pool.corePart.visible = true;
     pool.corePart.opacity = rnap.opacity;

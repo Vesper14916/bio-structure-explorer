@@ -257,5 +257,52 @@ Branch: `main` (tag `r3-st5`). Scope: Chief `DEC-011` pre-ST5 helper update (`50
 - Hardware-GPU desktop/phone frame times (all ST5 browser tests ran on headless Chromium SwiftShader).
 - Live `StoryScene` chapter playback (ST6 `R3-R3` → `R3-U2` → `R3-S3` → `R3-INT2`, Gate G2).
 
+---
+
+## 8. Round 3 Stage ST6 & Gate G2 Verification (`r3-w2`)
+
+Stage ST6 (`PLAN.md` §11) merged `R3-R3 → R3-U2 → R3-S3` (`--no-ff`) in exact order onto `main` after the Argon pre-S3 review (`docs/reviews/R3-ST6-argon.md`), followed by Chief integration **`R3-INT2`** (`js/scene/story-scene.js` + `js/main.js` wiring behind `?mode=express&scene=v2`, clamping playback at Chapter 7 end `66.25 s` until ST8/W3) and **Gate G2** (`PLAN.md` §12).
+
+### 8.1 Gate G2 Checklist (`PLAN.md` §12)
+
+| Gate G2 Criterion | Status | Evidence |
+| :--- | :---: | :--- |
+| 1. Chapters 1–7 play, pause, and seek on `index.html?mode=express&scene=v2` with zero console/page/network errors | **PASS** | Live Playwright verification (`clampedT = 66.25`, `playingAfterPlay = true`, `tAfterTick = 10.5`, `pausedHeld = true`, actor `sigma -> "σ⁷⁰"` & procedural `DNA -> "DNA duplex"` picking + clear, 0 console/page/HTTP errors) + `SMOKE PASS` on both `index.html?mode=express&scene=v2` and offline `dist/helix-standalone.html?mode=express&scene=v2` (`0` network requests). |
+| 2. `PLAN.md` §5.3 invariants 1, 2, 7, and 8 pass | **PASS** | `tests/story-tx.test.mjs` (`6/6 pass`): 675-nt sequence identity & WC complement; monotonic integer `rna.length` (`0..179`) & bit-for-bit determinism across random seeks; bubble `<= 14 bp <= 15 bp` and 9-bp Ch 6 RNA·DNA hybrid; 448-sample slot-track L1 clearance `maxDnaPen = 0.956 Å`, `maxRnaPen = 0.459 Å`, `maxNtpPen = 0.063 Å` (all `<= 1.0 Å`); downstream DNA drift `6.93e-4 Å <= 0.01 Å`; warmed-up `stateAt + poser.pose` average `0.568 ms/frame < 1.0 ms`. |
+| 3. Every chapter (1–7) screenshot reviewed on desktop (`1440×900` @ 2×) and phone (`iPhone 13` @ 2×) | **PASS** | All 14 captures (`docs/evidence/r3/INT2/desktop-ch{1..7}.jpg` and `phone-ch{1..7}.jpg`) visually inspected via `view_file`; framing, §4.3 palette, cutaway, labels (`<= 6`), and responsive bottom sheet verified clean across all 7 chapters without needing shot-distance overrides. |
+
+### 8.2 Automated Verification Results
+
+- **Syntax check (`node tools/check-syntax.mjs`):** `0 failed` across all JS/MJS files.
+- **Asset build determinism (`node tools/build-assets.mjs --check --quiet`):** `identical` for all 13 asset files (`1.46 MB` total across 12 real assets).
+- **Standalone bundle (`npm run build:standalone`):** `dist/helix-standalone.html` (**4.69 MB ≤ 7.5 MB**, 13 assets inlined in `window.__HELIX_ASSETS__`).
+- **Node test suite (`npm test`):**
+  ```text
+  tests 284 · pass 284 · fail 0
+  ```
+  Includes `tests/camera-rails.test.mjs` (6/6 pass, browser Free interrupt, `reducedMotion`, 250 ms label fades & cap `<= 6`), `tests/story-tx.test.mjs` (6/6 pass), `tests/stubs.test.mjs` (24/24 pass, marking `ntp`, `pose`, `story-scene`, `camera-rails`, `labels`, `inspect` implemented per `DEC-005`), and all pre-existing Round 1–3 tests.
+- **Browser smoke gate (`npm run smoke`):** `SMOKE PASS` (verified `/index.html`, `/dist/helix-standalone.html`, `/index.html?mode=express&scene=v2`, and offline `/dist/helix-standalone.html?mode=express&scene=v2` with zero errors and zero external network requests).
+- **UI & Inspection browser suites:**
+  - `node tests/ui-inspect.browser.mjs`: `UI-INSPECT PASS (141 checks)` (all 14 machine actor/part targets verbatim §5.4, all 6 procedural kinds `<= 120` chars, click-only `RCSB ↗`, all 13 PDB entries in About `"Sources"` §4.10, 0 external network requests).
+  - `node tests/ui-story.browser.mjs`: `UI-STORY PASS (50 checks)` (desktop & `iPhone 13`, 0 overflow, 0 unnamed buttons).
+
+### 8.3 ST6 Argon Independent Review (`docs/reviews/R3-ST6-argon.md`)
+
+- **Window (UTC):** `2026-11-20T06:33:05Z` – `2026-11-20T06:41:41Z` (8 min 36 s / 30 min budget).
+- **Verdict:** `READY TO LAUNCH R3-S3 WITH 6 CONCRETE BRIEF ADJUSTMENTS (C1–C6)`. All six adjustments were folded into the `R3-S3` brief and ratified in `DEC-027`.
+
+### 8.4 Visual Evidence Audited by Chief (42 2× JPEG q90 Captures)
+
+- `docs/evidence/r3/R3/` (2 captures): `shot-rnap-side-labels.jpg`, `shot-wide-overview-labels.jpg`.
+- `docs/evidence/r3/U2/` (5 captures): `desktop-inspect-ribosome-30s.jpg`, `desktop-inspect-procedural-mrna.jpg`, `desktop-about-sources.jpg`, `phone-inspect-sigma70.jpg`, `phone-about-sources.jpg`.
+- `docs/evidence/r3/S3/` (21 captures): `ch{1..7}-{start,mid,end}.jpg` in `dev/story-lab.html`.
+- `docs/evidence/r3/INT2/` (14 captures): `desktop-ch{1..7}.jpg` (`1440×900` @ 2×) and `phone-ch{1..7}.jpg` (`iPhone 13` `390×844` @ 2×) on `index.html?mode=express&scene=v2`.
+
+### 8.5 Not Verified in ST6
+
+- Translation chapters (8–16) and Coupled mode (owned by Claude ST7 `R3-K3` → `R3-S4` starting from tag `r3-w2`, and ST8/ST9).
+- Hardware-GPU desktop/phone FPS benchmarks (owned by ST9 `R3-P1`).
+
+
 
 

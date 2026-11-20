@@ -2,6 +2,7 @@
 import {
   Assembly, buildDuplex, buildRnaDuplex, buildCrystal, measureDuplex,
   cleanSequence, cleanRnaSequence, applyFrame, idealPairFrame, HELIX_B, HELIX_A,
+  TRUE_SCALE_GENE_CONSTRUCT,
 } from './science/index.js';
 import { createViewer } from './render/viewer.js';
 import { createUI, pairPayload } from './ui/ui.js';
@@ -9,6 +10,8 @@ import { createMeltSim } from './sim/melt.js';
 import { createReplicationSim, BLOB_DEF } from './sim/replication.js';
 import { createExpressionSim, EXPRESS_BLOB_DEF } from './sim/expression.js';
 import { REPLICATION_HEX, EXPRESSION_HEX } from './render/colors.js';
+import { loadAssets } from './assets/registry.js';
+import { createStoryScene } from './scene/story-scene.js';
 
 const DEFAULT_SEQUENCE = 'CGCGAATTCGCGATATGGCC';
 const params = new URLSearchParams(location.search);
@@ -19,7 +22,8 @@ const cleanForNa = (s, na = app.nucleicAcid) => (na === 'rna' ? cleanRnaSequence
 const app = {
   mode: 'structure',
   sceneVersion: params.get('scene') === 'v2' ? 'v2' : 'v1',
-  v2WorldState: null,
+  storyScene: null,
+  storySceneReady: null,
   nucleicAcid: initialNa,
   sequence: (initialNa === 'rna' ? cleanRnaSequence(params.get('seq') || '') : cleanSequence(params.get('seq') || '')).slice(0, 40)
     || (initialNa === 'rna' ? cleanRnaSequence(DEFAULT_SEQUENCE) : DEFAULT_SEQUENCE),
@@ -141,9 +145,16 @@ function selectPair(index, { focus = true } = {}) {
 // Mode switching
 function showMode(mode, { keepCamera = false } = {}) {
   app.mode = mode;
+  if (app.storyScene && mode !== 'express') {
+    app.storyScene.pause();
+  }
   viewer.setHighlight(null);
   viewer.setBlobs([]);
   viewer.setActors?.([]);
+  viewer.setAtomGroups?.([]);
+  viewer.setFx?.([]);
+  viewer.setLabels?.([]);
+  viewer.setDetailFocus?.(null);
   viewer.setAnnotations([]);
   viewer.setFollowTarget?.(null);
   viewer.setFraming?.(
@@ -154,11 +165,14 @@ function showMode(mode, { keepCamera = false } = {}) {
   if (mode === 'crystal') app.asm = crystal();
   else if (mode === 'melt') { const s = meltSim(); s.setConditions({ T: app.melt.T, Na: app.melt.Na }); app.asm = s.assembly; }
   else if (mode === 'replicate') app.asm = replSim().assembly;
-  else if (mode === 'express') app.asm = app.sceneVersion === 'v2' ? new Assembly().finalize() : exprSim().assembly;
-  else app.asm = ideal();
+  else if (mode === 'express') {
+    app.asm = app.sceneVersion === 'v2'
+      ? (app.storyScene ? app.storyScene.target.asm : new Assembly().finalize())
+      : exprSim().assembly;
+  } else app.asm = ideal();
 
   viewer.setStyle(styleForMode());
-  viewer.setAssembly(app.asm, { keepCamera });
+  viewer.setAssembly(app.asm, { keepCamera: keepCamera || (mode === 'express' && app.sceneVersion === 'v2') });
   ui.setStyle(styleForMode());
 
   if (mode === 'structure') {
@@ -175,7 +189,7 @@ function showMode(mode, { keepCamera = false } = {}) {
     pushReplication(true);
   } else if (mode === 'express') {
     if (app.sceneVersion === 'v2') {
-      loadV2Placeholder();
+      ensureStoryScene();
     } else {
       const sim = exprSim();
       sim.setCutaway(app.exprCutaway);
@@ -376,46 +390,72 @@ function pushExpression(force = false) {
   ui.setExpressState?.(payload);
 }
 
-function applyV2WorldState(ws) {
-  app.v2WorldState = ws;
-  if (!ws || app.mode !== 'express' || app.sceneVersion !== 'v2') return;
-  ui.setExpressState?.({
-    progress: ws.chapterProgress ?? 0,
-    playing: false,
-    speed: app.exprSpeed,
-    phase: ws.chapter?.title || 'Story v2',
-    caption: ws.caption || '',
-    rnaCount: ws.counters?.mrna ?? 0,
-    hybridCount: ws.counters?.hybrid ?? 0,
-    codonIndex: ws.counters?.codon ?? 0,
-    peptideCount: ws.counters?.peptide ?? 0,
-  });
+const STORY_V2_ASSETS = ['rnap-holo', 'rnap-ec', 'nusg'];
+
+function pushStoryState(st) {
+  if (!st || app.mode !== 'express' || app.sceneVersion !== 'v2') return;
+  ui.setExpressState?.(st);
 }
 
-async function loadV2Placeholder() {
-  if (app.v2WorldState) { applyV2WorldState(app.v2WorldState); return; }
-  const isStandalone = typeof import.meta.url === 'string' && import.meta.url.startsWith('data:');
-  if (!isStandalone && (location.protocol === 'http:' || location.protocol === 'https:')) {
-    try {
-      const url = new URL('../tests/fixtures/world-state.json', import.meta.url);
-      const res = await fetch(url);
-      if (res.ok) {
-        applyV2WorldState(await res.json());
-        return;
-      }
-    } catch { /* fall through to minimal placeholder */ }
+function ensureStoryScene() {
+  if (app.storyScene) {
+    app.asm = app.storyScene.target.asm;
+    viewer.setStyle(styleForMode());
+    viewer.setAssembly(app.asm, { keepCamera: true });
+    app.storyScene.seek(app.storyScene.state().t, { instantCamera: true });
+    pushStoryState(app.storyScene.state());
+    return Promise.resolve(app.storyScene);
   }
-  applyV2WorldState({
-    t: 42.75,
-    chapter: { index: 5, id: 'elongate-tx', title: 'Elongation', group: 'T', t0: 32.4, t1: 53.1, shot: 'rnap-follow' },
-    chapterProgress: 0.5,
-    caption: 'The polymerase reads the template 3′→5′ and builds RNA 5′→3′. About nine base pairs of RNA·DNA hybrid stay inside; the DNA re-closes behind.',
-    counters: { mrna: 81, hybrid: 9, codon: 0, peptide: 0 },
-  });
+  if (app.storySceneReady) return app.storySceneReady;
+  app.storySceneReady = loadAssets(STORY_V2_ASSETS)
+    .then(assets => {
+      const tier = viewer.getState ? viewer.getState().tier : 'high';
+      const scene = createStoryScene(viewer, {
+        scenario: TRUE_SCALE_GENE_CONSTRUCT,
+        assets,
+        mode: 'sequential',
+        tier,
+        onStateChange: st => pushStoryState(st),
+      });
+      app.storyScene = scene;
+      app.asm = scene.target.asm;
+      if (window.helix) window.helix.storyScene = scene;
+
+      if (app.mode === 'express' && app.sceneVersion === 'v2') {
+        const pausedParam = params.get('paused') === '1' || params.get('paused') === 'true';
+        if (params.has('t')) {
+          const tVal = parseFloat(params.get('t'));
+          scene.seek(Number.isFinite(tVal) ? tVal : 0, { instantCamera: true });
+          if (!pausedParam) scene.pause();
+        } else if (params.has('chapter')) {
+          const chNum = parseInt(params.get('chapter'), 10);
+          const fracVal = params.has('frac') ? parseFloat(params.get('frac')) : 0.5;
+          const idx = Number.isFinite(chNum) ? Math.max(0, chNum - 1) : 0;
+          scene.setChapter(idx, { frac: Number.isFinite(fracVal) ? fracVal : 0.5, instantCamera: true });
+          if (!pausedParam) scene.pause();
+        } else if (pausedParam) {
+          scene.seek(0, { instantCamera: true });
+        } else {
+          scene.seek(0, { instantCamera: true });
+          scene.play();
+        }
+        pushStoryState(scene.state());
+      }
+      return scene;
+    })
+    .catch(err => {
+      console.error('Failed to initialize Express v2 StoryScene:', err);
+      ui.showError('Could not load molecular assets for Express v2.', 'Scene unavailable');
+      return null;
+    });
+  return app.storySceneReady;
 }
 
 function tickExpression(dt) {
-  if (app.sceneVersion === 'v2') return;
+  if (app.sceneVersion === 'v2') {
+    app.storyScene?.tick(dt);
+    return;
+  }
   const sim = exprSim();
   sim.update(dt * app.exprSpeed);
   viewer.sync();
@@ -483,7 +523,22 @@ const handlers = {
   },
 
   onExpression({ action, value }) {
-    if (app.sceneVersion === 'v2') return;
+    if (app.sceneVersion === 'v2') {
+      const s = app.storyScene;
+      if (!s) return;
+      if (action === 'play') s.play();
+      else if (action === 'pause') s.pause();
+      else if (action === 'restart') s.restart();
+      else if (action === 'seek') s.seekProgress(value);
+      else if (action === 'speed') s.setSpeed(value);
+      else if (action === 'mode') s.setMode(value);
+      else if (action === 'camera') s.setCameraOption(value);
+      else if (action === 'toggle') s.setToggles(value);
+      else if (action === 'chapter') s.setChapter(value);
+      else if (action === 'selectCodon') s.selectCodon(value);
+      else if (action === 'clearInspect') s.clearInspect();
+      return;
+    }
     const sim = exprSim();
     if (action === 'play') { if (sim.state.finished) sim.seek(0); sim.play(); }
     else if (action === 'pause') sim.pause();
@@ -521,7 +576,10 @@ function boot() {
   viewer.on('pick', e => {
     if (app.mode === 'melt' || app.mode === 'replicate') return;
     if (app.mode === 'express') {
-      if (app.sceneVersion === 'v2') return;
+      if (app.sceneVersion === 'v2') {
+        app.storyScene?.pick(e);
+        return;
+      }
       if (!e || (e.codon === undefined || e.codon < 0)) {
         if (app.selectedCodon !== null) { applyCodonHighlight(null, { focus: false }); pushExpression(true); }
         return;
@@ -565,4 +623,4 @@ function boot() {
   window.helix = { app, viewer, ui };                   // handy for debugging and automated tests
 }
 
-boot();
+if (!window.helix) boot();

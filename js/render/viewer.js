@@ -903,7 +903,7 @@ class Viewer {
     pu.uDrift.value = motion;
     pu.uFocus.value = dist;
     pu.uCenter.value.copy(this.controls.target);
-    const R = Math.max(this.fit.r, 10, this.actors.maxRadius), box = Math.max(70, 2.2 * Math.max(this.fit.h / 2, R), dist * 1.2);
+    const R = Math.max(this.fit.r, 10, this.actors.maxRadius, dist * 0.35), box = Math.max(70, 2.2 * Math.max(this.fit.h / 2, R), dist * 1.2);
     pu.uBox.value.set(box, box, box);
     this.scene.fog.near = Math.max(1, dist - R * 0.6);
     this.scene.fog.far = dist + R * 4.5 + 25;
