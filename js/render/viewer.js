@@ -8,6 +8,7 @@ import { MoleculeLayer, BALL_SCALE } from './molecule.js';
 import { CartoonLayer } from './cartoon.js';
 import { AtomGroupLayer } from './atom-groups.js';
 import { ActorLayer } from './actors.js';
+import { FxLayer } from './fx.js';
 import { GuideLayer } from './guides.js';
 import { OverlayLayer } from './overlay.js';
 import { buildEnvironment, buildBackground, buildLightRig, Particles, Post, FOG_COLOR } from './stage.js';
@@ -107,6 +108,7 @@ class Viewer {
     this.cartoon = new CartoonLayer(this.root, this.tier);
     this.atomGroups = null;
     this.actors = new ActorLayer(this.root, this.tier);
+    this.fx = null;
     this.guides = new GuideLayer(this.root);
     this.overlay = new OverlayLayer(this.container, this.root, (x, y, z, out) => this.project(x, y, z, out));
     this.post = new Post(r, scene, this.camera, this.tier);
@@ -141,6 +143,7 @@ class Viewer {
     this.molecule.setTier(tier);
     this.cartoon.setTier(tier);
     if (this.atomGroups) this.atomGroups.setTier(tier);
+    if (this.fx) this.fx.setTier(tier);
     this.actors.setTier(tier);
     this.applyTierSettings();
     this.resize();
@@ -415,6 +418,34 @@ class Viewer {
       this.atomGroups.setDetailFocus(this.detailFocus);
     }
     this.atomGroups.setGroups(list, this.style);
+    this.dirty = true;
+  }
+
+  setFx(list) {
+    const items = list || [];
+    if (!this.fx) {
+      if (!items.length) return;
+      this.fx = new FxLayer({
+        parent: this.root,
+        overlayEl: this.overlay.el,
+        project: (x, y, z, out) => this.project(x, y, z, out),
+        tier: this.tier,
+      });
+    }
+    this.fx.setFx(items);
+    this.dirty = true;
+  }
+
+  setCrowd(instances, assetsById) {
+    this.actors.setCrowd(instances || [], assetsById);
+    this.dirty = true;
+  }
+
+  setFar(far) {
+    const f = Number(far);
+    if (!Number.isFinite(f) || f <= this.camera.near) return;
+    this.camera.far = f;
+    this.camera.updateProjectionMatrix();
     this.dirty = true;
   }
 
@@ -840,6 +871,17 @@ class Viewer {
     this.camera.updateMatrixWorld();
     this.root.updateMatrixWorld();
     this.actors.update(this.camera, dt, this.tier);
+    if (this.fx) {
+      const fxResolvers = this._fxResolvers || (this._fxResolvers = {
+        actors: this.actors,
+        molecule: this.molecule,
+        _v: this,
+        get atomGroups() { return this._v.atomGroups; },
+        get asm() { return this._v.asm; },
+        get dpos() { return this._v.dpos; },
+      });
+      this.fx.update(this.camera, this.width, this.height, fxResolvers, now);
+    }
     const ctx = this.labelCtx || (this.labelCtx = { pxPerAAt: d => this.pxPerA(d) });
     ctx.pxPerA = this.pxPerA(dist);
     ctx.centerDepth = dist;
@@ -895,9 +937,12 @@ class Viewer {
       setFollowTarget: spec => v.setFollowTarget(spec),
       setDetailFocus: focus => v.setDetailFocus(focus),
       setAtomGroups: groups => v.setAtomGroups(groups),
+      setFx: list => v.setFx(list),
+      setCrowd: (instances, assetsById) => v.setCrowd(instances, assetsById),
+      setFar: far => v.setFar(far),
       setAnnotations: list => v.overlay.setAnnotations(list || []),
       setBlobs: list => v.overlay.setBlobs(list || []),
-      /** Machine actors (helix-asset v1, see actors.js): [{ id, asset, transform, visible, opacity, parts, cutaway, lod, label }]. */
+      /** Machine actors (helix-asset v1/v2, see actors.js): [{ id, asset, transform, visible, opacity, parts, cutaway, lod, label, pickable }]. */
       setActors: list => { v.actors.setActors(list || []); v.ensureActorRange(); v.dirty = true; },
       getActorState: () => v.actors.getState(),
       /** Persistent framing hints for focus(null)/auto-framing: extra science-space points that must stay
@@ -946,6 +991,7 @@ class Viewer {
     this.controls.removeEventListener('start', this.onCtlStart);
     this.controls.removeEventListener('end', this.onCtlEnd);
     this.controls.dispose();
+    if (this.fx) this.fx.dispose();
     this.overlay.dispose();
     this.molecule.dispose();
     this.cartoon.dispose();

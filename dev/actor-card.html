@@ -20,18 +20,19 @@
 <script type="module">
 import { Assembly, nucleotideTemplate, applyFrame, dist } from '../js/science/index.js';
 import { decodeAsset } from '../js/assets/format.js';
+import { loadManifest, loadAsset } from '../js/assets/registry.js';
 import { createViewer } from '../js/render/viewer.js';
 
-// Machine actor card: shows one helix-asset v1 file (docs/CONTRACTS.md 6.2) with an identity transform.
+// Machine actor card: shows any helix-asset v1/v2 file (docs/CONTRACTS.md 6.2 & 7.1) with an identity transform.
 // URL params:
-//   asset    file name in assets/ (default fixture-machine.asset.json)
+//   asset    manifest asset id (e.g. ribosome-70s) or file name in assets/ (default fixture-machine.asset.json)
 //   lod      auto | l0 | l1 | l2            (default auto)
-//   cutaway  0 | 1                          clip the near half at the active site (default 0)
-//   tracks   0 | 1                          procedural nucleotides for every slot-track register (default 0)
+//   cutaway  0 | 1 | <anchorName>           clip the near half at the active site or named anchor (default 0)
+//   tracks   0 | 1                          procedural nucleotides for slot tracks + v2 paths polyline/endpoints (default 0)
 //   anchors  0 | 1                          one label per anchor (default 0)
 //   quality  auto | low | medium | high     (default auto)
 //   zoom     framing radius as a multiple of bounds.radius (default 1; smaller = closer)
-//   focus    anchor name to frame instead of the whole machine (for example activeSite); focusRadius in angstroms (default 20)
+//   focus    anchor name to frame instead of the whole machine (for example activeSite or ptc); focusRadius in angstroms (default 20)
 //   rotate   0 | 1                          auto-rotate (default 0)
 const q = new URLSearchParams(location.search);
 const flag = (k, d = false) => (q.has(k) ? q.get(k) !== '0' && q.get(k) !== 'false' : d);
@@ -40,16 +41,20 @@ const showError = e => { errBox.textContent += `${e && e.message || e}\n`; conso
 addEventListener('error', e => showError(e.error || e.message));
 addEventListener('unhandledrejection', e => showError(e.reason));
 
-const assetFile = (q.get('asset') || 'fixture-machine.asset.json').replace(/[^A-Za-z0-9._-]/g, '');
+const rawAssetParam = (q.get('asset') || 'fixture-machine.asset.json').replace(/[^A-Za-z0-9._-]/g, '');
 const lod = ['auto', 'l0', 'l1', 'l2'].includes(q.get('lod')) ? q.get('lod') : 'auto';
-const cutaway = flag('cutaway'), withTracks = flag('tracks'), withAnchors = flag('anchors');
+const rawCut = q.get('cutaway');
+const cutaway = !rawCut || rawCut === '0' || rawCut === 'false'
+  ? false
+  : (rawCut === '1' || rawCut === 'true' ? true : rawCut.replace(/[^A-Za-z0-9_-]/g, ''));
+const withTracks = flag('tracks'), withAnchors = flag('anchors');
 const zoom = q.has('zoom') ? Math.max(0.05, +q.get('zoom') || 1) : 1;
 
 /** One nucleotide per track slot (RNA tracks: ribose + U, DNA tracks: deoxyribose + T). Strand index = track order. */
 function buildTrackAssembly(asset) {
   const asm = new Assembly();
   let strand = 0, zlo = Infinity, zhi = -Infinity;
-  for (const track of Object.values(asset.tracks)) {
+  for (const track of Object.values(asset.tracks || {})) {
     const rna = track.kind === 'rna', ids = [];
     for (let i = 0; i < track.frames.length; i++) {
       const f = track.frames[i];
@@ -74,11 +79,63 @@ function buildTrackAssembly(asset) {
   return asm.finalize();
 }
 
+/**
+ * Convert Asset Format v2 `paths` (e.g. `tunnel`, `channel`, `coupledMrna`) into crisp 3D polyline
+ * atom groups plus start/end endpoint marker annotations.
+ */
+function buildPathVisuals(asset) {
+  const groups = [];
+  const annotations = [];
+  for (const [name, p] of Object.entries(asset.paths || {})) {
+    if (!p || !(p.count >= 2) || !p.points) continue;
+    const n = p.count;
+    const bonds = new Uint16Array((n - 1) * 2);
+    const el = new Array(n);
+    const bodyEl = name === 'tunnel' ? 'P' : 'S';
+    for (let i = 0; i < n; i++) {
+      el[i] = i === 0 ? 'MG' : i === n - 1 ? 'O' : bodyEl;
+      if (i + 1 < n) {
+        bonds[i * 2] = i;
+        bonds[i * 2 + 1] = i + 1;
+      }
+    }
+    groups.push({
+      id: `path:${name}`,
+      count: n,
+      pos: p.points,
+      el,
+      bonds,
+      color: name === 'tunnel' ? 0xff7a45 : 0x2fd9b9,
+      opacity: 1,
+      detail: 'ballstick',
+    });
+    const startPt = [p.points[0], p.points[1], p.points[2]];
+    const endOff = (n - 1) * 3;
+    const endPt = [p.points[endOff], p.points[endOff + 1], p.points[endOff + 2]];
+    annotations.push(
+      { id: `path-${name}-start`, kind: 'label', at: startPt, label: `${name} start`, size: 'sm' },
+      { id: `path-${name}-end`, kind: 'label', at: endPt, label: `${name} end`, size: 'sm' },
+    );
+  }
+  return { groups, annotations };
+}
+
+async function resolveAsset(param) {
+  const manifest = await loadManifest();
+  window.manifest = manifest;
+  const byId = (manifest.assets || []).find(a => a.id === param);
+  if (byId) return loadAsset(byId.id, { _manifest: manifest });
+  const byFile = (manifest.assets || []).find(a => a.file === param);
+  if (byFile) return loadAsset(byFile.id, { _manifest: manifest });
+  const file = param.endsWith('.json') ? param : `${param}.asset.json`;
+  const res = await fetch(`../assets/${file}`);
+  if (!res.ok) throw new Error(`cannot load assets/${file}: HTTP ${res.status}`);
+  return decodeAsset(await res.json());
+}
+
 let viewer = null, asset = null;
 try {
-  const res = await fetch(`../assets/${assetFile}`);
-  if (!res.ok) throw new Error(`cannot load assets/${assetFile}: HTTP ${res.status}`);
-  asset = decodeAsset(await res.json());
+  asset = await resolveAsset(rawAssetParam);
   window.asset = asset;
 
   viewer = createViewer(document.getElementById('stage'), { quality: q.get('quality') || 'auto' });
@@ -90,13 +147,27 @@ try {
   window.asm = asm;
   viewer.setAssembly(asm);
   viewer.setActors([{ id: asset.id, asset, transform: { o: [0, 0, 0], R: [1, 0, 0, 0, 1, 0, 0, 0, 1] }, lod, cutaway, label: asset.name }]);
+
+  const annotations = [];
+  let pathGroups = [];
+  if (withTracks) {
+    const pv = buildPathVisuals(asset);
+    pathGroups = pv.groups;
+    if (pathGroups.length) viewer.setAtomGroups(pathGroups);
+    annotations.push(...pv.annotations);
+  }
+  window.pathGroups = pathGroups;
+
+  if (withAnchors) {
+    for (const [name, f] of Object.entries(asset.anchors || {})) {
+      annotations.push({ id: `anchor-${name}`, kind: 'label', at: f.o, label: name, size: 'sm' });
+    }
+  }
+  if (annotations.length) viewer.setAnnotations(annotations);
+
   const focusAnchor = q.get('focus') && asset.anchors[q.get('focus')];
   if (focusAnchor) viewer.focus({ center: focusAnchor.o, radius: Math.max(1, +q.get('focusRadius') || 20) }, { duration: 0 });
   else viewer.focus({ center: asset.bounds.center, radius: asset.bounds.radius * zoom }, { duration: 0 });
-
-  if (withAnchors) {
-    viewer.setAnnotations(Object.entries(asset.anchors).map(([name, f]) => ({ id: `anchor-${name}`, kind: 'label', at: f.o, label: name, size: 'sm' })));
-  }
 
   const s = asset.source;
   const sourceLine = s.type === 'pdb'
@@ -104,16 +175,18 @@ try {
     : 'Synthetic';
   const tris = asset.lod0.reduce((n, m) => n + m.indices.length / 3, 0);
   const l2 = asset.lod2 ? asset.lod2.count : 0;
+  const pathNames = Object.keys(asset.paths || {});
   let acc = 1;
   viewer.on('frame', dt => {
     if ((acc += dt) < 0.25) return;
     acc = 0;
     const st = viewer.getState(), a = viewer.getActorState()[0];
+    const pathInfo = pathNames.length ? ` · paths ${pathNames.join(',')}` : '';
     hud.innerHTML =
-      `<b>${asset.name}</b>\n${sourceLine}\n` +
+      `<b>${asset.name}</b> (v${asset.version})\n${sourceLine}\n` +
       `level <b>${a ? a.level : '-'}</b> (${lod === 'auto' ? 'auto' : 'forced'}) · ratio ${a ? a.ratio.toFixed(2) : '-'}\n` +
-      `beads ${asset.lod1.count} · triangles ${tris} · L2 atoms ${l2} · track atoms ${st.atoms}\n` +
-      `${st.fps} fps · ${st.quality}${cutaway ? ' · cutaway' : ''}`;
+      `beads ${asset.lod1.count} · triangles ${tris} · L2 atoms ${l2} · track atoms ${st.atoms}${pathInfo}\n` +
+      `${st.fps} fps · ${st.quality}${cutaway ? ` · cutaway${typeof cutaway === 'string' ? `:${cutaway}` : ''}` : ''}`;
   });
   viewer.on('pick', e => { window.lastPick = e; console.log('pick', JSON.stringify(e)); });
 } catch (e) {
