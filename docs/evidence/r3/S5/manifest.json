@@ -1,0 +1,332 @@
+{
+  "task": "R3-S5",
+  "mode": "coupled",
+  "chapters": "6-12",
+  "consoleErrors": 0,
+  "pageErrors": 0,
+  "shots": {
+    "desktop-ch10.jpg": {
+      "file": "desktop-ch10.jpg",
+      "profile": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dsf": 2,
+      "chapter": 10,
+      "id": "couple-terminate",
+      "title": "Transcription ends",
+      "frac": 0.18,
+      "t": 101.02,
+      "caption": "The terminator hairpin has folded and the polymerase releases the RNA. The ribosome continues on its own.",
+      "counters": {
+        "mrna": 179,
+        "hybrid": 9,
+        "codon": 40,
+        "peptide": 40
+      },
+      "bytes": 894381,
+      "note": "couple-terminate (terminator hairpin folded at RNAP exit prior to release)"
+    },
+    "desktop-ch11.jpg": {
+      "file": "desktop-ch11.jpg",
+      "profile": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dsf": 2,
+      "chapter": 11,
+      "id": "release",
+      "title": "Stop codon",
+      "frac": 0.4,
+      "t": 108.7,
+      "caption": "Release factor RF1 reads UAA and frees the 40-residue peptide.",
+      "counters": {
+        "mrna": 179,
+        "hybrid": 0,
+        "codon": 41,
+        "peptide": 40
+      },
+      "bytes": 614234,
+      "note": "release (RF1 at UAA stop codon, hydrolysis & 40-aa peptide)"
+    },
+    "desktop-ch12.jpg": {
+      "file": "desktop-ch12.jpg",
+      "profile": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dsf": 2,
+      "chapter": 12,
+      "id": "finale",
+      "title": "Finished",
+      "frac": 0.6,
+      "t": 118.9,
+      "caption": "In coupled expression, transcription and translation overlap in time and space, which is possible because bacteria have no nucleus.",
+      "counters": {
+        "mrna": 179,
+        "hybrid": 0,
+        "codon": 41,
+        "peptide": 40
+      },
+      "bytes": 480163,
+      "note": "finale (wide view: re-annealed DNA, free mRNA, ribosome, 40-aa peptide)"
+    },
+    "desktop-ch06.jpg": {
+      "file": "desktop-ch06.jpg",
+      "profile": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dsf": 2,
+      "chapter": 6,
+      "id": "elongate-early",
+      "title": "RNA emerges",
+      "frac": 0.65,
+      "t": 37.275,
+      "caption": "The 5′ end of the mRNA, with its Shine–Dalgarno sequence, leaves the polymerase while transcription continues.",
+      "counters": {
+        "mrna": 44,
+        "hybrid": 9,
+        "codon": 0,
+        "peptide": 0
+      },
+      "bytes": 767130,
+      "note": "elongate-early (5' mRNA with SD emerging)"
+    },
+    "desktop-ch07.jpg": {
+      "file": "desktop-ch07.jpg",
+      "profile": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dsf": 2,
+      "chapter": 7,
+      "id": "couple-scan",
+      "title": "Ribosome joins early",
+      "frac": 0.9,
+      "t": 48.9,
+      "caption": "In bacteria a ribosome can start on an mRNA that is still being made. Here transcription pauses briefly so the steps can be seen.",
+      "counters": {
+        "mrna": 62,
+        "hybrid": 9,
+        "codon": 0,
+        "peptide": 0
+      },
+      "bytes": 716794,
+      "note": "couple-scan (30S+IF1+IF3+IF2+fMet-tRNA bound at expressome, 62 nt paused)"
+    },
+    "desktop-ch08.jpg": {
+      "file": "desktop-ch08.jpg",
+      "profile": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dsf": 2,
+      "chapter": 8,
+      "id": "couple-join",
+      "title": "70S assembly",
+      "frac": 0.94,
+      "t": 56.95,
+      "caption": "The 50S subunit joins and the initiation factors leave. NusG links the ribosome to the polymerase, 38 nucleotides behind its active site.",
+      "counters": {
+        "mrna": 62,
+        "hybrid": 9,
+        "codon": 1,
+        "peptide": 1
+      },
+      "bytes": 429100,
+      "note": "couple-join (70S assembled, NusG bound bridging RNAP & ribosome)"
+    },
+    "desktop-ch09.jpg": {
+      "file": "desktop-ch09.jpg",
+      "profile": "desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "dsf": 2,
+      "chapter": 9,
+      "id": "couple-run",
+      "title": "Coupled elongation",
+      "frac": 0.5,
+      "t": 78.85,
+      "caption": "The polymerase and ribosome move together. Every three nucleotides transcribed match one codon translated.",
+      "counters": {
+        "mrna": 121,
+        "hybrid": 9,
+        "codon": 21,
+        "peptide": 21
+      },
+      "bytes": 423461,
+      "note": "couple-run (expressome moving together, coupledMrna spacer, NusG, tRNAs & peptide)"
+    },
+    "phone-ch06.jpg": {
+      "file": "phone-ch06.jpg",
+      "profile": "phone",
+      "viewport": {
+        "width": 390,
+        "height": 664
+      },
+      "dsf": 2,
+      "chapter": 6,
+      "id": "elongate-early",
+      "title": "RNA emerges",
+      "frac": 0.65,
+      "t": 37.275,
+      "caption": "The 5′ end of the mRNA, with its Shine–Dalgarno sequence, leaves the polymerase while transcription continues.",
+      "counters": {
+        "mrna": 44,
+        "hybrid": 9,
+        "codon": 0,
+        "peptide": 0
+      },
+      "bytes": 203206,
+      "note": "elongate-early (5' mRNA with SD emerging)"
+    },
+    "phone-ch07.jpg": {
+      "file": "phone-ch07.jpg",
+      "profile": "phone",
+      "viewport": {
+        "width": 390,
+        "height": 664
+      },
+      "dsf": 2,
+      "chapter": 7,
+      "id": "couple-scan",
+      "title": "Ribosome joins early",
+      "frac": 0.9,
+      "t": 48.9,
+      "caption": "In bacteria a ribosome can start on an mRNA that is still being made. Here transcription pauses briefly so the steps can be seen.",
+      "counters": {
+        "mrna": 62,
+        "hybrid": 9,
+        "codon": 0,
+        "peptide": 0
+      },
+      "bytes": 177357,
+      "note": "couple-scan (30S+IF1+IF3+IF2+fMet-tRNA bound at expressome, 62 nt paused)"
+    },
+    "phone-ch08.jpg": {
+      "file": "phone-ch08.jpg",
+      "profile": "phone",
+      "viewport": {
+        "width": 390,
+        "height": 664
+      },
+      "dsf": 2,
+      "chapter": 8,
+      "id": "couple-join",
+      "title": "70S assembly",
+      "frac": 0.94,
+      "t": 56.95,
+      "caption": "The 50S subunit joins and the initiation factors leave. NusG links the ribosome to the polymerase, 38 nucleotides behind its active site.",
+      "counters": {
+        "mrna": 62,
+        "hybrid": 9,
+        "codon": 1,
+        "peptide": 1
+      },
+      "bytes": 145839,
+      "note": "couple-join (70S assembled, NusG bound bridging RNAP & ribosome)"
+    },
+    "phone-ch09.jpg": {
+      "file": "phone-ch09.jpg",
+      "profile": "phone",
+      "viewport": {
+        "width": 390,
+        "height": 664
+      },
+      "dsf": 2,
+      "chapter": 9,
+      "id": "couple-run",
+      "title": "Coupled elongation",
+      "frac": 0.5,
+      "t": 78.85,
+      "caption": "The polymerase and ribosome move together. Every three nucleotides transcribed match one codon translated.",
+      "counters": {
+        "mrna": 121,
+        "hybrid": 9,
+        "codon": 21,
+        "peptide": 21
+      },
+      "bytes": 139042,
+      "note": "couple-run (expressome moving together, coupledMrna spacer, NusG, tRNAs & peptide)"
+    },
+    "phone-ch10.jpg": {
+      "file": "phone-ch10.jpg",
+      "profile": "phone",
+      "viewport": {
+        "width": 390,
+        "height": 664
+      },
+      "dsf": 2,
+      "chapter": 10,
+      "id": "couple-terminate",
+      "title": "Transcription ends",
+      "frac": 0.18,
+      "t": 101.02,
+      "caption": "The terminator hairpin has folded and the polymerase releases the RNA. The ribosome continues on its own.",
+      "counters": {
+        "mrna": 179,
+        "hybrid": 9,
+        "codon": 40,
+        "peptide": 40
+      },
+      "bytes": 195046,
+      "note": "couple-terminate (terminator hairpin folded at RNAP exit prior to release)"
+    },
+    "phone-ch11.jpg": {
+      "file": "phone-ch11.jpg",
+      "profile": "phone",
+      "viewport": {
+        "width": 390,
+        "height": 664
+      },
+      "dsf": 2,
+      "chapter": 11,
+      "id": "release",
+      "title": "Stop codon",
+      "frac": 0.4,
+      "t": 108.7,
+      "caption": "Release factor RF1 reads UAA and frees the 40-residue peptide.",
+      "counters": {
+        "mrna": 179,
+        "hybrid": 0,
+        "codon": 41,
+        "peptide": 40
+      },
+      "bytes": 152760,
+      "note": "release (RF1 at UAA stop codon, hydrolysis & 40-aa peptide)"
+    },
+    "phone-ch12.jpg": {
+      "file": "phone-ch12.jpg",
+      "profile": "phone",
+      "viewport": {
+        "width": 390,
+        "height": 664
+      },
+      "dsf": 2,
+      "chapter": 12,
+      "id": "finale",
+      "title": "Finished",
+      "frac": 0.6,
+      "t": 118.9,
+      "caption": "In coupled expression, transcription and translation overlap in time and space, which is possible because bacteria have no nucleus.",
+      "counters": {
+        "mrna": 179,
+        "hybrid": 0,
+        "codon": 41,
+        "peptide": 40
+      },
+      "bytes": 122733,
+      "note": "finale (wide view: re-annealed DNA, free mRNA, ribosome, 40-aa peptide)"
+    }
+  },
+  "generatedAt": "2026-11-21T10:28:24.822Z"
+}
