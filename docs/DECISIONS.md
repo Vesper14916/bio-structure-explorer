@@ -249,3 +249,18 @@ This log records accepted contract changes, pre-approved fallbacks from `PLAN.md
 - **Decision:** `PEEK_H` in `js/ui/sheet.js` rises from 112 to 144 so the two-line caption is no longer cut off by the tab bar (the unused `--peek-h: 108px` token is unchanged, as §4.8 requires). Controls hidden in the collapsed sheet get `visibility: hidden` as well as `opacity: 0`, so keyboard focus no longer lands on invisible controls. The grip is 28 px high and `.pep-pill` 24 px high. `.chapter-list` and `.views` get 4 px of padding so focus rings are not clipped.
 - **Impact:** `tests/ui-phone.browser.mjs` known defects drop from 43 to 2 (three chapter-row focus rings on desktop and one grip ring on phone are still clipped by their scroll containers; both are listed in `docs/handoffs/R3-INT3.md`).
 
+## DEC-032: Pre-ST9 user rulings (plain-language branch, `js/kin/pose.js` coupled path, S-05 `DEFAULT_D`, and `R3-P1` merge timing)
+
+- **Date:** 2026-11-21
+- **Stage:** ST9
+- **Owner:** User / Gemini Chief
+- **Source:** Pre-ST9 escalation & user approval (2026-11-21)
+- **Context:** Before starting Stage ST9 on `r3/st9` (branched from `main` at `2675b1b`, post-PR #5), four scope and integration questions required explicit user rulings under session rules and `PLAN.md` §§4, 9.2, 10: (1) whether to merge the out-of-plan plain-language branch `origin/claude/project-thread-wt5yns` (`74c935e`), which modifies `js/ui/view-express.js`; (2) whether `R3-S5` may edit Claude ST7-owned `js/kin/pose.js` (> 1 line) to pose coupled mRNA along `rnap-ec.paths.coupledMrna`; (3) how to handle ST8 audit item S-05 (`DEFAULT_D = 48` in `js/sim/gene/timeline.js:25-26`), whose default fallback assertions also live in `tests/timeline.test.mjs:350-352`; and (4) how to sequence the merge of `R3-P1` (which deletes Round 1 `js/sim/expression.js` and `js/ui/view-express.js`) relative to the `js/main.js` Express v2 cutover in `R3-INT4`.
+- **Decision:**
+  1. **Plain-language branch untouched:** `origin/claude/project-thread-wt5yns` (`74c935e`) is NOT merged and is left untouched throughout ST9.
+  2. **`js/kin/pose.js` edit approved for `R3-S5`:** Approved an edit (~50–80 lines) within `R3-S5` to add `rna.layout === 'coupled'` and `rnap-ec.paths.coupledMrna` support in `js/kin/pose.js`, extending `R3-S5` Owns to the `js/kin/pose.js` coupled path.
+  3. **S-05 `DEFAULT_D = 48 -> 38` (Option A):** Approved updating both `js/sim/gene/timeline.js:25-26` (2 lines: `DEFAULT_D = 38` and source string referencing `6ZTJ` / `DEC-024`) and `tests/timeline.test.mjs:350-352` (3 lines: default `D = 38` fallback assertions) together during `R3-INT4`.
+  4. **`R3-P1` atomic merge timing (`PLAN.md` §10):** Develop `R3-P1` on `r3/R3-P1`; merge `R3-D1` and `R3-S5` into `r3/st9` and run `R3-V1` first; then merge `R3-P1` atomically with the `R3-INT4` Express v2 cutover so every commit on `r3/st9` passes `npm test` and `npm run smoke`.
+- **Impact:** Unblocks parallel execution of `R3-P1`, `R3-D1`, and `R3-S5` from `r3/st9`, preserves strict `PLAN.md` §4 closed design-system boundaries, keeps `r3/st9` green on every merge, and synchronizes `DEFAULT_D` with `DEC-024` during `R3-INT4`.
+
+
