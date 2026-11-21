@@ -967,7 +967,10 @@ class Viewer {
         v.dirty = true;
       },
       setHighlight(h) {
+        // `dim: true` keeps the highlight active with nothing listed, so every nucleotide and residue fades
+        // (used when the reader focuses a machine).
         v.highlight = h && (
+          h.dim ||
           (h.nucleotides && h.nucleotides.length) ||
           (h.pairs && h.pairs.length) ||
           (h.residues && h.residues.length)

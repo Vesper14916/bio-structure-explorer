@@ -88,6 +88,7 @@ import { createReplicateView } from './view-replicate.js';
 import { createExpressView } from './view-express.js';
 import { createStoryView } from './view-story.js';
 import { createCrystalView } from './view-crystal.js';
+import { MODE_INTROS } from './plain.js';
 
 export { pairPayload, meltStatic, meltDynamic, meltPhase } from './payloads.js';
 
@@ -132,6 +133,11 @@ export function createUI(root, handlers = {}) {
     crystal: createCrystalView(ctx),
   };
   ctx.onColourPicked = () => views.crystal.setToggles({ bfactor: false });
+  // Plain one-line introduction at the end of each view header (phones hide the title but keep this line): what the reader is looking at, before any mechanism.
+  for (const [id, v] of Object.entries(views)) {
+    const head = v.el.querySelector('header.view-head');
+    if (head && MODE_INTROS[id]) head.append(h('p', { class: 'view-intro' }, MODE_INTROS[id]));
+  }
 
   // ---- shell ------------------------------------------------------------------------------------
   const aboutBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'About, references and shortcuts', onclick: () => openAbout() }, icon('info', 20));

@@ -3,6 +3,7 @@
 import { h, hex, setText, rafThrottle } from './dom.js';
 import { icon } from './icons.js';
 import { segmented, toggleTile, range, stat, sectionLabel } from './components.js';
+import { createStepper, plainLine } from './plain.js';
 
 export const DEFAULT_EXPRESS_LEGEND = [
   { id: 'coding', label: 'Coding DNA (5′→3′)', color: '#74c0fc', kind: 'strand' },
@@ -39,6 +40,16 @@ const PHASE_LABELS = {
   complete: { label: 'Complete', level: 'closed' },
 };
 
+/** Simulation phase -> [step index 0..3, plain sentence] for the four-step stepper. */
+const PHASE_PLAIN = {
+  promoter: [0, 'A copying machine, RNA polymerase, opens the DNA at the start of the gene so it can read one strand.'],
+  transcription: [1, 'It builds an RNA copy of the gene, one matching letter at a time.'],
+  initiation: [2, 'The protein-making machine, the ribosome, grabs the RNA and finds the start word AUG.'],
+  elongation: [3, 'The ribosome reads three letters at a time; adapters (tRNAs) bring the matching amino acids, which are linked into a chain.'],
+  termination: [3, 'A stop word ends reading, and a release factor frees the finished protein chain.'],
+  complete: [3, 'Done: the gene was copied into RNA, and the RNA was read to make a short protein chain.'],
+};
+
 export function createExpressView(ctx) {
   const { H } = ctx;
   let playing = false, scrubbing = false, progress = 0;
@@ -71,6 +82,8 @@ export function createExpressView(ctx) {
   scrub.el.addEventListener('blur', endScrub);
 
   const pct = h('span', { class: 'pct' }, '0\u202f%');
+  const stepper = createStepper();
+  const plain = plainLine('plain-line');
   const caption = h('p', { class: 'caption', 'aria-live': 'polite', 'aria-atomic': 'true' },
     'Press play to watch RNA polymerase transcribe the gene into mRNA and the 70S ribosome translate it into an 11-residue polypeptide.');
   const phase = h('span', { class: 'phase', 'data-level': 'closed' }, 'Ready');
@@ -270,6 +283,8 @@ export function createExpressView(ctx) {
       h('p', {}, 'Transcription (DNA → mRNA) & translation (mRNA → polypeptide).')),
     h('div', { class: 'peek' },
       h('div', { class: 'transport' }, playBtn, restartBtn, h('div', { class: 'scrub' }, scrub.el), pct),
+      stepper.el,
+      plain.el,
       caption),
     h('div', { class: 'group row-between' },
       h('div', { class: 'grow' }, sectionLabel('Speed'), speed.el),
@@ -318,6 +333,10 @@ export function createExpressView(ctx) {
       if ('cutaway' in s && s.cutaway != null) cutawayTile.set(!!s.cutaway);
       if ('caption' in s && s.caption && caption.textContent !== s.caption) {
         caption.textContent = s.caption;
+      }
+      if ('phase' in s && s.phase && PHASE_PLAIN[s.phase]) {
+        stepper.set(PHASE_PLAIN[s.phase][0]);
+        plain.set(PHASE_PLAIN[s.phase][1]);
       }
       if ('phase' in s && s.phase) {
         const pInfo = PHASE_LABELS[s.phase] || { label: s.phase, level: 'mid' };
