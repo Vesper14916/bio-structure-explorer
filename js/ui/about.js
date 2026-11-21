@@ -153,7 +153,7 @@ export function createAbout({ onClose }) {
         h('li', {}, h('b', {}, 'B-DNA & A-RNA geometry. '), 'PDB 1BNA: Drew HR et al. (1981) ', h('i', {}, 'PNAS'), ' 78:2179–2183 (1.9\u202fÅ). A-RNA C3′-endo ribose (with 2′-OH) regularised under 2.81\u202fÅ / 11.0\u202fbp-per-turn screw symmetry (Arnott et al. 1972; Gelbin et al. 1996).'),
         h('li', {}, h('b', {}, 'DNA & RNA thermodynamics. '), 'SantaLucia J Jr (1998) ', h('i', {}, 'PNAS'), ' 95:1460–1465 (B-DNA); Xia T et al. (1998) ', h('i', {}, 'Biochemistry'), ' 37:14719–14735 & Turner & Mathews (2010) (A-RNA).'),
         h('li', {}, h('b', {}, 'Groove chemistry & wobble pairs. '), 'Seeman NC, Rosenberg JM, Rich A (1976) ', h('i', {}, 'PNAS'), ' 73:804–808; Varani G, McClain WH (2000) ', h('i', {}, 'EMBO Rep.'), ' 1:18–23.'),
-        h('li', {}, h('b', {}, 'Bacterial transcription & translation. '), 'RNAP transcription bubble and 70S ribosome (30S + 50S) decoding reference: PDB 8FIZ (E. coli 70S ribosome with mRNA and tRNA) & PDB-101.'),
+        h('li', {}, h('b', {}, 'Bacterial transcription & translation. '), 'Machine structures (RNA polymerase, 70S ribosome, tRNAs and factors) are listed under Sources below; see PDB-101 for background.'),
         h('li', {}, h('b', {}, '3D rendering. '), 'three.js (MIT licence), WebGL.')),
 
       h('h3', {}, 'Sources'),
@@ -165,8 +165,8 @@ export function createAbout({ onClose }) {
         h('li', {}, 'Ideal B-DNA and A-RNA helices use perfectly regular screw symmetry with rigid nucleotides; real nucleic acids bend and breathe.'),
         h('li', {}, 'Hydrogen atoms, bulk solvent, and counter-ions are omitted (except crystallographic waters in the X-ray view).'),
         h('li', {}, 'Melting solves an exact nearest-neighbour helix–coil model with a monovalent salt correction at 1\u202fµM strand concentration.'),
-        h('li', {}, 'In Express mode, a compact 48-bp bacterial construct (−10 TATA box, Shine–Dalgarno AGGAGG, 11 sense codons starting with fMet, and a UAA stop codon decoded by RF1) runs sequentially in one scene for visual clarity.'),
-        h('li', {}, 'Macromolecular complexes (RNAP, 30S/50S ribosomal subunits, tRNA bodies, and RF1) are shown as translucent envelopes with active-site cutaways rather than all-atom protein/rRNA structures.')))
+        h('li', {}, 'In Express mode, a 248-bp synthetic bacterial gene (−35 TTGACA and −10 TATAAT promoter, Shine–Dalgarno AGGAGG, 40 sense codons starting with fMet, a UAA stop codon decoded by RF1, and an intrinsic terminator) is read by rigid machine structures; each molecule card lists its own simplifications.'),
+        h('li', {}, 'Macromolecular complexes (RNAP, 30S/50S ribosomal subunits, tRNA bodies and factors) are rigid models drawn as translucent envelopes, residue beads or atoms depending on distance; DNA, RNA, tRNA anticodons and the peptide are built from ideal geometry.')))
   );
   const scrim = h('div', { class: 'scrim', hidden: true, onclick: e => { if (e.target === scrim) close(); } }, dlg);
   let opener = null;

@@ -1,0 +1,59 @@
+{
+  "task": "R3-Q2",
+  "generatedAt": "2026-11-20T14:19:42.005Z",
+  "node": "v22.23.5",
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "samples": 2000,
+  "timeSpacing": "t_i = duration * i / (samples - 1), i = 0..samples-1",
+  "warmup": {
+    "stride": 10,
+    "timed": false
+  },
+  "budgetsMs": {
+    "stateAtMedian": 2,
+    "poseMedian": 6
+  },
+  "stories": {
+    "sequential": {
+      "label": "Step by step",
+      "mode": "sequential",
+      "duration": 164.05,
+      "chapters": 16,
+      "events": 1109,
+      "stateAt": {
+        "medianMs": 0.03411449999975957,
+        "p95Ms": 0.0811849000000052,
+        "maxMs": 0.2532289999999193,
+        "samples": 2000
+      },
+      "pose": {
+        "medianMs": 2.0886229999998704,
+        "p95Ms": 3.9108407499998292,
+        "maxMs": 10.480426999999963,
+        "samples": 2000
+      },
+      "pass": true
+    },
+    "coupled": {
+      "label": "Coupled",
+      "mode": "coupled",
+      "duration": 121.3,
+      "chapters": 12,
+      "events": 1114,
+      "stateAt": {
+        "medianMs": 0.02094749999969281,
+        "p95Ms": 0.04659100000048966,
+        "maxMs": 1.0764250000001994,
+        "samples": 2000
+      },
+      "pose": {
+        "medianMs": 0.628916499999832,
+        "p95Ms": 1.375997950000101,
+        "maxMs": 11.977658000000702,
+        "samples": 2000
+      },
+      "pass": true
+    }
+  },
+  "result": "PASS"
+}

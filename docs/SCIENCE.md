@@ -98,3 +98,22 @@ All 20 required heavy-atom residue templates are implemented in `js/science/resi
 - **Simplifications and NTP substrates:** There are no hydrogens, no rotamer sampling, no side-chain packing, and no folding. Nucleoside triphosphates (`js/science/ntp.js`) extend the A-RNA ribonucleotide template with an idealised extended triphosphate (bridging `P-O` $1.61\,\text{Å}$, terminal $1.49\,\text{Å}$, `O-P-O` $109.5^\circ$, `P-O-P` $130^\circ$), without $\text{Mg}^{2+}$ ions or hydrogens; the $\beta$- and $\gamma$-phosphates form the pyrophosphate (`PPi`) leaving group. The triphosphate conformation is an idealisation, not the conformation bound in RNA polymerase.
 
 Integration check (2026-11-17): the original 11 template geometries were compared with the protein chains of PDB 6ALF. All 2,930 residues with a $\text{C}\beta$ have positive chiral volume (mean $2.494\,\text{Å}^3$), matching the templates' L configuration, and every template bond is within $0.020\,\text{Å}$ of the observed mean for that bond. Side-chain values were entered from Engh & Huber (1991) tables as recalled and have not been machine-checked against the paper itself.
+
+---
+
+## 5. Crowding (`js/scene/crowd.js`, task R3-R4)
+
+The scene sits in a patch of cytoplasm so that the gene, RNA polymerase and ribosome are seen among neighbouring molecules (PLAN.md §1, §4.3).
+
+- **Box and counts.** Crowders are placed in a 1600 × 1000 × 1000 Å box (1.6 × 10⁻³ µm³) centred on the gene midpoint, which is the world origin. The gene axis is the world x axis. Counts are `round(density × volume)`:
+
+  | Crowder | Asset | Density (µm⁻³, illustrative) | Instances at `high` | `medium` | `low` |
+  | --- | --- | --- | --- | --- | --- |
+  | Ribosome | `ribosome-70s` | 25,000 | 40 | 20 | 0 |
+  | EF-Tu | `ef-tu` | 60,000 | 96 | 48 | 0 |
+  | RNA polymerase (holoenzyme) | `rnap-holo` | 3,000 | 5 | 3 | 0 |
+
+- **Provenance of the densities.** The densities are **illustrative**. They are chosen to be of the order reported for a fast-growing *E. coli* cell (tens of thousands of ribosomes and a few thousand RNA polymerase molecules per cell of about 1 µm³), but no BioNumbers identifier was verified for them in this round, so none is cited.
+- **Simplifications.** EF-Tu is drawn alone: the ternary complex EF-Tu·GTP·aa-tRNA is not modelled as a crowder. Every instance uses the machine's L0 envelope in its structure frame, with a random orientation, and the crowd is static: crowders do not move, rotate or exchange with the actors in the story.
+- **Exclusions.** Each instance's bounding sphere (the asset's `bounds.radius`) stays outside a capsule of radius 180 Å around the gene axis (length: 248 bp × 3.38 Å) and outside a sphere of radius 320 Å around the ribosome's centre in its Step by step layout pose (`RIBO_LAYOUT`). The centre of each crowder lies inside the box, so large crowders near the box faces may protrude from it. The minimum distance between two centres is 0.8 × the sum of the two bounds radii, so neighbouring envelopes may overlap by up to 20 % of their radii (the bounding spheres are looser than the shapes).
+- **Determinism.** Placement is random sequential addition with a seeded PRNG (`mulberry32`, default seed 19). `medium` is the first half of each class of `high`, so changing quality tier never reshuffles the remaining crowders. Tests: `tests/crowd.test.mjs`.

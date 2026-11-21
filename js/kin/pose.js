@@ -5,13 +5,15 @@
  * procedural `AtomGroup` buffers (`ntp`, `ppi`), `ActorSpec` transforms, FX, and camera detail focus
  * with zero per-frame typed-array allocations.
  */
-import { ntpTemplate, PPI_TEMPLATE, nucleotideTemplate, Assembly, TRUE_SCALE_GENE_CONSTRUCT } from '../science/index.js';
-import { composeFrame, readFrame16, writeFrame16 } from './frames.js';
+import { ntpTemplate, PPI_TEMPLATE, nucleotideTemplate, Assembly, TRUE_SCALE_GENE_CONSTRUCT, codonTable } from '../science/index.js';
+import { composeFrame, readFrame16, writeFrame16, slerpFrame } from './frames.js';
 import { sampleTrack } from './track.js';
 import { poseDuplex, machinePoseForRegister } from './duplex.js';
-import { buildFreeChain, poseFreeChain } from './chain.js';
+import { buildFreeChain, poseFreeChain, generateTailControlPoints, sampleFreeChainAt } from './chain.js';
 import { poseHairpin, HAIRPIN_LENGTH } from './hairpin.js';
 import { poseNtp, posePpi } from './ntp.js';
+import { anticodonOf, trnaSiteFrame, poseTrnaAnticodon, poseAminoacylResidue, peptidylAttachPoint, residueCode3 } from './trna.js';
+import { posePeptideOnPath } from './peptide-path.js';
 
 const HYBRID_MAX = 9;
 const HAIRPIN_START_MRNA = 151;
@@ -136,6 +138,29 @@ export function initStoryAssembly(asm, cInfo) {
     asm.addLink(rnaNucs[j - 1], rnaNucs[j], false);
   }
 
+  // Strand 3 (translation only, R3-K3/S4): anticodons 34-36 of the tRNA for each sense codon k = 1..40,
+  // 120 nucleotides at 675 + 3(k - 1) + q, each paired with its codon nucleotide (34 <-> 3rd, 36 <-> 1st).
+  if (cInfo.translation) {
+    for (let k = 1; k <= 40; k++) {
+      const j0 = 24 + 3 * (k - 1);
+      const anti = anticodonOf(rna.slice(j0, j0 + 3));
+      const ac = [];
+      for (let q = 0; q < 3; q++) {
+        const t = nucleotideTemplate(anti[q], 'ribose');
+        const nu = asm.addNucleotide({
+          base: anti[q], sugar: 'ribose', strand: 3, seqIndex: 3 * (k - 1) + q, role: 'trna', tag: `anticodon:${k}`,
+          visible: false, frame: newFrame(), names: t.names, el: t.el, local: t.local, bonds: t.bonds,
+        });
+        nu.seqIndex = 3 * (k - 1) + q;
+        nu.anticodonOf = k;
+        ac.push(nu);
+      }
+      asm.addLink(ac[0], ac[1], false);
+      asm.addLink(ac[1], ac[2], false);
+      for (let q = 0; q < 3; q++) asm.addPair(rnaNucs[j0 + 2 - q], ac[q], 0);
+    }
+  }
+
   asm.meta = {
     kind: 'gene-expression',
     nucleicAcid: 'dna-rna',
@@ -172,6 +197,8 @@ export function createPoser(scenarioOrOpts = {}, maybeAssets = undefined) {
   assets = assets || {};
   const cInfo = resolveConstruct(rawScenario);
   const { raw: construct, dnaLen, rnaLen } = cInfo;
+  const tlKit = createTranslationKit(cInfo, assets);
+  cInfo.translation = Boolean(tlKit);
 
   // Preallocated typed buffers (zero per-frame heap allocation)
   const dnaFrames = new Float32Array(32 * dnaLen);
@@ -586,7 +613,12 @@ export function createPoser(scenarioOrOpts = {}, maybeAssets = undefined) {
       links[rnaLinkOffset + j - 1].active = j < L;
     }
 
-    // Recompute all atom positions in place for deterministic bit-for-bit output across all 675 nucleotides
+    // 3d. Translation layout (R3-S4): mRNA on the ribosome track and tails, tRNA anticodons and codon pairs.
+    const tlActive = Boolean(tlKit) && nucs.length > rnaStartIdx + rnaLen &&
+      tlKit.poseNucleotides(world, nucs, pairs, links, rnaStartIdx, rnaStartIdx + rnaLen, dnaLen,
+        2 * (dnaLen - 1) + (rnaLen - 1));
+
+    // Recompute all atom positions in place for deterministic bit-for-bit output across all nucleotides
     asm.updatePositions();
 
     // 4. Populate procedural AtomGroups (NTP & PPi)
@@ -625,6 +657,9 @@ export function createPoser(scenarioOrOpts = {}, maybeAssets = undefined) {
       target.actors.push(act);
     }
 
+    // 5b. Translation actors and atom groups (tRNAs, aminoacyl residues, peptide).
+    if (tlActive) tlKit.poseGroupsAndActors(world, target, world.fx);
+
     // 6. Populate target.fx and target.focus
     if (!target.fx || typeof target.fx !== 'object') {
       target.fx = { pulses: [], flashes: [], list: [] };
@@ -641,7 +676,9 @@ export function createPoser(scenarioOrOpts = {}, maybeAssets = undefined) {
     }
 
     if (!target.focus) target.focus = { center: [0, 0, 0], radius: 24 };
-    if (rnapSpec && !rna.released) {
+    if (tlActive && tlKit.focusCenter(world, target.focus.center)) {
+      target.focus.radius = 30;
+    } else if (rnapSpec && !rna.released) {
       const actSite = (ecAsset && ecAsset.anchors && ecAsset.anchors.activeSite)
         ? ecAsset.anchors.activeSite.o
         : [4.632, 4.565, -6.39];
@@ -668,4 +705,434 @@ export function createPoser(scenarioOrOpts = {}, maybeAssets = undefined) {
   }
 
   return { pose, reset };
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Translation parts (task R3-S4): mRNA translation layout and sliding, tRNA actors, procedural anticodons
+// paired with their codons (R3-K3), aminoacyl residues, and the peptide through the exit tunnel.
+// ---------------------------------------------------------------------------------------------------
+
+const ORF_START_MRNA = 24;          // mRNA index of the first nucleotide of codon 1 (PLAN.md §5.1)
+const SENSE_CODONS = 40;
+const TL_ENTER_DISTANCE = 220;      // factor / carried-tRNA approach distance (PLAN.md §10 R3-S4)
+const TL_RELEASE_DISTANCE = 60;     // part or factor release distance (PLAN.md §4.4)
+const TAIL_EXTRA_NT = 4;
+const IDENTITY_FRAME = Object.freeze({ o: Object.freeze([0, 0, 0]), R: Object.freeze([1, 0, 0, 0, 1, 0, 0, 0, 1]) });
+
+/** Unit vector `b - a`. */
+function unitBetween(a, b, out = [0, 0, 0]) {
+  const x = b[0] - a[0], y = b[1] - a[1], z = b[2] - a[2];
+  const l = Math.hypot(x, y, z) || 1;
+  out[0] = x / l; out[1] = y / l; out[2] = z / l;
+  return out;
+}
+
+function applyPoint(f, p, out = [0, 0, 0]) {
+  const R = f.R, o = f.o;
+  const x = p[0], y = p[1], z = p[2];
+  out[0] = R[0] * x + R[1] * y + R[2] * z + o[0];
+  out[1] = R[3] * x + R[4] * y + R[5] * z + o[1];
+  out[2] = R[6] * x + R[7] * y + R[8] * z + o[2];
+  return out;
+}
+
+/**
+ * Build a ribosome-local free-chain tail leaving the mRNA track at `endReg` (outward, `dirSign` = +1 for the
+ * 3′ tail beyond register +15, -1 for the 5′ tail beyond register −16). The tail first continues along the
+ * track, then turns away from the ribosome centre and wanders deterministically (seeded).
+ */
+function buildMrnaTail(ribo, endReg, dirSign, ntCount, seed, chainId) {
+  const track = ribo.tracks.mrna;
+  const fEnd = sampleTrack(track, endReg, newFrame());
+  const fIn = sampleTrack(track, endReg - dirSign, newFrame());
+  const t0 = unitBetween(fIn.o, fEnd.o);
+  const centre = ribo.anchors.center.o;
+  const radial = unitBetween(centre, fEnd.o);
+  const p0 = fEnd.o.slice();
+  const p1 = [p0[0] + t0[0] * 10, p0[1] + t0[1] * 10, p0[2] + t0[2] * 10];
+  const bend = unitBetween([0, 0, 0], [t0[0] + 1.6 * radial[0], t0[1] + 1.6 * radial[1], t0[2] + 1.6 * radial[2]]);
+  const p2 = [p1[0] + bend[0] * 36, p1[1] + bend[1] * 36, p1[2] + bend[2] * 36];
+  const out = unitBetween([0, 0, 0], [0.4 * t0[0] + radial[0], 0.4 * t0[1] + radial[1], 0.4 * t0[2] + radial[2]]);
+  const rest = generateTailControlPoints(p2, out, ntCount, { seed, chainId, maxTurnDeg: 25 });
+  const seedFrame = dirSign > 0 ? fEnd : flipStrandDirection(fEnd, newFrame());
+  return buildFreeChain([p0, p1, ...rest], {
+    seed, chainId, anchorStart: true, anchorEnd: false, swayAmplitude: 3.5, anchorDampRadius: 40,
+    seedFrame, extendTo: ntCount + TAIL_EXTRA_NT,
+  });
+}
+
+/**
+ * Create the translation kit when the ribosome and both tRNA assets are present (otherwise null, and the
+ * Assembly keeps its 675-nucleotide transcription topology).
+ */
+function createTranslationKit(cInfo, assets) {
+  const ribo = assets['ribosome-70s'];
+  const trnaAssets = { init: assets['trna-init'], aa: assets['trna-aa'] };
+  if (!ribo || !ribo.tracks || !ribo.tracks.mrna || !trnaAssets.init || !trnaAssets.aa) return null;
+  const { rna, rnaLen } = cInfo;
+  const track = ribo.tracks.mrna;
+  const r0 = track.registers[0];
+  const r1 = track.registers[track.registers.length - 1];
+
+  // Codons, anticodons and residue codes of the ORF (codon k = 1..40).
+  const codons = [];
+  for (let k = 1; k <= SENSE_CODONS; k++) {
+    const j = ORF_START_MRNA + 3 * (k - 1);
+    codons.push(rna.slice(j, j + 3));
+  }
+  const anticodons = codons.map(anticodonOf);
+  const residueCodes = codonTable(cInfo.raw).slice(0, SENSE_CODONS).map(c => residueCode3(c.aa3));
+  const residuePrefixes = [[]];
+  for (let n = 1; n <= SENSE_CODONS; n++) residuePrefixes.push(residueCodes.slice(0, n));
+
+  // mRNA tails in the ribosome frame (longest reach: 3′ at codon 1, 5′ at codon 40).
+  const n3 = (rnaLen - 1 - ORF_START_MRNA) - r1 + 3; // codon 1: nucleotide 178 beyond register +15
+  const n5 = (ORF_START_MRNA + 3 * (SENSE_CODONS - 1)) + r0 + 3; // codon 40: nucleotide 0 beyond register -16
+  const tail3 = buildMrnaTail(ribo, r1, +1, n3, 31, 'mrna-ribo-3p');
+  const tail5 = buildMrnaTail(ribo, r0, -1, n5, 37, 'mrna-ribo-5p');
+  const tailBuf3 = new Float32Array(16 * (rnaLen + 8));
+  const tailBuf5 = new Float32Array(16 * (rnaLen + 8));
+
+  // Factor directions (ribosome centre -> factor centre) for tRNAs carried in by EF-Tu or IF2.
+  const carrierDir = {};
+  for (const id of ['ef-tu', 'if2']) {
+    const a = assets[id];
+    carrierDir[id] = a && a.anchors && a.anchors.center ? unitBetween(ribo.anchors.center.o, a.anchors.center.o) : [0, 0, 1];
+  }
+
+  // Ribosome-frame tunnel polyline (asset path) and a free path beyond the exit.
+  const tunnel = ribo.paths && ribo.paths.tunnel;
+  const tunnelLocal = [];
+  if (tunnel) for (let i = 0; i < tunnel.count; i++) tunnelLocal.push([tunnel.points[3 * i], tunnel.points[3 * i + 1], tunnel.points[3 * i + 2]]);
+  let worldCache = null; // { key, tunnel: number[][], free: chain }
+
+  function worldPaths(layout) {
+    const key = layout.o.join(',') + '|' + layout.R.join(',');
+    if (worldCache && worldCache.key === key) return worldCache;
+    const tw = tunnelLocal.map(p => applyPoint(layout, p));
+    const n = tw.length;
+    const exitDir = unitBetween(tw[n - 4], tw[n - 1]);
+    const radial = unitBetween(applyPoint(layout, ribo.anchors.center.o), tw[n - 1]);
+    const d = unitBetween([0, 0, 0], [exitDir[0] + radial[0], exitDir[1] + radial[1], exitDir[2] + radial[2]]);
+    const q0 = tw[n - 1];
+    const q1 = [q0[0] + exitDir[0] * 12, q0[1] + exitDir[1] * 12, q0[2] + exitDir[2] * 12];
+    const rest = generateTailControlPoints([q1[0] + d[0] * 20, q1[1] + d[1] * 20, q1[2] + d[2] * 20], d, 60, { seed: 41, chainId: 'peptide-free', maxTurnDeg: 25 });
+    // Static (non-swaying) free path sampled once every 3 Å: re-sampling a swaying chain per frame costs ~3 ms.
+    const chain = buildFreeChain([q0, q1, ...rest], { seed: 41, chainId: 'peptide-free', anchorStart: true, anchorEnd: false, swayAmplitude: 0 });
+    const len = sampleFreeChainAt(chain, 0, 0).length;
+    const free = [];
+    for (let s = 0; s <= len; s += 3) free.push(sampleFreeChainAt(chain, s, 0).point);
+    worldCache = { key, tunnel: tw, free };
+    return worldCache;
+  }
+
+  // Ribosome L1 beads within 60 Å of any mRNA track register (ribo frame), for the §5.3 item 8 guard:
+  // procedural nucleotides in and next to the slot track are pushed out of beads beyond 0.85 Å (<= 1.0 Å gate).
+  const l1 = ribo.lod1;
+  const nearIdx = [];
+  if (l1) {
+    const tO = track.frames.map(f => f.o);
+    for (let b = 0; b < l1.count; b++) {
+      const x = l1.positions[3 * b], y = l1.positions[3 * b + 1], z = l1.positions[3 * b + 2];
+      for (let i = 0; i < tO.length; i++) {
+        const dx = x - tO[i][0], dy = y - tO[i][1], dz = z - tO[i][2];
+        if (dx * dx + dy * dy + dz * dz <= 3600) { nearIdx.push(b); break; }
+      }
+    }
+  }
+  const NB = nearIdx.length;
+  const bLocal = new Float32Array(3 * NB), bRad = new Float32Array(NB), bLarge = new Uint8Array(NB);
+  nearIdx.forEach((b, i) => {
+    bLocal[3 * i] = l1.positions[3 * b]; bLocal[3 * i + 1] = l1.positions[3 * b + 1]; bLocal[3 * i + 2] = l1.positions[3 * b + 2];
+    bRad[i] = l1.kind[b] === 1 ? 2.4 : 1.9;
+    bLarge[i] = ribo.chains[l1.chain[b]].part === 'large' ? 1 : 0;
+  });
+  const bx = new Float32Array(NB), by = new Float32Array(NB), bz = new Float32Array(NB), br = new Float32Array(NB);
+  const nearB = new Int32Array(256);
+  const MAX_PEN = 0.85;
+
+  function loadBeads(M, large) {
+    let n = 0;
+    const R = M.R, o = M.o;
+    for (let i = 0; i < NB; i++) {
+      let x = bLocal[3 * i], y = bLocal[3 * i + 1], z = bLocal[3 * i + 2];
+      if (bLarge[i]) {
+        if (!large) continue;
+        x += large.o[0]; y += large.o[1]; z += large.o[2];
+      }
+      bx[n] = R[0] * x + R[1] * y + R[2] * z + o[0];
+      by[n] = R[3] * x + R[4] * y + R[5] * z + o[1];
+      bz[n] = R[6] * x + R[7] * y + R[8] * z + o[2];
+      br[n] = bRad[i];
+      n++;
+    }
+    return n;
+  }
+
+  /** Push a nucleotide frame out of L1 beads so no heavy atom lies deeper than MAX_PEN inside one. */
+  function clearNuc(nu, count) {
+    const f = nu.frame;
+    let nNear = 0;
+    for (let b = 0; b < count && nNear < 256; b++) {
+      const dx = f.o[0] - bx[b];
+      if (dx > 14 || dx < -14) continue;
+      const dy = f.o[1] - by[b];
+      if (dy > 14 || dy < -14) continue;
+      const dz = f.o[2] - bz[b];
+      if (dz > 14 || dz < -14) continue;
+      if (dx * dx + dy * dy + dz * dz <= 196) nearB[nNear++] = b;
+    }
+    if (nNear === 0) return;
+    const Lc = nu.local, R = f.R;
+    for (let pass = 0; pass < 4; pass++) {
+      let hit = false;
+      for (let a = 0; a < nu.atomCount; a++) {
+        const lx = Lc[3 * a], ly = Lc[3 * a + 1], lz = Lc[3 * a + 2];
+        let ax = R[0] * lx + R[1] * ly + R[2] * lz + f.o[0];
+        let ay = R[3] * lx + R[4] * ly + R[5] * lz + f.o[1];
+        let az = R[6] * lx + R[7] * ly + R[8] * lz + f.o[2];
+        for (let k = 0; k < nNear; k++) {
+          const b = nearB[k];
+          const dx = ax - bx[b], dy = ay - by[b], dz = az - bz[b];
+          const th = br[b] - MAX_PEN;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 >= th * th) continue;
+          const d = Math.sqrt(d2) || 1e-6;
+          const need = th - d + 0.02;
+          const px = dx / d * need, py = dy / d * need, pz = dz / d * need;
+          f.o[0] += px; f.o[1] += py; f.o[2] += pz;
+          ax += px; ay += py; az += pz;
+          hit = true;
+        }
+      }
+      if (!hit) break;
+    }
+  }
+
+  // Scratch
+  const fA = newFrame(), fB = newFrame(), fL = newFrame(), fW = newFrame(), fS = newFrame();
+  const acBuf = new Float32Array(48);
+  const codonFrameRefs = [null, null, null];
+  const trnaSpec = { transform: newFrame(), pair: 0, codonFrames: codonFrameRefs };
+  const pVec = [0, 0, 0], dVec = [0, 0, 0];
+  const attachPt = [0, 0, 0];
+  const aaGroups = [{}, {}, {}, {}].map((g, s) => Object.assign(g, { id: `aa:${s}`, opacity: 1, label: 'Amino acid' }));
+  const peptideGroup = { id: 'peptide', opacity: 1, label: 'Peptide' };
+  const trnaActors = [0, 1, 2, 3].map(s => ({
+    id: `trna:${s}`, assetId: 'trna-aa', asset: null, transform: newFrame(), opacity: 1, visible: true,
+    parts: { body: { visible: true, opacity: 1 }, anticodon: { visible: false, opacity: 0 } },
+    cutaway: false, lod: 'auto', label: 'tRNA', pickable: true,
+  }));
+  const trnaWorld = [newFrame(), newFrame(), newFrame(), newFrame()];
+  const trnaKind = ['aa', 'aa', 'aa', 'aa'];
+  const trnaPresent = [false, false, false, false];
+  const staticP = { transform: newFrame() };
+
+  /** Frame of the tail nucleotide `d` registers beyond the track end (fractional), from a posed tail buffer. */
+  function tailFrame(buf, d, endFrame, flip, out) {
+    if (d < 1) {
+      readFrame16(buf, 1, fB);
+      if (flip) flipStrandDirection(fB, fB);
+      return slerpFrame(endFrame, fB, d, out);
+    }
+    const k = Math.floor(d), u = d - k;
+    readFrame16(buf, k, fA);
+    if (flip) flipStrandDirection(fA, fA);
+    if (u === 0) return copyFrame(fA, out);
+    readFrame16(buf, k + 1, fB);
+    if (flip) flipStrandDirection(fB, fB);
+    return slerpFrame(fA, fB, u, out);
+  }
+
+  /**
+   * Place the 179 mRNA nucleotides on the translation layout (blended from their current frames by
+   * `layoutBlend`), then the visible tRNAs' anticodons and pair strengths. Returns false when idle.
+   */
+  function poseNucleotides(world, nucs, pairs, links, rnaStartIdx, acStartIdx, acPairStart, acLinkStart) {
+    for (let i = 0; i < 3 * SENSE_CODONS; i++) {
+      const nu = nucs[acStartIdx + i];
+      nu.visible = false;
+      // Hidden anticodons rest on their codon nucleotide so positions never depend on seek history.
+      copyFrame(nucs[rnaStartIdx + ORF_START_MRNA + i - 2 * (i % 3) + 2].frame, nu.frame);
+      pairs[acPairStart + i].strength = 0;
+    }
+    for (let i = 0; i < 2 * SENSE_CODONS; i++) links[acLinkStart + i].active = false;
+    for (let s = 0; s < 4; s++) trnaPresent[s] = false;
+
+    const rs = world.ribosome;
+    const layout = rs && rs.layout;
+    const rnaS = world.rna;
+    if (!layout || !rnaS || rnaS.layout !== 'ribosome') return false;
+    const blend = Math.max(0, Math.min(1, rnaS.layoutBlend ?? 0));
+    const codon = Math.max(1, rs.codon || 1);
+    const p0 = ORF_START_MRNA + 3 * (codon - 1);
+    const t = world.t ?? 0;
+    const L = Math.max(0, Math.min(rnaLen, Math.floor(rnaS.length ?? 0)));
+
+    if (blend > 0 && L > 0) {
+      const maxD3 = Math.max(0, (L - 1 - p0) - r1);
+      const maxD5 = Math.max(0, r0 - (0 - p0));
+      if (maxD3 > 0) poseFreeChain(tail3, Math.ceil(maxD3) + 2, t, tailBuf3);
+      if (maxD5 > 0) poseFreeChain(tail5, Math.ceil(maxD5) + 2, t, tailBuf5);
+      for (let j = 0; j < L; j++) {
+        const r = j - p0;
+        if (r >= r0 && r <= r1) {
+          sampleTrack(track, r, fL);
+        } else if (r > r1) {
+          sampleTrack(track, r1, fS);
+          tailFrame(tailBuf3, r - r1, fS, false, fL);
+        } else {
+          sampleTrack(track, r0, fS);
+          tailFrame(tailBuf5, r0 - r, fS, true, fL);
+        }
+        composeFrame(layout, fL, fW);
+        const nf = nucs[rnaStartIdx + j].frame;
+        if (blend >= 1) copyFrame(fW, nf);
+        else slerpFrame(nf, fW, blend, nf);
+      }
+    }
+
+    // Clearance guard (whenever the ribosome machine is in the scene, including the 30S docking in chapter 8):
+    // mRNA nucleotides within 30 registers of the track.
+    let beadCount = 0;
+    if (NB > 0) {
+      let rm = null;
+      const ms = world.machines || [];
+      for (let i = 0; i < ms.length; i++) if (ms[i] && ms[i].id === 'ribosome') { rm = ms[i]; break; }
+      if (rm) {
+        const lp = rm.parts && rm.parts.large;
+        const large = lp && lp.visible !== false && (lp.opacity ?? 1) > 0.001 ? (lp.transform || IDENTITY_FRAME) : null;
+        beadCount = loadBeads(rm.transform, large);
+        const jLo = Math.max(0, Math.floor(p0 + r0 - 30)), jHi = Math.min(L - 1, Math.ceil(p0 + r1 + 30));
+        for (let j = jLo; j <= jHi; j++) clearNuc(nucs[rnaStartIdx + j], beadCount);
+      }
+    }
+
+    // tRNAs: world placement, anticodon nucleotides and codon pairs.
+    const trnas = world.trnas || [];
+    for (let i = 0; i < trnas.length; i++) {
+      const tr = trnas[i];
+      const s = tr.slot | 0;
+      const k = tr.codon | 0;
+      if (s < 0 || s > 3 || k < 1 || k > SENSE_CODONS) continue;
+      const kind = tr.kind === 'init' ? 'init' : 'aa';
+      const asset = trnaAssets[kind];
+      trnaSiteFrame(ribo, tr.from || tr.site, tr.site, tr.blend ?? 1, fL);
+      if (tr.approach > 0) {
+        const dir = carrierDir[tr.carrier] || carrierDir['ef-tu'];
+        const d = TL_ENTER_DISTANCE * tr.approach;
+        fL.o[0] += dir[0] * d; fL.o[1] += dir[1] * d; fL.o[2] += dir[2] * d;
+      }
+      if (tr.depart > 0) {
+        applyPoint(fL, asset.anchors.center.o, pVec);
+        unitBetween(ribo.anchors.center.o, pVec, dVec);
+        const d = TL_RELEASE_DISTANCE * tr.depart;
+        fL.o[0] += dVec[0] * d; fL.o[1] += dVec[1] * d; fL.o[2] += dVec[2] * d;
+      }
+      composeFrame(layout, fL, trnaWorld[s]);
+      trnaKind[s] = kind;
+      trnaPresent[s] = true;
+
+      const base = ORF_START_MRNA + 3 * (k - 1);
+      for (let q = 0; q < 3; q++) codonFrameRefs[q] = nucs[rnaStartIdx + base + q].frame;
+      copyFrame(trnaWorld[s], trnaSpec.transform);
+      trnaSpec.pair = tr.pair ?? 0;
+      trnaSpec.codon = codons[k - 1];
+      trnaSpec.anticodon = anticodons[k - 1];
+      poseTrnaAnticodon(trnaSpec, asset, acBuf);
+      const op = tr.opacity ?? 1;
+      for (let q = 0; q < 3; q++) {
+        const nu = nucs[acStartIdx + 3 * (k - 1) + q];
+        readFrame16(acBuf, q, nu.frame);
+        if (beadCount > 0) clearNuc(nu, beadCount);
+        nu.visible = op > 0.02;
+        nu.opacity = op;
+        pairs[acPairStart + 3 * (k - 1) + q].strength = (tr.pair ?? 0) * (op > 0.02 ? 1 : 0);
+      }
+      links[acLinkStart + 2 * (k - 1)].active = op > 0.02;
+      links[acLinkStart + 2 * (k - 1) + 1].active = op > 0.02;
+    }
+    return true;
+  }
+
+  /** tRNA actors, aminoacyl residues, the peptide chain and the peptide-bond pulse atoms. */
+  function poseGroupsAndActors(world, target, worldFx) {
+    const rs = world.ribosome;
+    const layout = rs && rs.layout;
+    if (!layout) return;
+    const trnas = world.trnas || [];
+    for (let i = 0; i < trnas.length; i++) {
+      const tr = trnas[i];
+      const s = tr.slot | 0;
+      if (!trnaPresent[s]) continue;
+      const act = trnaActors[s];
+      act.assetId = trnaKind[s] === 'init' ? 'trna-init' : 'trna-aa';
+      act.asset = trnaAssets[trnaKind[s]];
+      copyFrame(trnaWorld[s], act.transform);
+      act.opacity = tr.opacity ?? 1;
+      act.visible = act.opacity > 0.001;
+      act.parts.body.opacity = act.opacity;
+      act.label = tr.aa === 'fMet' ? 'fMet-tRNA' : (tr.aa ? `${tr.aa}-tRNA` : 'tRNA');
+      if (act.visible) target.actors.push(act);
+
+      // Aminoacyl residue on a charged tRNA that does not (yet) hold the chain.
+      if (tr.aa && !tr.peptidyl) {
+        const g = aaGroups[s];
+        poseAminoacylResidue({ transform: trnaWorld[s] }, act.asset, tr.aa, g);
+        g.opacity = act.opacity;
+        g.visible = act.visible;
+        if (act.visible) target.groups.push(g);
+      }
+    }
+
+    const pep = world.peptide;
+    const n = pep ? Math.min(SENSE_CODONS, pep.length | 0) : 0;
+    if (n <= 0 || !tunnelLocal.length) return;
+    let holder = -1;
+    for (let i = 0; i < trnas.length; i++) {
+      const tr = trnas[i];
+      if (tr.peptidyl && trnaPresent[tr.slot | 0]) { holder = tr.slot | 0; break; }
+    }
+    if (holder >= 0 && pep.attach !== 'free') {
+      peptidylAttachPoint({ transform: trnaWorld[holder] }, trnaAssets[trnaKind[holder]], attachPt);
+    } else {
+      trnaSiteFrame(ribo, 'P', 'P', 1, fL);
+      composeFrame(layout, fL, staticP.transform);
+      peptidylAttachPoint(staticP, trnaAssets.aa, attachPt);
+    }
+    const paths = worldPaths(layout);
+    const path = [[attachPt[0], attachPt[1], attachPt[2]], ...paths.tunnel];
+    posePeptideOnPath(residuePrefixes[n], path, paths.free, pep.release ?? 0, peptideGroup);
+    peptideGroup.opacity = 1;
+    peptideGroup.visible = true;
+    target.groups.push(peptideGroup);
+
+    // Peptide-bond pulse: C of residue n-1 and N of residue n (the bond just made).
+    if (Array.isArray(worldFx)) {
+      for (let i = 0; i < worldFx.length; i++) {
+        const fx = worldFx[i];
+        if (!fx || fx.kind !== 'peptide' || !fx.anchor || !Array.isArray(fx.anchor.atoms)) continue;
+        const res = peptideGroup.residues;
+        if (n >= 2 && res && res.length >= n) {
+          fx.anchor.atoms[0] = findAtom(peptideGroup, res[n - 2], 'C');
+          fx.anchor.atoms[1] = findAtom(peptideGroup, res[n - 1], 'N');
+        }
+      }
+    }
+  }
+
+  function findAtom(g, res, name) {
+    for (let a = res.atomStart; a < res.atomStart + res.atomCount; a++) if (g.names[a] === name) return a;
+    return -1;
+  }
+
+  /** Detail-sphere centre for translation shots: the decoding centre. */
+  function focusCenter(world, out) {
+    const layout = world.ribosome && world.ribosome.layout;
+    if (!layout || !ribo.anchors.decoding) return false;
+    applyPoint(layout, ribo.anchors.decoding.o, out);
+    return true;
+  }
+
+  return { ribo, codons, poseNucleotides, poseGroupsAndActors, focusCenter, worldPaths, anticodonCount: 3 * SENSE_CODONS };
 }

@@ -13,7 +13,7 @@ export const MACHINE_INSPECT_TABLE = Object.freeze({
   'rnap-core': Object.freeze({
     name: 'RNA polymerase',
     role: 'Copies the template DNA strand into RNA, 5′→3′.',
-    simplifications: Object.freeze(['Rigid structure; DNA bend from one structure (6ALF)']),
+    simplifications: Object.freeze(['Rigid structure; promoter DNA bend from 6CA0 (5.75 Å), elongation DNA from 6ALF']),
     defaultChains: 'Core subunits α₂ββ′ω (chains G–K in 6ALF; A–E in 6C9Y)',
     defaultMethod: 'Cryo-EM, 4.1 Å',
     defaultPdbId: '6ALF',
@@ -84,7 +84,7 @@ export const MACHINE_INSPECT_TABLE = Object.freeze({
   }),
   if1: Object.freeze({
     name: 'IF1',
-    role: 'Guide the initiator tRNA to the start codon and control subunit joining.',
+    role: 'Binds the 30S A site, keeping elongator tRNAs out, and supports IF2 and IF3.',
     simplifications: Object.freeze(['Canonical order only']),
     defaultChains: 'Translation initiation factor IF-1 (chain y, 72 residues)',
     defaultMethod: 'Cryo-EM, 3.0 Å',
@@ -92,7 +92,7 @@ export const MACHINE_INSPECT_TABLE = Object.freeze({
   }),
   if2: Object.freeze({
     name: 'IF2',
-    role: 'Guide the initiator tRNA to the start codon and control subunit joining.',
+    role: 'Delivers the initiator fMet-tRNA to the P site and, as a GTPase, helps the 50S subunit join.',
     simplifications: Object.freeze(['Canonical order only']),
     defaultChains: 'Translation initiation factor IF-2 (chain x, residues 296–890, 595 residues)',
     defaultMethod: 'Cryo-EM, 3.0 Å',
@@ -100,7 +100,7 @@ export const MACHINE_INSPECT_TABLE = Object.freeze({
   }),
   if3: Object.freeze({
     name: 'IF3',
-    role: 'Guide the initiator tRNA to the start codon and control subunit joining.',
+    role: 'Favours the initiator tRNA on the start codon and keeps the subunits apart until the 50S subunit joins.',
     simplifications: Object.freeze(['Canonical order only']),
     defaultChains: 'Translation initiation factor IF-3 CTD (chain J, residues 76–177, 102 residues)',
     defaultMethod: 'Cryo-EM, 2.0 Å',
@@ -132,7 +132,7 @@ export const PROCEDURAL_INSPECT_TABLE = Object.freeze({
     detail: 'Procedural',
     simplifications: Object.freeze([
       'Procedural; ideal geometry',
-      'Twin-domain view: DNA spins about its axis while RNAP does not rotate',
+      'DNA spins about its axis while RNAP stays fixed; supercoiling (twin-domain model) is not shown',
     ]),
   }),
   mrna: Object.freeze({
@@ -151,7 +151,7 @@ export const PROCEDURAL_INSPECT_TABLE = Object.freeze({
   }),
   anticodon: Object.freeze({
     name: 'tRNA anticodon',
-    role: 'Three-nucleotide tRNA anticodon loop that base-pairs with the mRNA codon by Watson–Crick rules in A and P.',
+    role: 'Three-nucleotide tRNA anticodon (nt 34–36) that base-pairs with the mRNA codon by Watson–Crick rules in A and P.',
     source: 'Procedural A-RNA triplet on PDB 7K00 anticodon track (nt 34–36)',
     pdbId: null,
     organism: 'Escherichia coli (procedural nucleotides)',

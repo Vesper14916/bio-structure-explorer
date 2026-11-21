@@ -6,6 +6,7 @@
     "check": "node tools/check-syntax.mjs",
     "test": "node tools/check-syntax.mjs && node --test tests/*.test.mjs",
     "smoke": "node tests/smoke.browser.mjs",
+    "perf": "node tools/perf/story-bench.mjs && node tools/perf/browser-bench.mjs",
     "fetch-sources": "node tools/fetch-sources.mjs",
     "build:standalone": "node tools/build-standalone.mjs"
   }

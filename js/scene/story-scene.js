@@ -4,8 +4,8 @@
  * Connects Story (`buildStory`/`stateAt`), Poser (`createPoser`), CameraRails (`createCameraRails`),
  * Labels (`selectLabels`), Inspection (`buildInspectInfo`), and the Helix 3D Viewer API.
  *
- * Until W3 / Stage ST8 integrates translation choreography, story time clamps at the end of
- * Chapter 7 (`story.chapters[6].t1`, 66.25 s) unless `opts.maxTime` overrides it.
+ * The whole story plays: story time is clamped to `duration - END_EPSILON` (the contract shows defaults at
+ * exactly `duration`, S2 boundary rule), unless `opts.maxTime` asks for an earlier stop.
  */
 import { Assembly, TRUE_SCALE_GENE_CONSTRUCT, codonTable } from '../science/index.js';
 import { buildStory, stateAt, createWorldState } from '../sim/gene/story.js';
@@ -13,6 +13,11 @@ import { createPoser } from '../kin/pose.js';
 import { createCameraRails } from './camera-rails.js';
 import { selectLabels } from './labels.js';
 import { buildInspectInfo } from '../ui/inspect.js';
+import { generateCrowd } from './crowd.js';
+import { RIBO_LAYOUT } from '../sim/gene/translation.js';
+
+/** The last story time that can be shown: the contract returns defaults at t = duration (PLAN.md §8.2). */
+export const END_EPSILON = 1e-3;
 
 const GROUP_PHASE_LEVEL = {
   T: 'closed',
@@ -78,10 +83,14 @@ function computeLabelPositions(target, world, out) {
   if (nucs[0] && nucs[0].frame) setPt('DNA 5′', nucs[0].frame.o);
   if (nucs[247] && nucs[247].frame) setPt('DNA 3′', nucs[247].frame.o);
 
-  // Region tags along DNA (coding strand 0)
+  // Region tags along DNA (coding strand 0). Once the ribosome is in the scene, SD, AUG and UAA are drawn on the
+  // mRNA codons in the ribosome (mRNA index = DNA index − 45) instead of on the DNA (ST8 audit F04).
+  const riboLayout = Boolean(world && world.rna && world.rna.layout === 'ribosome') ||
+    Boolean(world && (world.machines || []).some(m => m && m.id === 'ribosome'));
   for (let i = 0; i < REGION_GENE_INDICES.length; i++) {
     const [key, g] = REGION_GENE_INDICES[i];
-    const nu = nucs[g];
+    const onMrna = riboLayout && (key === 'SD' || key === 'AUG' || key === 'UAA');
+    const nu = onMrna ? nucs[496 + (key === 'SD' ? g - 45 + 2 : g - 45 + 1)] : nucs[g];
     if (nu && nu.frame) setPt(key, nu.frame.o);
   }
 
@@ -101,14 +110,16 @@ function actorMatchesCutaway(act, cutSpec) {
   if (!act || !cutSpec) return false;
   const id = String(act.id || '');
   const assetId = String(act.assetId || '');
-  const kind = typeof cutSpec === 'string' ? cutSpec : String(cutSpec.kind || cutSpec.anchor || '');
-  if (kind === 'activeSite' || kind === 'rnaExit') {
-    return id === 'rnap' || assetId.startsWith('rnap');
-  }
+  // Resolved cut specs (camera-rails `resolveCutSpec`) name the machine they open; `kind` is only 'anchor' or
+  // 'tunnel-axis', so it cannot be used to pick the machine.
+  const machine = typeof cutSpec === 'object' ? String(cutSpec.machineId || '') : '';
+  if (machine === 'ribosome') return id === 'ribosome' || id === 'ribo' || assetId.startsWith('ribosome');
+  if (machine === 'rnap') return id === 'rnap' || assetId.startsWith('rnap');
+  const kind = typeof cutSpec === 'string' ? cutSpec : String(cutSpec.anchor || cutSpec.kind || '');
   if (kind === 'decoding' || kind === 'ptc' || kind === 'tunnel-axis') {
     return id === 'ribosome' || id === 'ribo' || assetId.startsWith('ribosome');
   }
-  return id === 'rnap';
+  return id === 'rnap' || assetId.startsWith('rnap');
 }
 
 function normalizePickHit(hit, target) {
@@ -176,14 +187,12 @@ export function createStoryScene(viewer, opts = {}) {
   const onStateChange = typeof opts.onStateChange === 'function' ? opts.onStateChange : null;
 
   let story = buildStory(scenario, assets, { mode });
-  const defaultW2MaxTime = () => {
-    if (Number.isFinite(opts.maxTime) && opts.maxTime > 0) return Math.min(opts.maxTime, story.duration);
-    // W2 transcription slice (PLAN.md §10 R3-INT2): clamp at end of chapter 7 until ST8/W3.
-    return (story.chapters && story.chapters[6] && Number.isFinite(story.chapters[6].t1))
-      ? story.chapters[6].t1
-      : story.duration;
+  const lastShownTime = () => Math.max(0, story.duration - END_EPSILON);
+  const defaultMaxTime = () => {
+    if (Number.isFinite(opts.maxTime) && opts.maxTime > 0) return Math.min(opts.maxTime, lastShownTime());
+    return lastShownTime();
   };
-  let maxTime = defaultW2MaxTime();
+  let maxTime = defaultMaxTime();
 
   const poser = createPoser({ construct: scenario, assets });
   const world = createWorldState();
@@ -209,6 +218,31 @@ export function createStoryScene(viewer, opts = {}) {
     labels: true,
     crowding: tier !== 'low',
   };
+
+  // Cytoplasmic crowders (PLAN.md §4.5): generated once per quality tier, shown while the Crowding toggle is on.
+  const crowdCache = new Map();
+  let crowdShown = null;
+  function currentTier() {
+    const st = viewer.getState ? viewer.getState() : null;
+    return (st && st.quality) || tier;
+  }
+  let crowdFrames = 0;
+  function syncCrowd(force = false) {
+    if (disposed || !viewer.setCrowd) return;
+    // The auto quality tier can change while playing; poll it every 30 frames rather than on each one.
+    if (!force && crowdShown !== null && (++crowdFrames % 30) !== 0) return;
+    tier = currentTier();
+    const useTier = toggles.crowding ? tier : 'low';
+    if (crowdShown === useTier) return;
+    crowdShown = useTier;
+    if (useTier === 'low') { viewer.setCrowd([], assets); return; }
+    let list = crowdCache.get(useTier);
+    if (!list) {
+      list = generateCrowd(scenario, assets, { seed: 19, tier: useTier, ribosomePose: RIBO_LAYOUT });
+      crowdCache.set(useTier, list);
+    }
+    viewer.setCrowd(list, assets);
+  }
 
   const cameraRails = createCameraRails(viewer, {
     initialOption: 'auto',
@@ -257,6 +291,7 @@ export function createStoryScene(viewer, opts = {}) {
     viewer.setActors?.(target.actors);
     viewer.setAtomGroups?.(target.groups);
     viewer.setFx?.(normalizeFxList(world.fx));
+    syncCrowd();
 
     if (toggles.labels) {
       computeLabelPositions(target, world, labelPositions);
@@ -374,7 +409,7 @@ export function createStoryScene(viewer, opts = {}) {
     if (norm === mode) return;
     mode = norm;
     story = buildStory(scenario, assets, { mode });
-    maxTime = defaultW2MaxTime();
+    maxTime = defaultMaxTime();
     t = clamp(t, 0, maxTime);
     poser.reset?.();
     applyScene({ instantCamera: true });
@@ -404,6 +439,7 @@ export function createStoryScene(viewer, opts = {}) {
       changed = true;
     }
     if (changed) {
+      syncCrowd(true);
       applyScene({ instantCamera: false });
       emitState();
     }

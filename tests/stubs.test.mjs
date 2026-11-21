@@ -35,14 +35,14 @@ const STUBS = [
   { path: 'js/kin/chain.js', implemented: true, fns: ['buildFreeChain', 'poseFreeChain'] }, // DEC-005: implemented in R3-K2; behaviour in tests/kin-chain.test.mjs
   { path: 'js/kin/hairpin.js', implemented: true, fns: ['poseHairpin'] }, // DEC-005: implemented in R3-K2; behaviour in tests/kin-chain.test.mjs
   { path: 'js/kin/peptide-path.js', implemented: true, fns: ['posePeptideOnPath'] }, // DEC-005: implemented in R3-K2; behaviour in tests/kin-chain.test.mjs
-  { path: 'js/kin/trna.js', fns: ['poseTrnaAnticodon', 'poseAminoacylEnd'] },
+  { path: 'js/kin/trna.js', implemented: true, fns: ['poseTrnaAnticodon', 'poseAminoacylEnd'] }, // DEC-005: implemented in R3-K3; behaviour in tests/kin-trna.test.mjs
   { path: 'js/kin/ntp.js', implemented: true, fns: ['poseNtp', 'posePpi'] }, // DEC-005: implemented in R3-S3; behaviour in tests/story-tx.test.mjs
   { path: 'js/kin/pose.js', implemented: true, fns: ['createPoser'] }, // DEC-005: implemented in R3-S3; behaviour in tests/story-tx.test.mjs
 
   // Scene (js/scene/)
   { path: 'js/scene/story-scene.js', implemented: true, fns: ['createStoryScene'] }, // DEC-005: implemented in R3-INT2
   { path: 'js/scene/camera-rails.js', implemented: true, fns: ['resolveShot', 'transitionDuration', 'createCameraRails'] }, // DEC-005: implemented in R3-R3; behaviour in tests/camera-rails.test.mjs
-  { path: 'js/scene/crowd.js', fns: ['generateCrowd'] },
+  { path: 'js/scene/crowd.js', implemented: true, fns: ['generateCrowd'] }, // DEC-005: implemented in R3-R4; behaviour in tests/crowd.test.mjs
   { path: 'js/scene/labels.js', implemented: true, fns: ['selectLabels'] }, // DEC-005: implemented in R3-R3; behaviour in tests/camera-rails.test.mjs
 
   // Render (js/render/)

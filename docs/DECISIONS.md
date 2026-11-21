@@ -228,9 +228,24 @@ This log records accepted contract changes, pre-approved fallbacks from `PLAN.md
   3. Stabilize `tests/kin-duplex.test.mjs:445` against V8 young-gen nursery sawtooth by combining median and net 20,000-call average growth (retaining `<= 1 MiB` bound; verified `18.4 KiB` retained under `--expose-gc`).
 - **Impact:** Reliable, fast `SMOKE PASS` and `284/284` unit test pass across both HTTP and offline standalone builds.
 
+## DEC-030: ST8 audit rulings: label policy, chapter-1 holoenzyme, ribosome cutaway, chapter-8 clearance
 
+- **Date:** 2026-11-20
+- **Source:** `docs/reviews/R3-ST8-audit.md` (findings F01–F05, S-01–S-03), `docs/handoffs/R3-INT3.md`
+- **Context:** The stage-wide audit before ST9 found that (a) the cutaway never opened the ribosome because `actorMatchesCutaway` read `cut.kind` (always `'anchor'`) instead of `cut.machineId`; (b) the mRNA in the 30S track penetrated L1 beads by up to 2.1 Å in chapter 8 (§5.3 item 8) because the clearance guard ran only when `ribosome.bound`, and the item-8 test skipped every unbound sample; (c) chapter 1 showed no holoenzyme although §6.1 row 1 says "holoenzyme 400 Å away"; (d) the six-tag cap starved `EF-Tu`, `EF-G`, `UAA` for whole chapters, and the `SD`/`AUG`/`UAA` tags were drawn on the DNA, about 400 Å from the ribosome.
+- **Decision:**
+  1. `actorMatchesCutaway` selects the machine from `cut.machineId`. The `ribo-decode`, `ribo-ptc` and `ribo-tunnel` cutaways now open the ribosome.
+  2. The mRNA clearance guard in `js/kin/pose.js` runs whenever the ribosome machine is in the scene. `tests/story-tl.test.mjs` item 8 has no `bound` gate and asserts that every chapter 8–16 is sampled.
+  3. Chapter 1 shows the holoenzyme at full opacity 400 Å from its bound pose along the old approach direction; chapter 2 moves it in (`js/sim/gene/transcription.js`).
+  4. Label policy (PLAN §4.6 amendment): no `σ⁷⁰` tag in chapter 1; no `mRNA 5′`/`3′` tags in chapters 11–15; `SD`, `AUG` and `UAA` sit on mRNA codons once the ribosome is present.
+  5. Wording corrections (PLAN §5.2, §5.4 and the matching `js/ui/inspect.js`, `tests/ui-inspect.browser.mjs`, `js/ui/about.js`): RNAP DNA provenance (6CA0 for the promoter DNA, 6ALF for elongation), DNA rotation is not "twin-domain", IF1/IF2/IF3 get their own role sentences, "anticodon loop" becomes "anticodon (nt 34–36)", and the About sheet describes construct v3.
+  6. `PLAN.md` §2 D13 and §6.4 now state D = 38 nt (DEC-024) and about 121 s for Coupled mode.
+- **Impact:** All §5.3 items pass for chapters 8–16 with real sampling. Caption wording changes (S-06 to S-09, S-13) are proposed in the science review but not applied, because §6.2 captions are locked product copy.
 
+## DEC-031: INT3 phone peek height and focus rings
 
-
-
+- **Date:** 2026-11-20
+- **Source:** `docs/handoffs/R3-U3.md` Requests 1–4
+- **Decision:** `PEEK_H` in `js/ui/sheet.js` rises from 112 to 144 so the two-line caption is no longer cut off by the tab bar (the unused `--peek-h: 108px` token is unchanged, as §4.8 requires). Controls hidden in the collapsed sheet get `visibility: hidden` as well as `opacity: 0`, so keyboard focus no longer lands on invisible controls. The grip is 28 px high and `.pep-pill` 24 px high. `.chapter-list` and `.views` get 4 px of padding so focus rings are not clipped.
+- **Impact:** `tests/ui-phone.browser.mjs` known defects drop from 43 to 2 (three chapter-row focus rings on desktop and one grip ring on phone are still clipped by their scroll containers; both are listed in `docs/handoffs/R3-INT3.md`).
 
