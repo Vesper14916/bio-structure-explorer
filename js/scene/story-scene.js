@@ -244,6 +244,11 @@ export function createStoryScene(viewer, opts = {}) {
     viewer.setCrowd(list, assets);
   }
 
+  /** Forget the shown crowd tier (the host cleared the crowd), so the next frame or seek restores it. */
+  function invalidateCrowd() {
+    crowdShown = null;
+  }
+
   const cameraRails = createCameraRails(viewer, {
     initialOption: 'auto',
     onCameraOptionChange: () => emitState(),
@@ -532,6 +537,7 @@ export function createStoryScene(viewer, opts = {}) {
     setMode,
     setCameraOption,
     setToggles,
+    invalidateCrowd,
     selectCodon,
     clearInspect,
     pick,

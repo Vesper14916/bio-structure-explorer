@@ -154,6 +154,10 @@ function showMode(mode, { keepCamera = false } = {}) {
   viewer.setAtomGroups?.([]);
   viewer.setFx?.([]);
   viewer.setLabels?.([]);
+  // Crowders live outside actors (PLAN.md §4.5); clear them so other modes do not inherit them, and
+  // let the story scene restore them on re-entry.
+  viewer.setCrowd?.([]);
+  app.storyScene?.invalidateCrowd?.();
   viewer.setDetailFocus?.(null);
   viewer.setAnnotations([]);
   viewer.setFollowTarget?.(null);
