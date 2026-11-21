@@ -22,8 +22,8 @@ export const EVENT_TYPES = Object.freeze([
   'couple.unlock',
 ]);
 
-const DEFAULT_D = 48;
-const DEFAULT_D_SOURCE = 'default 48 (PLAN.md §6.4); pending task A4';
+const DEFAULT_D = 38;
+const DEFAULT_D_SOURCE = '6ZTJ, DEC-024';
 const RESIDUE_SPACING = 3.40; // Å per residue along the tunnel (PLAN.md §7.4, CONTRACTS §7.4)
 const MS = s => Math.round(s * 1000);
 
