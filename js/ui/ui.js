@@ -74,7 +74,7 @@
  *   ui.setSheet('peek'|'half'|'full') / ui.getSheet() (phone), ui.openAbout() / closeAbout(), ui.destroy().
  *   DOM / CSS hooks: root gets classes `is-mobile` (phone layout), `is-collapsed`, `kb-open`, and CSS vars
  *   --inset-top/right/bottom/left (px) always mirroring the last onLayout payload.
- *   Keys: 1-5 modes, H panel, Space play/pause (Copy), Left/Right step pair (Pairs), ? about.
+ *   Keys: 1-6 modes, H panel, Space play/pause (Copy), Left/Right step pair (Pairs), ? about.
  */
 import { BASE_INFO } from '../science/index.js';
 import { h, hex, lsGet, lsSet, rafThrottle } from './dom.js';

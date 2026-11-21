@@ -264,3 +264,17 @@ This log records accepted contract changes, pre-approved fallbacks from `PLAN.md
 - **Impact:** Unblocks parallel execution of `R3-P1`, `R3-D1`, and `R3-S5` from `r3/st9`, preserves strict `PLAN.md` §4 closed design-system boundaries, keeps `r3/st9` green on every merge, and synchronizes `DEFAULT_D` with `DEC-024` during `R3-INT4`.
 
 
+
+## DEC-033: G4 cutover and R3-V1 rulings (ST9, R3-INT4)
+
+- **Date:** 2026-11-21
+- **Stage:** ST9
+- **Owner:** Chief (Claude, ST9 continuation after the Gemini session stopped)
+- **Source:** `docs/reviews/R3-V1-science.md`; DEC-032; PLAN.md §10 R3-INT4, §12 G4
+- **Decision:**
+  1. **Cutover.** Express is the Round 3 story scene. `js/main.js` and `js/ui/ui.js` no longer read `?scene`; `?scene=v1` and `?scene=v2` are ignored. R3-P1 merged with `--no-ff` in the same change, so no commit on `r3/st9` imports a deleted module.
+  2. **`dist/helix-standalone.html` rebuilt in INT4** (not only in INT5) because `npm run smoke` checks the standalone bundle at `?mode=express` and the old bundle still carried Round 1 Express.
+  3. **V1 High count is 0**, so the G4 item "V1 issues of severity high are fixed" is met. Medium items M-02, M-03, M-05, M-06 and M-08 were fixed in INT4; M-01 (Coupled caption 10) and the caption parts of L-01, L-02 and the carried ST8 caption items wait for the user because §6.2/§6.4 captions are locked copy; M-04 (in-app hairpin caveat) and M-07 (first NTP bond) are scheduled as wording or product calls.
+  4. **F11 ruling (V1 L-11):** the nascent peptide in the exit tunnel is exempt from PLAN.md §5.3 item 8, which covers slot tracks. Its 1.2–1.9 Å penetration of rigid 50S L1 beads is a known limitation. A PLAN text amendment is proposed, not applied.
+  5. **Hardware frame time** stays `PENDING (human)`; the measuring steps are in `docs/PERF.md` §5.1.
+- **Impact:** Gate G4 passes on every automated item; it closes when a person records the desktop frame time and the user merges the ST9 PR and creates tag `r3-w4`.

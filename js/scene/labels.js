@@ -489,8 +489,12 @@ export function selectLabels(worldState, assets = {}, opts = {}) {
   // ST8 DEC-030: while the ribosome decodes (chapters 11-15, `decode` to `release`) the two mRNA-end tags are
   // dropped so that the six-tag cap reaches the factor, region (UAA) and peptide tags of those chapters.
   const chIdx = Number(worldState?.chapter?.index);
-  const decodingChapters = riboState.visible && worldState?.chapter?.group === 'E' && chIdx >= 10 && chIdx <= 14
-    && worldState?.chapter?.id !== undefined && (worldState.rna?.layout === 'ribosome');
+  // R3-INT4 (V1 M-03): the same rule applies to the Coupled decoding chapters (`couple-run`, `release`), where the
+  // RNA layout is 'coupled' from chapter 7 and never returns to 'ribosome'.
+  const seqDecoding = chIdx >= 10 && chIdx <= 14 && worldState?.rna?.layout === 'ribosome';
+  const cplDecoding = worldState?.rna?.layout === 'coupled';
+  const decodingChapters = riboState.visible && worldState?.chapter?.group === 'E'
+    && worldState?.chapter?.id !== undefined && (seqDecoding || cplDecoding);
   const mrnaLen = Number(worldState?.rna?.length ?? worldState?.counters?.mrna ?? 0);
   if (mrnaLen >= 12 && !decodingChapters) {
     let mrna5At;

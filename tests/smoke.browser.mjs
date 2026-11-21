@@ -293,11 +293,21 @@ async function checkPage(context, base, localHost, urlPath, modInfo) {
         }
         await sleep(800);
         // 0.7 of the Step by step story lies in translation elongation (PLAN.md §6.1).
-        const tChapter = await page.evaluate(() => window.helix?.storyScene?.state?.().chapter ?? null);
+        let tChapter = null;
+        for (let i = 0; i < 30 && tChapter === null; i++) {
+          tChapter = await page.evaluate(() => {
+            const sc = window.helix?.storyScene;
+            if (!sc) return null;
+            sc.seekProgress?.(0.7);
+            return sc.state().chapterIndex;
+          });
+          if (tChapter === null) await sleep(500);
+        }
         const legacy = await page.evaluate(() =>
           !!document.querySelector('input[type="range"][aria-label="Gene expression progress"]'));
         if (legacy) problems.push(`[${urlPath}] Round 1 Express panel still mounted after key 5`);
         if (tChapter === null) problems.push(`[${urlPath}] Express story scene not available after key 5`);
+        else if (!(tChapter >= 10)) problems.push(`[${urlPath}] story at 0.7 should be in translation (chapter index >= 10), got ${tChapter}`);
       }
     }
   } finally {

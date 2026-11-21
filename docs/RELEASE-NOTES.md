@@ -37,7 +37,7 @@ Helix is a teaching visualization of a single local bacterial gene, not a whole-
 - **Extended nascent peptide:** Built on a fixed extended backbone (`φ = -139°`, `ψ = 135°`, no proline); real nascent chains inside the 50S exit tunnel are often partly helical, and protein folding is not shown.
 - **Exact Watson–Crick anticodons:** Each tRNA anticodon (nt 34–36) is built as the exact complement of its codon; wobble pairing and modified nucleosides are disclosed rather than modelled (`PLAN.md` §2 D7).
 - **Static illustrative crowding:** Neighbouring ribosomes, standalone EF-Tu, and RNAP holoenzymes use illustrative densities without Brownian motion or molecular exchange (`docs/SCIENCE.md` §5).
-- **Unpublished wwPDB entry:** `9ZN2` (`IF1`/`IF2`) is cited as an unpublished wwPDB deposition (`Guerra GS et al., 2026, wwPDB (To Be Published)`) as recorded in `js/ui/about.js` and `docs/assets/factors.md`.
+- **Unpublished wwPDB entry:** `9ZN2` (`IF1`/`IF2`) is cited as an unpublished wwPDB deposition (`Guerra GS et al., 2026, wwPDB (To Be Published)`), a placeholder citation recorded in `js/ui/about.js`; author and DOI are not verified against RCSB.
 
 ---
 

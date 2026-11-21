@@ -746,3 +746,16 @@ test('S5 performance & GC: coupled stateAt median <= 2.0 ms, pose median <= 6.0 
   assert.ok(medState <= 2.0, `coupled stateAt median ${medState.toFixed(4)} ms > 2.0 ms`);
   assert.ok(medPose <= 6.0, `coupled pose median ${medPose.toFixed(4)} ms > 6.0 ms`);
 });
+
+test('coupled decoding chapters drop the mRNA end tags (DEC-030 rule; R3-INT4, V1 M-03)', async () => {
+  const { selectLabels } = await import('../js/scene/labels.js');
+  for (const id of ['couple-run', 'release']) {
+    const c = ch(id);
+    for (const f of [0.1, 0.5, 0.9]) {
+      const w = createWorldState();
+      stateAt(story, c.t0 + f * (c.t1 - c.t0), w);
+      const texts = selectLabels(w, ASSETS, { enabled: true }).map(l => l.text);
+      assert.ok(!texts.includes('mRNA 5′') && !texts.includes('mRNA 3′'), `${id} @${f}: ${texts.join(', ')}`);
+    }
+  }
+});
