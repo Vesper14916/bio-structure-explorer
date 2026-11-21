@@ -8,8 +8,7 @@ import { createViewer } from './render/viewer.js';
 import { createUI, pairPayload } from './ui/ui.js';
 import { createMeltSim } from './sim/melt.js';
 import { createReplicationSim, BLOB_DEF } from './sim/replication.js';
-import { createExpressionSim, EXPRESS_BLOB_DEF } from './sim/expression.js';
-import { REPLICATION_HEX, EXPRESSION_HEX } from './render/colors.js';
+import { REPLICATION_HEX } from './render/colors.js';
 import { loadAssets } from './assets/registry.js';
 import { createStoryScene } from './scene/story-scene.js';
 
@@ -21,7 +20,6 @@ const cleanForNa = (s, na = app.nucleicAcid) => (na === 'rna' ? cleanRnaSequence
 
 const app = {
   mode: 'structure',
-  sceneVersion: params.get('scene') === 'v2' ? 'v2' : 'v1',
   storyScene: null,
   storySceneReady: null,
   nucleicAcid: initialNa,
@@ -31,14 +29,10 @@ const app = {
   crystal: { waters: true, bfactor: false },
   melt: { T: 25, Na: 0.1 },
   replSpeed: 1,
-  exprSpeed: 1,
-  exprCamera: 'overview',
-  exprCutaway: true,
-  selectedCodon: null,     // selected codon index 0..11 in Express mode
   pair: null,              // selected base-pair index (structure / pair / crystal modes)
   measure: false,
   asm: null,               // assembly currently shown
-  ideal: null, crystalAsm: null, meltSim: null, replSim: null, exprSim: null,
+  ideal: null, crystalAsm: null, meltSim: null, replSim: null,
 };
 if (app.sequence.length < 4) app.sequence = initialNa === 'rna' ? cleanRnaSequence(DEFAULT_SEQUENCE) : DEFAULT_SEQUENCE;
 
@@ -52,7 +46,6 @@ const ideal = () => (app.ideal ||= (app.nucleicAcid === 'rna' ? buildRnaDuplex(a
 const crystal = () => (app.crystalAsm ||= buildCrystal());
 const meltSim = () => (app.meltSim ||= createMeltSim(app.sequence, { T: app.melt.T, Na: app.melt.Na, seed: 7, nucleicAcid: app.nucleicAcid }));
 const replSim = () => (app.replSim ||= createReplicationSim(cleanSequence(app.sequence), { seed: 11 }));
-const exprSim = () => (app.exprSim ||= createExpressionSim({ seed: 19, cutaway: app.exprCutaway }));
 
 function invalidateSequenceModels() {
   app.meltSim?.dispose?.(); app.replSim?.dispose?.();
@@ -161,22 +154,17 @@ function showMode(mode, { keepCamera = false } = {}) {
   viewer.setDetailFocus?.(null);
   viewer.setAnnotations([]);
   viewer.setFollowTarget?.(null);
-  viewer.setFraming?.(
-    mode === 'replicate' ? replicationFraming(replSim()) :
-    mode === 'express' && app.sceneVersion !== 'v2' ? expressionFraming(exprSim()) : null
-  );
+  viewer.setFraming?.(mode === 'replicate' ? replicationFraming(replSim()) : null);
 
   if (mode === 'crystal') app.asm = crystal();
   else if (mode === 'melt') { const s = meltSim(); s.setConditions({ T: app.melt.T, Na: app.melt.Na }); app.asm = s.assembly; }
   else if (mode === 'replicate') app.asm = replSim().assembly;
   else if (mode === 'express') {
-    app.asm = app.sceneVersion === 'v2'
-      ? (app.storyScene ? app.storyScene.target.asm : new Assembly().finalize())
-      : exprSim().assembly;
+    app.asm = app.storyScene ? app.storyScene.target.asm : new Assembly().finalize();
   } else app.asm = ideal();
 
   viewer.setStyle(styleForMode());
-  viewer.setAssembly(app.asm, { keepCamera: keepCamera || (mode === 'express' && app.sceneVersion === 'v2') });
+  viewer.setAssembly(app.asm, { keepCamera: keepCamera || mode === 'express' });
   ui.setStyle(styleForMode());
 
   if (mode === 'structure') {
@@ -192,18 +180,7 @@ function showMode(mode, { keepCamera = false } = {}) {
     viewer.setBlobs(sim.blobs);
     pushReplication(true);
   } else if (mode === 'express') {
-    if (app.sceneVersion === 'v2') {
-      ensureStoryScene();
-    } else {
-      const sim = exprSim();
-      sim.setCutaway(app.exprCutaway);
-      sim.setCameraMode(app.exprCamera);
-      if (sim.state.progress === 0 || sim.state.finished) { sim.seek(0); sim.play(); }
-      viewer.setBlobs(sim.blobs);
-      applyExpressCamera();
-      applyCodonHighlight(app.selectedCodon, { focus: false });
-      pushExpression(true);
-    }
+    ensureStoryScene();
   } else if (mode === 'crystal') {
     app.pair = null;
     ui.setCrystalInfo({ atoms: app.asm.atoms.count, waters: app.asm.waters ? app.asm.waters.count : null });
@@ -300,108 +277,15 @@ function tickReplication(dt) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Gene Expression (Transcription + Translation)
-let lastExprCaption = '';
-const EXPRESS_LEGEND = [
-  { id: 'coding', label: 'Coding DNA (5′→3′)', color: hexCss(EXPRESSION_HEX.coding), kind: 'strand' },
-  { id: 'template', label: 'Template DNA (3′→5′)', color: hexCss(EXPRESSION_HEX.template), kind: 'strand' },
-  { id: 'mrna', label: 'mRNA transcript (2′-OH)', color: hexCss(EXPRESSION_HEX.mrna), kind: 'strand' },
-  { id: 'trna', label: 'tRNA anticodon', color: hexCss(EXPRESSION_HEX.trna), kind: 'strand' },
-  { id: 'peptide', label: 'Nascent peptide', color: hexCss(EXPRESSION_HEX.peptide), kind: 'strand' },
-  { id: 'rnap', label: EXPRESS_BLOB_DEF.rnap.label, color: hexCss(EXPRESS_BLOB_DEF.rnap.color), kind: 'blob' },
-  { id: 'ribosome', label: '30S / 50S Ribosome', color: hexCss(EXPRESS_BLOB_DEF['ribosome-30s'].color), kind: 'blob' },
-  { id: 'rf1', label: EXPRESS_BLOB_DEF.rf1.label, color: hexCss(EXPRESS_BLOB_DEF.rf1.color), kind: 'blob' },
-];
-
-function expressionFraming(sim) {
-  if (sim._framing) return sim._framing;
-  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
-  const add = (x, y, z, r = 0) => {
-    lo[0] = Math.min(lo[0], x - r); hi[0] = Math.max(hi[0], x + r);
-    lo[1] = Math.min(lo[1], y - r); hi[1] = Math.max(hi[1], y + r);
-    lo[2] = Math.min(lo[2], z - r); hi[2] = Math.max(hi[2], z + r);
-  };
-  const save = sim.state.progress, asm = sim.assembly, P = asm.atoms.pos;
-  for (let i = 0; i <= 32; i++) {
-    sim.seek(i / 32);
-    for (const nu of asm.nucleotides) {
-      if (nu.visible === false || nu.opacity < 0.5) continue;
-      for (let a = 0; a < nu.atomCount; a += 4) { const g = (nu.atomStart + a) * 3; add(P[g], P[g + 1], P[g + 2]); }
-    }
-    for (const r of asm.residues || []) if (r.visible) add(r.pos[0], r.pos[1], r.pos[2], r.radius || 2);
-    for (const b of sim.blobs) if (b.visible && b.opacity > 0.08) add(b.pos[0], b.pos[1], b.pos[2], b.radius * 0.85);
-  }
-  sim.seek(save);
-  const pts = [];
-  for (const x of [lo[0], hi[0]]) for (const y of [lo[1], hi[1]]) for (const z of [lo[2], hi[2]]) pts.push([x, y, z]);
-  return (sim._framing = { points: pts, dir: [0.15, 0.88, 0.45] });
-}
-
-function applyExpressCamera() {
-  if (!viewer || app.mode !== 'express') return;
-  if (app.exprCamera === 'overview') {
-    viewer.setFollowTarget?.(null);
-    viewer.focus(null, { duration: 0.7 });
-  } else {
-    viewer.setFollowTarget?.({ mode: app.exprCamera });
-  }
-}
-
-function applyCodonHighlight(codonIdx, { focus = true } = {}) {
-  app.selectedCodon = codonIdx;
-  if (!viewer || app.mode !== 'express') return;
-  const asm = exprSim().assembly;
-  if (codonIdx === null || codonIdx === undefined || codonIdx < 0) {
-    viewer.setHighlight(null);
-    return;
-  }
-  const nucIds = [];
-  for (const nu of asm.nucleotides) {
-    if (nu.codon === codonIdx) nucIds.push(nu.id);
-  }
-  const resIds = [];
-  for (const r of asm.residues || []) {
-    if (r.codonIndex === codonIdx) resIds.push(r.id);
-  }
-  viewer.setHighlight({ nucleotides: nucIds, residues: resIds });
-  if (focus && nucIds.length) {
-    viewer.focus({ nucleotides: nucIds }, { duration: 0.65 });
-  }
-}
-
-function pushExpression(force = false) {
-  const sim = exprSim(), st = sim.state;
-  const payload = {
-    progress: st.progress,
-    playing: !!st.playing && !st.finished,
-    speed: app.exprSpeed,
-    phase: st.phase,
-    cameraMode: app.exprCamera,
-    cutaway: app.exprCutaway,
-    rnaCount: st.rnaCount,
-    hybridCount: st.hybridCount,
-    codonIndex: st.codonIndex,
-    activeCodon: st.activeCodon,
-    selectedCodon: app.selectedCodon,
-    peptideCount: st.peptideCount,
-    peptideSeq: st.peptideSeq,
-    construct: st.construct,
-  };
-  if (force || st.caption !== lastExprCaption) {
-    payload.caption = st.caption;
-    lastExprCaption = st.caption;
-  }
-  ui.setExpressState?.(payload);
-}
-
-const STORY_V2_ASSETS = [
+// Gene Expression (Transcription + Translation): the Round 3 story scene (PLAN.md D9, gate G4)
+const STORY_ASSETS = [
   'rnap-holo', 'rnap-ec', 'nusg',
   'ribosome-70s', 'trna-init', 'trna-aa',
   'if1', 'if2', 'if3', 'ef-tu', 'ef-g', 'rf1',
 ];
 
 function pushStoryState(st) {
-  if (!st || app.mode !== 'express' || app.sceneVersion !== 'v2') return;
+  if (!st || app.mode !== 'express') return;
   ui.setExpressState?.(st);
 }
 
@@ -415,7 +299,7 @@ function ensureStoryScene() {
     return Promise.resolve(app.storyScene);
   }
   if (app.storySceneReady) return app.storySceneReady;
-  app.storySceneReady = loadAssets(STORY_V2_ASSETS)
+  app.storySceneReady = loadAssets(STORY_ASSETS)
     .then(assets => {
       const tier = viewer.getState ? viewer.getState().tier : 'high';
       const scene = createStoryScene(viewer, {
@@ -429,7 +313,7 @@ function ensureStoryScene() {
       app.asm = scene.target.asm;
       if (window.helix) window.helix.storyScene = scene;
 
-      if (app.mode === 'express' && app.sceneVersion === 'v2') {
+      if (app.mode === 'express') {
         const pausedParam = params.get('paused') === '1' || params.get('paused') === 'true';
         if (params.has('t')) {
           const tVal = parseFloat(params.get('t'));
@@ -452,23 +336,15 @@ function ensureStoryScene() {
       return scene;
     })
     .catch(err => {
-      console.error('Failed to initialize Express v2 StoryScene:', err);
-      ui.showError('Could not load molecular assets for Express v2.', 'Scene unavailable');
+      console.error('Failed to initialize the Express StoryScene:', err);
+      ui.showError('Could not load molecular assets for Express.', 'Scene unavailable');
       return null;
     });
   return app.storySceneReady;
 }
 
 function tickExpression(dt) {
-  if (app.sceneVersion === 'v2') {
-    app.storyScene?.tick(dt);
-    return;
-  }
-  const sim = exprSim();
-  sim.update(dt * app.exprSpeed);
-  viewer.sync();
-  viewer.setBlobs(sim.blobs);
-  pushExpression();
+  app.storyScene?.tick(dt);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -531,32 +407,19 @@ const handlers = {
   },
 
   onExpression({ action, value }) {
-    if (app.sceneVersion === 'v2') {
-      const s = app.storyScene;
-      if (!s) return;
-      if (action === 'play') s.play();
-      else if (action === 'pause') s.pause();
-      else if (action === 'restart') s.restart();
-      else if (action === 'seek') s.seekProgress(value);
-      else if (action === 'speed') s.setSpeed(value);
-      else if (action === 'mode') s.setMode(value);
-      else if (action === 'camera') s.setCameraOption(value);
-      else if (action === 'toggle') s.setToggles(value);
-      else if (action === 'chapter') s.setChapter(value);
-      else if (action === 'selectCodon') s.selectCodon(value);
-      else if (action === 'clearInspect') s.clearInspect();
-      return;
-    }
-    const sim = exprSim();
-    if (action === 'play') { if (sim.state.finished) sim.seek(0); sim.play(); }
-    else if (action === 'pause') sim.pause();
-    else if (action === 'restart') { sim.seek(0); sim.play(); }
-    else if (action === 'seek') { sim.seek(value); viewer.sync(); viewer.setBlobs(sim.blobs); }
-    else if (action === 'speed') { app.exprSpeed = value; sim.setSpeed(value); }
-    else if (action === 'camera') { app.exprCamera = value || 'overview'; sim.setCameraMode(app.exprCamera); applyExpressCamera(); }
-    else if (action === 'cutaway') { app.exprCutaway = !!value; sim.setCutaway(app.exprCutaway); viewer.setBlobs(sim.blobs); }
-    else if (action === 'selectCodon') { applyCodonHighlight(value, { focus: true }); }
-    pushExpression(true);
+    const s = app.storyScene;
+    if (!s) return;
+    if (action === 'play') s.play();
+    else if (action === 'pause') s.pause();
+    else if (action === 'restart') s.restart();
+    else if (action === 'seek') s.seekProgress(value);
+    else if (action === 'speed') s.setSpeed(value);
+    else if (action === 'mode') s.setMode(value);
+    else if (action === 'camera') s.setCameraOption(value);
+    else if (action === 'toggle') s.setToggles(value);
+    else if (action === 'chapter') s.setChapter(value);
+    else if (action === 'selectCodon') s.selectCodon(value);
+    else if (action === 'clearInspect') s.clearInspect();
   },
 
   onCrystal(c) {
@@ -584,17 +447,7 @@ function boot() {
   viewer.on('pick', e => {
     if (app.mode === 'melt' || app.mode === 'replicate') return;
     if (app.mode === 'express') {
-      if (app.sceneVersion === 'v2') {
-        app.storyScene?.pick(e);
-        return;
-      }
-      if (!e || (e.codon === undefined || e.codon < 0)) {
-        if (app.selectedCodon !== null) { applyCodonHighlight(null, { focus: false }); pushExpression(true); }
-        return;
-      }
-      const nextCodon = app.selectedCodon === e.codon ? null : e.codon;
-      applyCodonHighlight(nextCodon, { focus: false });
-      pushExpression(true);
+      app.storyScene?.pick(e);
       return;
     }
     if (!e || e.pair < 0) {
@@ -623,7 +476,6 @@ function boot() {
   ui.setNucleicAcid?.(app.nucleicAcid);
   ui.setSequence(app.sequence);
   ui.setReplicationLegend?.(REPL_LEGEND);
-  if (app.sceneVersion !== 'v2') ui.setExpressLegend?.(EXPRESS_LEGEND);
   const startMode = ['structure', 'pair', 'melt', 'replicate', 'express', 'crystal'].includes(params.get('mode')) ? params.get('mode') : 'structure';
   ui.setMode(startMode);
   showMode(startMode);

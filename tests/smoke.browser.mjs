@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Browser smoke gate: serves the repository root over a local static server, opens the app and
-// the standalone bundle in Chromium, switches modes with the keys 1-6, scrubs the Express v1
-// progress slider, checks ?mode=express&scene=v2 on both pages, verifies offline asset loading
+// the standalone bundle in Chromium, switches modes with the keys 1-6, scrubs the Express story
+// progress slider, checks ?mode=express on both pages, verifies offline asset loading
 // from window.__HELIX_ASSETS__ in the standalone bundle with all network requests blocked, and
 // checks module imports across js/ so broken modules print their path.
 // Prints SMOKE PASS or SMOKE FAIL. Not a node:test file.
@@ -282,20 +282,22 @@ async function checkPage(context, base, localHost, urlPath, modInfo) {
       await sleep(800);
       if (key === '5') {
         const found = await page.evaluate(() => {
-          const range = document.querySelector('input[type="range"][aria-label="Gene expression progress"]');
+          const range = document.querySelector('#view-express input[type="range"][aria-label="Story progress"]');
           if (!range) return false;
           range.value = '700';
           range.dispatchEvent(new Event('input', { bubbles: true }));
           return true;
         });
         if (!found) {
-          problems.push(`[${urlPath}] range input "Gene expression progress" not found after key 5`);
+          problems.push(`[${urlPath}] range input "Story progress" not found after key 5`);
         }
         await sleep(800);
-        const hasTranslation = await page.evaluate(() => document.body.innerText.includes('Translation'));
-        if (!hasTranslation) {
-          problems.push(`[${urlPath}] page text does not contain "Translation" after scrubbing to 700`);
-        }
+        // 0.7 of the Step by step story lies in translation elongation (PLAN.md §6.1).
+        const tChapter = await page.evaluate(() => window.helix?.storyScene?.state?.().chapter ?? null);
+        const legacy = await page.evaluate(() =>
+          !!document.querySelector('input[type="range"][aria-label="Gene expression progress"]'));
+        if (legacy) problems.push(`[${urlPath}] Round 1 Express panel still mounted after key 5`);
+        if (tChapter === null) problems.push(`[${urlPath}] Express story scene not available after key 5`);
       }
     }
   } finally {
@@ -400,8 +402,8 @@ async function main() {
     for (const urlPath of PAGES) {
       await checkPage(context, base, localHost, urlPath, modInfo);
     }
-    await checkV2Page(context, base, localHost, '/index.html?mode=express&scene=v2', { offline: false });
-    await checkV2Page(context, base, localHost, '/dist/helix-standalone.html?mode=express&scene=v2', { offline: true });
+    await checkV2Page(context, base, localHost, '/index.html?mode=express', { offline: false });
+    await checkV2Page(context, base, localHost, '/dist/helix-standalone.html?mode=express', { offline: true });
   } finally {
     if (browser) await browser.close();
     await new Promise(resolve => server.close(resolve));

@@ -364,23 +364,26 @@ async function runTests() {
     check(wsInfo.crowdingPressed === 'false', `low tier sets Crowding off by default (got ${wsInfo.crowdingPressed})`);
     await wsPage.close();
 
-    // Verify index.html?mode=express&scene=v2 renders cleanly without errors, and ?mode=express stays v1
+    // Verify index.html?mode=express mounts the story panel (Gate G4 cutover; ?scene is ignored)
     const v2App = await desktopCtx.newPage();
-    attachMonitors(v2App, 'index-v2', localHost);
-    await v2App.goto(`${base}/index.html?mode=express&scene=v2`, { waitUntil: 'load' });
+    attachMonitors(v2App, 'index-express', localHost);
+    await v2App.goto(`${base}/index.html?mode=express`, { waitUntil: 'load' });
     await v2App.waitForTimeout(800);
-    const hasV2Slider = await v2App.evaluate(() =>
-      !!document.querySelector('#view-express input[type="range"][aria-label="Story progress"]'));
-    check(hasV2Slider, 'index.html?mode=express&scene=v2 mounts Express v2 panel cleanly');
+    const panel = await v2App.evaluate(() => ({
+      story: !!document.querySelector('#view-express input[type="range"][aria-label="Story progress"]'),
+      legacy: !!document.querySelector('input[type="range"][aria-label="Gene expression progress"]'),
+    }));
+    check(panel.story, 'index.html?mode=express mounts the Express story panel');
+    check(!panel.legacy, 'index.html?mode=express no longer mounts the Round 1 Express panel');
     await v2App.close();
 
     const v1App = await desktopCtx.newPage();
-    attachMonitors(v1App, 'index-v1', localHost);
-    await v1App.goto(`${base}/index.html?mode=express`, { waitUntil: 'load' });
+    attachMonitors(v1App, 'index-scene-v1', localHost);
+    await v1App.goto(`${base}/index.html?mode=express&scene=v1`, { waitUntil: 'load' });
     await v1App.waitForTimeout(800);
-    const hasV1Slider = await v1App.evaluate(() =>
-      !!document.querySelector('#view-express input[type="range"][aria-label="Gene expression progress"]'));
-    check(hasV1Slider, 'index.html?mode=express (without scene=v2) keeps Round 1 Express panel untouched');
+    const v1Ignored = await v1App.evaluate(() =>
+      !!document.querySelector('#view-express input[type="range"][aria-label="Story progress"]'));
+    check(v1Ignored, 'index.html?mode=express&scene=v1 is ignored and still mounts the story panel');
     await v1App.close();
 
     // ---- 4. Phone layout accessibility & overflow check (iPhone 13) ----------------------------
