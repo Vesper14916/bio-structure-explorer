@@ -47,7 +47,7 @@ node tools/perf/browser-bench.mjs --quality=low --frames=20 --chapters=8,9
 
 The browser run has no frame-time budget. Software GL is far slower than a hardware GPU, so its frame times are informational only and never fail the run. The script fails only on page errors.
 
-The Coupled story is checked against the same budgets. Its mode is a pass-through stub until task R3-S5, so its numbers describe the stub timeline only.
+The Coupled story is checked against the same budgets. Since R3-S5 (ST9) it runs the full coupled choreography (expressome lock, NusG, coupled mRNA layout).
 
 ## 3. Measured results
 
@@ -59,8 +59,10 @@ Environment for every number below: Node v22.23.5 on Intel Xeon 2.10 GHz (the sa
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Step by step (16 chapters, 164.05 s, 1,109 events) | `stateAt` | 2,000 | 0.0341 | 0.0812 | 0.2532 | at most 2 ms | PASS |
 | Step by step | `pose` | 2,000 | 2.0886 | 3.9108 | 10.4804 | at most 6 ms | PASS |
-| Coupled (stub, 12 chapters, 121.30 s, 1,114 events) | `stateAt` | 2,000 | 0.0209 | 0.0466 | 1.0764 | at most 2 ms | PASS |
-| Coupled (stub) | `pose` | 2,000 | 0.6289 | 1.3760 | 11.9777 | at most 6 ms | PASS |
+| Coupled (12 chapters, 121.30 s, D = 38; R3-S5) | `stateAt` | 2,000 | 0.0312 | 0.0582 | 0.2710 | at most 2 ms | PASS |
+| Coupled | `pose` | 2,000 | 2.7253 | 4.8351 | 15.1869 | at most 6 ms | PASS |
+
+The Step by step rows above are from the R3-Q2 run (2026-11-20). The Coupled rows were re-measured in R3-INT4 (2026-11-21, same container type) after R3-S5 landed; that run gave Step by step `stateAt` 0.0303 / 0.0487 / 0.3412 ms and `pose` 2.1723 / 3.5708 / 7.5196 ms (median / p95 / max), consistent with the table. `docs/evidence/r3/Q2/story-bench.json` holds the R3-INT4 run.
 
 Printed summary: `STORY-BENCH PASS`.
 
@@ -113,11 +115,39 @@ At the medium tier, a software-GL frame from chapter 2 on takes 4 to 10 s, and t
 1. **Software GL only.** SwiftShader runs on the CPU. No hardware GPU was available, so the browser frame times say nothing about a real device.
 2. **Draw counts are wrapper counts.** They come from wrapping the WebGL2 draw methods, not from `renderer.info.render`, which the viewer API does not expose. The totals should match `renderer.info.render` for each frame, but this was not cross-checked.
 3. **Frame time is the rAF interval.** It is the spacing between viewer ticks, which includes the CPU work of the tick and whatever GL work finishes in that interval. There is no GPU timer.
-4. **Coupled numbers describe a stub.** `contributeCoupled` is a pass-through until task R3-S5. The Coupled rows will change when S5 lands and must be measured again.
+4. **Coupled browser numbers predate R3-S5.** The Node Coupled rows in §3.1 were re-measured after R3-S5. The browser run (§3.2) covers the Step by step story only.
 5. **Variable frame counts.** Chapter frame counts vary between 3 and 20 (section 3.2). Rerun the chapter with `--chapters` for a tighter number.
 6. **Node numbers from one machine.** One run on a shared container, with 200 untimed warm-up calls and no control of GC. The max column may include GC pauses.
 
 ## 5. Hardware results (filled in by a human)
+
+**Gate G4 status: `PENDING (human)`.** PLAN.md §12 needs the median desktop frame time on a hardware GPU at quality `high`, target at most 16.7 ms. No cloud or agent session has a hardware GPU, so this row must come from a person.
+
+### 5.1 How to measure the desktop frame time (G4)
+
+1. On a desktop or laptop with a hardware GPU, check out the commit under review and serve the repository root, for example `python3 -m http.server 8080` (any static server works).
+2. Open Chrome or Edge (current stable), one window, no other heavy tabs, the device on mains power. Open `http://localhost:8080/index.html?mode=express&quality=high`.
+3. Open DevTools, Console. Paste the snippet below. It plays the Step by step story at 1× from the start and records the interval between animation frames for 60 s (chapters 1 to about 6; transcription is the heaviest part, with the full bubble and crowders).
+
+   ```js
+   (async () => {
+     const s = window.helix.storyScene; s.seek(0); s.play();
+     const dts = []; let last = performance.now(); const end = last + 60000;
+     await new Promise(done => { const f = now => { dts.push(now - last); last = now; now < end ? requestAnimationFrame(f) : done(); }; requestAnimationFrame(f); });
+     dts.shift(); dts.sort((a, b) => a - b);
+     const q = p => dts[Math.min(dts.length - 1, Math.floor(p * dts.length))].toFixed(2);
+     console.log(`frames ${dts.length}  median ${q(0.5)} ms  p95 ${q(0.95)} ms  max ${dts[dts.length - 1].toFixed(2)} ms`);
+   })();
+   ```
+
+4. Repeat once with the chapter list set to chapter 11 (Decoding) and once in Coupled mode (Story: Coupled) to cover translation and the moving expressome. Record the worst of the three medians.
+5. Read the quality tier that the app reports with `?debug` (or confirm `quality=high` in the URL), and the GPU name from `chrome://gpu`.
+6. Fill one row below. PASS if the median is at most 16.7 ms. If it misses, PLAN.md §13 gives the fallback order (lower `detailRadius` by 25 %, then cap crowders at 50 %).
+
+The phone measurement for gate G5 uses the same snippet on a phone at `quality=low` or `auto` (target at most 33 ms), through remote debugging.
+
+### 5.2 Results
+
 
 Record one row per device, browser and quality tier. Use the browser-bench draw-call and triangle counts for the same tier (they should depend mainly on the story and the tier, not on the device). The frame-time targets are in section 2. Do not fill in numbers from software GL here.
 

@@ -6,11 +6,11 @@
  * with zero per-frame typed-array allocations.
  */
 import { ntpTemplate, PPI_TEMPLATE, nucleotideTemplate, Assembly, TRUE_SCALE_GENE_CONSTRUCT, codonTable } from '../science/index.js';
-import { composeFrame, readFrame16, writeFrame16, slerpFrame } from './frames.js';
+import { composeFrame, readFrame16, writeFrame16, slerpFrame, arcLengthTable, sampleCatmullRom, rotationMinimizingFrames } from './frames.js';
 import { sampleTrack } from './track.js';
 import { poseDuplex, machinePoseForRegister } from './duplex.js';
 import { buildFreeChain, poseFreeChain, generateTailControlPoints, sampleFreeChainAt } from './chain.js';
-import { poseHairpin, HAIRPIN_LENGTH } from './hairpin.js';
+import { poseHairpin, hairpinPairFold, HAIRPIN_LENGTH } from './hairpin.js';
 import { poseNtp, posePpi } from './ntp.js';
 import { anticodonOf, trnaSiteFrame, poseTrnaAnticodon, poseAminoacylResidue, peptidylAttachPoint, residueCode3 } from './trna.js';
 import { posePeptideOnPath } from './peptide-path.js';
@@ -554,34 +554,43 @@ export function createPoser(scenarioOrOpts = {}, maybeAssets = undefined) {
     }
 
     // 3c. Enforce slot-track L1 clearance (<= 0.85 A <= 1.0 A gate) when RNAP is bound in an active open complex
+    let rnapBeadCount = -1;
+    const ensureRnapBeads = () => {
+      if (rnapBeadCount >= 0) return rnapBeadCount;
+      rnapBeadCount = 0;
+      const rnapAsset = rnapSpec ? (assets[rnapSpec.assetId] || ecAsset) : null;
+      if (!rnapAsset || !rnapAsset.lod1) return 0;
+      const l1 = rnapAsset.lod1;
+      const M = rnapSpec.transform;
+      const mR = M.R, mo = M.o;
+      let bCount = 0;
+      for (let b = 0; b < l1.count; b++) {
+        const chId = l1.chain[b];
+        const partId = rnapAsset.chains[chId].part;
+        const pSpec = rnapSpec.parts && rnapSpec.parts[partId];
+        if (pSpec && (pSpec.visible === false || (pSpec.opacity !== undefined && pSpec.opacity <= 0.001))) continue;
+        let lx = l1.positions[3 * b], ly = l1.positions[3 * b + 1], lz = l1.positions[3 * b + 2];
+        if (pSpec && pSpec.transform && pSpec.transform.o) {
+          lx += pSpec.transform.o[0];
+          ly += pSpec.transform.o[1];
+          lz += pSpec.transform.o[2];
+        }
+        if (lx < -130 || lx > 35 || ly < -95 || ly > 45 || lz < -45 || lz > 65) continue;
+        l1WorldX[bCount] = mR[0] * lx + mR[1] * ly + mR[2] * lz + mo[0];
+        l1WorldY[bCount] = mR[3] * lx + mR[4] * ly + mR[5] * lz + mo[1];
+        l1WorldZ[bCount] = mR[6] * lx + mR[7] * ly + mR[8] * lz + mo[2];
+        l1WorldR[bCount] = l1.kind[b] === 1 ? 2.4 : 1.9;
+        bCount++;
+      }
+      rnapBeadCount = bCount;
+      return rnapBeadCount;
+    };
+
     const isFractionalReg = Math.abs(reg - Math.round(reg)) > 1e-4;
     const isHoloActive = rnapSpec && rnapSpec.assetId === 'rnap-holo';
     if (rnapSpec && rnapSpec.visible !== false && bend === 1 && relax === 0 && (isHoloActive || isFractionalReg)) {
-      const rnapAsset = assets[rnapSpec.assetId] || ecAsset;
-      if (rnapAsset && rnapAsset.lod1) {
-        const l1 = rnapAsset.lod1;
-        const M = rnapSpec.transform;
-        const mR = M.R, mo = M.o;
-        let bCount = 0;
-        for (let b = 0; b < l1.count; b++) {
-          const chId = l1.chain[b];
-          const partId = rnapAsset.chains[chId].part;
-          const pSpec = rnapSpec.parts && rnapSpec.parts[partId];
-          if (pSpec && (pSpec.visible === false || (pSpec.opacity !== undefined && pSpec.opacity <= 0.001))) continue;
-          let lx = l1.positions[3 * b], ly = l1.positions[3 * b + 1], lz = l1.positions[3 * b + 2];
-          if (pSpec && pSpec.transform && pSpec.transform.o) {
-            lx += pSpec.transform.o[0];
-            ly += pSpec.transform.o[1];
-            lz += pSpec.transform.o[2];
-          }
-          if (lx < -130 || lx > 35 || ly < -95 || ly > 45 || lz < -45 || lz > 65) continue;
-          l1WorldX[bCount] = mR[0] * lx + mR[1] * ly + mR[2] * lz + mo[0];
-          l1WorldY[bCount] = mR[3] * lx + mR[4] * ly + mR[5] * lz + mo[1];
-          l1WorldZ[bCount] = mR[6] * lx + mR[7] * ly + mR[8] * lz + mo[2];
-          l1WorldR[bCount] = l1.kind[b] === 1 ? 2.4 : 1.9;
-          bCount++;
-        }
-
+      const bCount = ensureRnapBeads();
+      if (bCount > 0) {
         const r0 = isHoloActive ? -45 : -15;
         const r1 = isHoloActive ? 11 : 13;
         const gLo = Math.max(0, Math.ceil(reg + r0));
@@ -613,10 +622,19 @@ export function createPoser(scenarioOrOpts = {}, maybeAssets = undefined) {
       links[rnaLinkOffset + j - 1].active = j < L;
     }
 
-    // 3d. Translation layout (R3-S4): mRNA on the ribosome track and tails, tRNA anticodons and codon pairs.
+    // 3d. Translation / coupled layout (R3-S4 / R3-S5): mRNA on ribosome track, coupledMrna spacer and tails,
+    // tRNA anticodons and codon pairs.
     const tlActive = Boolean(tlKit) && nucs.length > rnaStartIdx + rnaLen &&
       tlKit.poseNucleotides(world, nucs, pairs, links, rnaStartIdx, rnaStartIdx + rnaLen, dnaLen,
-        2 * (dnaLen - 1) + (rnaLen - 1));
+        2 * (dnaLen - 1) + (rnaLen - 1), rnaRefM);
+
+    // In coupled mode, ensure the posed coupled mRNA spacer / hairpin / hybrid also clears RNAP L1 (<= 0.85 A).
+    if (tlActive && rna.layout === 'coupled' && rnapSpec && rnapSpec.visible !== false && !rna.released && L > 0) {
+      const bCount = ensureRnapBeads();
+      if (bCount > 0) {
+        for (let j = 0; j < L; j++) enforceNucL1Clearance(nucs[rnaStartIdx + j], bCount);
+      }
+    }
 
     // Recompute all atom positions in place for deterministic bit-for-bit output across all nucleotides
     asm.updatePositions();
@@ -800,31 +818,82 @@ function createTranslationKit(cInfo, assets) {
     carrierDir[id] = a && a.anchors && a.anchors.center ? unitBetween(ribo.anchors.center.o, a.anchors.center.o) : [0, 0, 1];
   }
 
-  // Ribosome-frame tunnel polyline (asset path) and a free path beyond the exit.
+  // Ribosome-frame tunnel polyline (asset path) and a free path beyond the exit, transformed in place
+  // per layout so moving coupled poses allocate zero objects per frame.
   const tunnel = ribo.paths && ribo.paths.tunnel;
   const tunnelLocal = [];
   if (tunnel) for (let i = 0; i < tunnel.count; i++) tunnelLocal.push([tunnel.points[3 * i], tunnel.points[3 * i + 1], tunnel.points[3 * i + 2]]);
-  let worldCache = null; // { key, tunnel: number[][], free: chain }
-
-  function worldPaths(layout) {
-    const key = layout.o.join(',') + '|' + layout.R.join(',');
-    if (worldCache && worldCache.key === key) return worldCache;
-    const tw = tunnelLocal.map(p => applyPoint(layout, p));
-    const n = tw.length;
-    const exitDir = unitBetween(tw[n - 4], tw[n - 1]);
-    const radial = unitBetween(applyPoint(layout, ribo.anchors.center.o), tw[n - 1]);
+  const freeLocal = [];
+  if (tunnelLocal.length >= 4) {
+    const n = tunnelLocal.length;
+    const exitDir = unitBetween(tunnelLocal[n - 4], tunnelLocal[n - 1]);
+    const radial = unitBetween(ribo.anchors.center.o, tunnelLocal[n - 1]);
     const d = unitBetween([0, 0, 0], [exitDir[0] + radial[0], exitDir[1] + radial[1], exitDir[2] + radial[2]]);
-    const q0 = tw[n - 1];
+    const q0 = tunnelLocal[n - 1];
     const q1 = [q0[0] + exitDir[0] * 12, q0[1] + exitDir[1] * 12, q0[2] + exitDir[2] * 12];
     const rest = generateTailControlPoints([q1[0] + d[0] * 20, q1[1] + d[1] * 20, q1[2] + d[2] * 20], d, 60, { seed: 41, chainId: 'peptide-free', maxTurnDeg: 25 });
-    // Static (non-swaying) free path sampled once every 3 Å: re-sampling a swaying chain per frame costs ~3 ms.
     const chain = buildFreeChain([q0, q1, ...rest], { seed: 41, chainId: 'peptide-free', anchorStart: true, anchorEnd: false, swayAmplitude: 0 });
     const len = sampleFreeChainAt(chain, 0, 0).length;
-    const free = [];
-    for (let s = 0; s <= len; s += 3) free.push(sampleFreeChainAt(chain, s, 0).point);
-    worldCache = { key, tunnel: tw, free };
+    for (let s = 0; s <= len; s += 3) freeLocal.push(sampleFreeChainAt(chain, s, 0).point);
+  }
+  const tunnelWorld = tunnelLocal.map(() => [0, 0, 0]);
+  const freeWorld = freeLocal.map(() => [0, 0, 0]);
+  const lastLayoutO = [NaN, NaN, NaN];
+  const lastLayoutR = new Float64Array(9);
+  const worldCache = { tunnel: tunnelWorld, free: freeWorld };
+
+  function worldPaths(layout) {
+    let same = layout.o[0] === lastLayoutO[0] && layout.o[1] === lastLayoutO[1] && layout.o[2] === lastLayoutO[2];
+    if (same) {
+      for (let i = 0; i < 9; i++) if (layout.R[i] !== lastLayoutR[i]) { same = false; break; }
+    }
+    if (same) return worldCache;
+    lastLayoutO[0] = layout.o[0]; lastLayoutO[1] = layout.o[1]; lastLayoutO[2] = layout.o[2];
+    for (let i = 0; i < 9; i++) lastLayoutR[i] = layout.R[i];
+    for (let i = 0; i < tunnelLocal.length; i++) applyPoint(layout, tunnelLocal[i], tunnelWorld[i]);
+    for (let i = 0; i < freeLocal.length; i++) applyPoint(layout, freeLocal[i], freeWorld[i]);
     return worldCache;
   }
+
+  // Coupled-mode intervening mRNA spacer (R3-S5, DEC-032): precomputed 5' -> 3' RMF lookup table in `rnap`
+  // frame from expressome(ribosome-70s mrna track register +7 = 6ZTJ AV:23) through observed 6ZTJ coupledMrna
+  // points to rnaExit (index 0).
+  const COUPLED_RIBO_MAX_R = 7;
+  const COUPLED_TABLE_N = 128;
+  const ecAsset = assets['rnap-ec'] || null;
+  const coupledHairpinAnchor = (ecAsset && ecAsset.anchors && ecAsset.anchors.hairpin)
+    ? ecAsset.anchors.hairpin
+    : {
+      o: [-32.384, -9.451, -5.123],
+      R: [-0.382298, -0.662703, -0.643951, -0.909916, 0.14861, 0.387257, -0.160939, 0.733989, -0.659817],
+    };
+  let coupledPathFrames = null;
+  const coupledPath = ecAsset && ecAsset.paths && ecAsset.paths.coupledMrna;
+  const expAnchor = ecAsset && ecAsset.anchors && ecAsset.anchors.expressome;
+  if (coupledPath && coupledPath.points && coupledPath.count >= 2 && expAnchor) {
+    const seedRibo7 = composeFrame(expAnchor, sampleTrack(track, COUPLED_RIBO_MAX_R, newFrame()));
+    const syn = coupledPath.synthetic;
+    let lastObs = coupledPath.count - 1;
+    if (syn && syn.length === coupledPath.count) {
+      for (let i = coupledPath.count - 1; i >= 0; i--) {
+        if (syn[i] === 0) { lastObs = i; break; }
+      }
+    }
+    const ctrlPts = [seedRibo7.o.slice()];
+    for (let i = lastObs; i >= 0; i--) {
+      ctrlPts.push([coupledPath.points[3 * i], coupledPath.points[3 * i + 1], coupledPath.points[3 * i + 2]]);
+    }
+    const tbl = arcLengthTable(u => sampleCatmullRom(ctrlPts, u), 256);
+    const sampled = new Array(COUPLED_TABLE_N);
+    for (let i = 0; i < COUPLED_TABLE_N; i++) {
+      sampled[i] = tbl.pointAt((tbl.length * i) / (COUPLED_TABLE_N - 1));
+    }
+    const rmf = rotationMinimizingFrames(sampled, seedRibo7);
+    coupledPathFrames = new Float32Array(16 * COUPLED_TABLE_N);
+    for (let i = 0; i < COUPLED_TABLE_N; i++) writeFrame16(coupledPathFrames, i, rmf[i]);
+  }
+  const hpUnfoldedBuf = new Float32Array(16 * HAIRPIN_LENGTH);
+  const hpLocalBuf = new Float32Array(16 * HAIRPIN_LENGTH);
 
   // Ribosome L1 beads within 60 Å of any mRNA track register (ribo frame), for the §5.3 item 8 guard:
   // procedural nucleotides in and next to the slot track are pushed out of beads beyond 0.85 Å (<= 1.0 Å gate).
@@ -944,11 +1013,23 @@ function createTranslationKit(cInfo, assets) {
     return slerpFrame(fA, fB, u, out);
   }
 
+  /** Sample a precomputed 5'->3' coupledMrna RMF frame in `rnap` local coordinates at fraction `u` in [0, 1]. */
+  function sampleCoupledPath(u, out) {
+    const uc = u <= 0 ? 0 : u >= 1 ? 1 : u;
+    const f = uc * (COUPLED_TABLE_N - 1);
+    const k = Math.min(COUPLED_TABLE_N - 2, Math.floor(f));
+    const frac = f - k;
+    readFrame16(coupledPathFrames, k, fA);
+    if (frac <= 0) return copyFrame(fA, out);
+    readFrame16(coupledPathFrames, k + 1, fB);
+    return slerpFrame(fA, fB, frac, out);
+  }
+
   /**
-   * Place the 179 mRNA nucleotides on the translation layout (blended from their current frames by
-   * `layoutBlend`), then the visible tRNAs' anticodons and pair strengths. Returns false when idle.
+   * Place the 179 mRNA nucleotides on the translation or coupled layout (blended from their current
+   * frames by `layoutBlend`), then the visible tRNAs' anticodons and pair strengths. Returns false when idle.
    */
-  function poseNucleotides(world, nucs, pairs, links, rnaStartIdx, acStartIdx, acPairStart, acLinkStart) {
+  function poseNucleotides(world, nucs, pairs, links, rnaStartIdx, acStartIdx, acPairStart, acLinkStart, rnaRefM = null) {
     for (let i = 0; i < 3 * SENSE_CODONS; i++) {
       const nu = nucs[acStartIdx + i];
       nu.visible = false;
@@ -962,38 +1043,132 @@ function createTranslationKit(cInfo, assets) {
     const rs = world.ribosome;
     const layout = rs && rs.layout;
     const rnaS = world.rna;
-    if (!layout || !rnaS || rnaS.layout !== 'ribosome') return false;
+    const isCoupled = Boolean(rnaS && rnaS.layout === 'coupled');
+    if (!layout || !rnaS || (rnaS.layout !== 'ribosome' && !isCoupled)) return false;
     const blend = Math.max(0, Math.min(1, rnaS.layoutBlend ?? 0));
     const codon = Math.max(1, rs.codon || 1);
     const p0 = ORF_START_MRNA + 3 * (codon - 1);
     const t = world.t ?? 0;
     const L = Math.max(0, Math.min(rnaLen, Math.floor(rnaS.length ?? 0)));
 
+    const uRel = isCoupled && rnaS.released ? Math.max(0, Math.min(1, world.dna ? (world.dna.relax ?? 1) : 1)) : 0;
+    const fullRibo = !isCoupled || uRel >= 1 || !coupledPathFrames || !rnaRefM;
+
     if (blend > 0 && L > 0) {
-      const maxD3 = Math.max(0, (L - 1 - p0) - r1);
-      const maxD5 = Math.max(0, r0 - (0 - p0));
-      if (maxD3 > 0) poseFreeChain(tail3, Math.ceil(maxD3) + 2, t, tailBuf3);
-      if (maxD5 > 0) poseFreeChain(tail5, Math.ceil(maxD5) + 2, t, tailBuf5);
-      for (let j = 0; j < L; j++) {
-        const r = j - p0;
-        if (r >= r0 && r <= r1) {
-          sampleTrack(track, r, fL);
-        } else if (r > r1) {
-          sampleTrack(track, r1, fS);
-          tailFrame(tailBuf3, r - r1, fS, false, fL);
-        } else {
-          sampleTrack(track, r0, fS);
-          tailFrame(tailBuf5, r0 - r, fS, true, fL);
+      if (fullRibo) {
+        const maxD3 = Math.max(0, (L - 1 - p0) - r1);
+        const maxD5 = Math.max(0, r0 - (0 - p0));
+        if (maxD3 > 0) poseFreeChain(tail3, Math.ceil(maxD3) + 2, t, tailBuf3);
+        if (maxD5 > 0) poseFreeChain(tail5, Math.ceil(maxD5) + 2, t, tailBuf5);
+        for (let j = 0; j < L; j++) {
+          const r = j - p0;
+          if (r >= r0 && r <= r1) {
+            sampleTrack(track, r, fL);
+          } else if (r > r1) {
+            sampleTrack(track, r1, fS);
+            tailFrame(tailBuf3, r - r1, fS, false, fL);
+          } else {
+            sampleTrack(track, r0, fS);
+            tailFrame(tailBuf5, r0 - r, fS, true, fL);
+          }
+          composeFrame(layout, fL, fW);
+          const nf = nucs[rnaStartIdx + j].frame;
+          if (blend >= 1) copyFrame(fW, nf);
+          else slerpFrame(nf, fW, blend, nf);
         }
-        composeFrame(layout, fL, fW);
-        const nf = nucs[rnaStartIdx + j].frame;
-        if (blend >= 1) copyFrame(fW, nf);
-        else slerpFrame(nf, fW, blend, nf);
+      } else {
+        // Coupled mode while RNAP holds the 3' hybrid (or smoothly releasing across dna.relax 0 -> 1).
+        const H = Math.min(L, HYBRID_MAX);
+        const E = L - H;
+        const hasHairpin = (rnaS.hairpin ?? 0) > 0 && E > HAIRPIN_START_MRNA;
+        let riboHi = Math.min(E - 1, Math.floor(p0 + COUPLED_RIBO_MAX_R));
+        if (hasHairpin) riboHi = Math.min(riboHi, HAIRPIN_START_MRNA - 1);
+
+        const maxD5 = Math.max(0, r0 - (0 - p0));
+        if (maxD5 > 0) poseFreeChain(tail5, Math.ceil(maxD5) + 2, t, tailBuf5);
+        const maxD3 = uRel > 0 ? Math.max(0, (L - 1 - p0) - r1) : 0;
+        if (maxD3 > 0) poseFreeChain(tail3, Math.ceil(maxD3) + 2, t, tailBuf3);
+
+        // 1. 5' tail and ribosome channel (j = 0 .. riboHi) in expressome ribosome frame.
+        for (let j = 0; j <= riboHi; j++) {
+          const r = j - p0;
+          if (r >= r0) {
+            sampleTrack(track, r, fL);
+          } else {
+            sampleTrack(track, r0, fS);
+            tailFrame(tailBuf5, r0 - r, fS, true, fL);
+          }
+          composeFrame(layout, fL, fW);
+          const nf = nucs[rnaStartIdx + j].frame;
+          if (blend >= 1) copyFrame(fW, nf);
+          else slerpFrame(nf, fW, blend, nf);
+        }
+
+        // 2. Intervening mRNA spacer along coupledMrna (j = riboHi + 1 .. E - 1) and progressive hairpin.
+        const spanAll = Math.max(1, E - riboHi);
+        if (hasHairpin) {
+          const hpEnd = Math.min(E - 1, HAIRPIN_END_MRNA);
+          for (let k = 0; k < HAIRPIN_LENGTH; k++) {
+            const j = HAIRPIN_START_MRNA + k;
+            sampleCoupledPath(j < E ? (j - riboHi) / spanAll : 1, fL);
+            writeFrame16(hpUnfoldedBuf, k, fL);
+          }
+          const totalLen = L + (rnaS.addProgress ?? 0);
+          poseHairpin(coupledHairpinAnchor, rnaS.hairpin, hpLocalBuf, {
+            totalTranscriptLength: totalLen,
+            hairpinStart: HAIRPIN_START_MRNA,
+            unfoldedFrames: hpUnfoldedBuf,
+          });
+          const hpFold = (rnaS.hairpin ?? 0) * hairpinPairFold(0, totalLen, HAIRPIN_START_MRNA);
+          const spanPre = Math.max(1, HAIRPIN_START_MRNA - riboHi);
+          for (let j = riboHi + 1; j < E; j++) {
+            if (j < HAIRPIN_START_MRNA) {
+              const uUnf = (j - riboHi) / spanAll;
+              const uFld = (j - riboHi) / spanPre;
+              sampleCoupledPath(uUnf + (uFld - uUnf) * hpFold, fL);
+            } else if (j <= hpEnd) {
+              readFrame16(hpLocalBuf, j - HAIRPIN_START_MRNA, fL);
+            } else {
+              sampleCoupledPath(1, fL);
+            }
+            composeFrame(rnaRefM, fL, fW);
+            const nf = nucs[rnaStartIdx + j].frame;
+            if (blend >= 1) copyFrame(fW, nf);
+            else slerpFrame(nf, fW, blend, nf);
+          }
+        } else {
+          for (let j = riboHi + 1; j < E; j++) {
+            sampleCoupledPath((j - riboHi) / spanAll, fL);
+            composeFrame(rnaRefM, fL, fW);
+            const nf = nucs[rnaStartIdx + j].frame;
+            if (blend >= 1) copyFrame(fW, nf);
+            else slerpFrame(nf, fW, blend, nf);
+          }
+        }
+
+        // 3. Smooth release blend (uRel in (0, 1)): transfer 3' spacer/hairpin/hybrid onto ribosome tail3.
+        if (uRel > 0) {
+          for (let j = riboHi + 1; j < L; j++) {
+            const r = j - p0;
+            if (r >= r0 && r <= r1) {
+              sampleTrack(track, r, fL);
+            } else if (r > r1) {
+              sampleTrack(track, r1, fS);
+              tailFrame(tailBuf3, r - r1, fS, false, fL);
+            } else {
+              sampleTrack(track, r0, fS);
+              tailFrame(tailBuf5, r0 - r, fS, true, fL);
+            }
+            composeFrame(layout, fL, fW);
+            const nf = nucs[rnaStartIdx + j].frame;
+            slerpFrame(nf, fW, uRel, nf);
+          }
+        }
       }
     }
 
-    // Clearance guard (whenever the ribosome machine is in the scene, including the 30S docking in chapter 8):
-    // mRNA nucleotides within 30 registers of the track.
+    // Clearance guard (whenever the ribosome machine is in the scene, including the 30S docking):
+    // mRNA nucleotides within 30 registers of the track (all visible mRNA in coupled mode).
     let beadCount = 0;
     if (NB > 0) {
       let rm = null;
@@ -1003,7 +1178,8 @@ function createTranslationKit(cInfo, assets) {
         const lp = rm.parts && rm.parts.large;
         const large = lp && lp.visible !== false && (lp.opacity ?? 1) > 0.001 ? (lp.transform || IDENTITY_FRAME) : null;
         beadCount = loadBeads(rm.transform, large);
-        const jLo = Math.max(0, Math.floor(p0 + r0 - 30)), jHi = Math.min(L - 1, Math.ceil(p0 + r1 + 30));
+        const jLo = isCoupled ? 0 : Math.max(0, Math.floor(p0 + r0 - 30));
+        const jHi = isCoupled ? (L - 1) : Math.min(L - 1, Math.ceil(p0 + r1 + 30));
         for (let j = jLo; j <= jHi; j++) clearNuc(nucs[rnaStartIdx + j], beadCount);
       }
     }
@@ -1101,7 +1277,22 @@ function createTranslationKit(cInfo, assets) {
       peptidylAttachPoint(staticP, trnaAssets.aa, attachPt);
     }
     const paths = worldPaths(layout);
-    const path = [[attachPt[0], attachPt[1], attachPt[2]], ...paths.tunnel];
+    let path;
+    if (world.rna && world.rna.layout === 'coupled' && paths.tunnel.length > 4) {
+      // Skip tunnel prefix points that lie backward from attachPt so release slide has no 180-deg RMF reversal.
+      const tw = paths.tunnel;
+      let startK = 0;
+      let bestD2 = Infinity;
+      for (let i = 0; i < Math.min(24, tw.length - 2); i++) {
+        const dx = tw[i][0] - attachPt[0], dy = tw[i][1] - attachPt[1], dz = tw[i][2] - attachPt[2];
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < bestD2) { bestD2 = d2; startK = i; }
+      }
+      if (startK > 0) startK = Math.min(tw.length - 2, startK + 2);
+      path = [[attachPt[0], attachPt[1], attachPt[2]], ...tw.slice(startK)];
+    } else {
+      path = [[attachPt[0], attachPt[1], attachPt[2]], ...paths.tunnel];
+    }
     posePeptideOnPath(residuePrefixes[n], path, paths.free, pep.release ?? 0, peptideGroup);
     peptideGroup.opacity = 1;
     peptideGroup.visible = true;

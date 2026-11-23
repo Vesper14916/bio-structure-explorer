@@ -345,3 +345,43 @@ ST8 (owner: Claude, reassigned by the user) covered `R3-R4`, `R3-Q2`, `R3-U3`, `
 - 2× captures (the sweep is 1×; see `docs/handoffs/R3-V2.md`).
 - Coupled mode beyond chapter 5 (ST9).
 - Tags `r3-st7` and `r3-w3`: the session git proxy refuses tag pushes, so the Chief creates them.
+
+## 10. Round 3 Stage ST9 / Gate G4 (`r3-w4`, 2026-11-21)
+
+ST9 covered `R3-P1`, `R3-D1`, `R3-S5` (Gemini), then `R3-V1` and `R3-INT4` (Claude, continuing after the Gemini session stopped). Branch `r3/st9`, base `main` at `2675b1b`. Details: `docs/handoffs/R3-P1.md`, `R3-D1.md`, `R3-S5.md`, `docs/reviews/R3-V1-science.md`, DEC-032, DEC-033.
+
+### 10.1 Automated checks (after R3-INT4)
+
+| Check | Result |
+| --- | --- |
+| `npm test` | `tests 324 · pass 324 · fail 0` (one earlier full run hit the known `story-tx` < 1.0 ms perf flake under CPU load from parallel review jobs; the file passed 3 of 3 runs alone and the next full run passed) |
+| `npm run smoke` (all six modes on `index.html` and `dist/helix-standalone.html`, Express at `?mode=express`, standalone offline) | `SMOKE PASS` |
+| `node tests/ui-story.browser.mjs` | `UI-STORY PASS (51 checks)` (includes: `?mode=express` mounts the story panel; `?scene=v1` is ignored) |
+| `node tests/ui-inspect.browser.mjs` | `UI-INSPECT PASS (141 checks)` |
+| `node tests/ui-phone.browser.mjs` | `UI-PHONE PASS (269 checks, 2 known defects)` |
+| `node tools/perf/story-bench.mjs` | `STORY-BENCH PASS` (Coupled `pose` median 2.73 ms; `docs/PERF.md` §3.1) |
+| `node tools/build-assets.mjs --check` | **Not verified**: `tools/sources/*.cif` are absent and RCSB is unreachable from the cloud session. No asset or recipe changed in ST9. |
+
+### 10.2 Gate G4 criteria (PLAN §12)
+
+| Criterion | Evidence | Result |
+| --- | --- | --- |
+| Coupled mode passes its tests | `tests/story-coupled.test.mjs` 12/12 (11 from R3-S5 plus the INT4 label test) | PASS |
+| V1 issues of severity "high" are fixed | `docs/reviews/R3-V1-science.md`: 0 High | PASS |
+| Round 1 Express removed, tests ported | R3-P1 merged: `js/sim/expression.js` and `js/ui/view-express.js` deleted; `tests/story-legacy-port.test.mjs` passes; no import of either module remains | PASS |
+| All six modes load with zero errors | `npm run smoke` (keys 1–6 on both pages, console and page errors fail the run) | PASS |
+| Hardware-GPU desktop frame time recorded by a human (median ≤ 16.7 ms at `high`) | Steps in `docs/PERF.md` §5.1; table §5.2 empty | **PENDING (human)** |
+
+**Gate G4: PASS on all automated items; open until the human frame-time row is filled.** Tag `r3-w4` is created by the user on the merge commit of the ST9 PR.
+
+### 10.3 Open for the user
+
+- Coupled caption 10 (V1 M-01) and other locked caption wording (V1 L-01, L-02; ST8 S-06 to S-09, S-13).
+- Where tag `r3-w3` should point: it is at `9182358` (PR #4), while ST9 was based on `2675b1b` (PR #5).
+- Hardware desktop frame time (above).
+
+### 10.4 Not verified in ST9
+
+- RCSB titles, authors and codon facts (V1 I-06); `build-assets --check`.
+- Hardware GPU (G4) and real phones (G5).
+- New 2× captures after INT4: the panel and scene did not change in INT4 apart from the Coupled label rule; the S5 captures in `docs/evidence/r3/S5/` predate it.

@@ -42,7 +42,7 @@ const ALL_FRACTIONS = [['start', 0.02], ['mid', 0.5], ['end', 0.98]];
 const DEVICES = [...ALL_DEVICES];
 const FRACTIONS = [...ALL_FRACTIONS];
 const FRAME_PAIRS = 5; // at least five requestAnimationFrame pairs before each screenshot
-const COUPLED_LAST_CHAPTER = 5; // R3-S5 (ST9) implements chapters 6-12 of coupled mode
+const COUPLED_LAST_CHAPTER = 12; // R3-S5 (ST9) implemented coupled chapters 6-12; raised in R3-INT4
 const LOAD_TIMEOUT = 180000;
 const SHOT_TIMEOUT = 300000;
 const LAUNCH_ARGS = ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
@@ -236,7 +236,7 @@ async function captureDevice({ browser, devicesPreset, baseUrl, opts, device, lo
   let shots = 0;
 
   try {
-    const url = `${baseUrl}/index.html?mode=express&scene=v2&chapter=1&frac=0.5&paused=1&quality=medium`;
+    const url = `${baseUrl}/index.html?mode=express&chapter=1&frac=0.5&paused=1&quality=medium`;
     log(`[${device}] open ${url}`);
     await page.goto(url, { waitUntil: 'load', timeout: LOAD_TIMEOUT });
     await page.waitForFunction('window.helix && window.helix.storyScene', null, { timeout: LOAD_TIMEOUT });
@@ -419,7 +419,6 @@ async function main() {
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   log(`sweep: mode=${opts.mode} dsf=${opts.dsf} chapters=${opts.chapters ? opts.chapters.join(',') : 'all'} out=${path.relative(ROOT, opts.out) || '.'}`);
   if (opts.dsf === 1) log('note: dsf 1 is a deliberate deviation from PLAN §9.2 rule 6 (2x software-GL capture takes about 45 s); use --dsf 2 --out <dir> for 2x');
-  if (opts.mode === 'coupled') log(`note: coupled choreography after chapter ${COUPLED_LAST_CHAPTER} is a stub (R3-S5, ST9); chapters 6-12 are not captured`);
 
   // One browser at a time: each device gets its own launch, so a browser crash cannot take the other device down.
   const results = [];

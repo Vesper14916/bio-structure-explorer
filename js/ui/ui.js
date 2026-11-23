@@ -74,7 +74,7 @@
  *   ui.setSheet('peek'|'half'|'full') / ui.getSheet() (phone), ui.openAbout() / closeAbout(), ui.destroy().
  *   DOM / CSS hooks: root gets classes `is-mobile` (phone layout), `is-collapsed`, `kb-open`, and CSS vars
  *   --inset-top/right/bottom/left (px) always mirroring the last onLayout payload.
- *   Keys: 1-5 modes, H panel, Space play/pause (Copy), Left/Right step pair (Pairs), ? about.
+ *   Keys: 1-6 modes, H panel, Space play/pause (Copy), Left/Right step pair (Pairs), ? about.
  */
 import { BASE_INFO } from '../science/index.js';
 import { h, hex, lsGet, lsSet, rafThrottle } from './dom.js';
@@ -85,7 +85,6 @@ import { createStructureView } from './view-structure.js';
 import { createPairView } from './view-pair.js';
 import { createMeltView } from './view-melt.js';
 import { createReplicateView } from './view-replicate.js';
-import { createExpressView } from './view-express.js';
 import { createStoryView } from './view-story.js';
 import { createCrystalView } from './view-crystal.js';
 
@@ -122,13 +121,11 @@ export function createUI(root, handlers = {}) {
 
   root.classList.add('ui-root'); root.replaceChildren();
 
-  const storyV2 = params.get('scene') === 'v2';
-
   // ---- views ------------------------------------------------------------------------------------
   const views = {
     structure: createStructureView(ctx), pair: createPairView(ctx), melt: createMeltView(ctx),
     replicate: createReplicateView(ctx),
-    express: storyV2 ? createStoryView(ctx) : createExpressView(ctx),
+    express: createStoryView(ctx),
     crystal: createCrystalView(ctx),
   };
   ctx.onColourPicked = () => views.crystal.setToggles({ bfactor: false });
@@ -259,11 +256,10 @@ export function createUI(root, handlers = {}) {
     }
     if ((k === 'ArrowLeft' || k === 'ArrowRight') && mode === 'express') {
       if (t.closest && t.closest('input[type="range"], [role="radio"], [role="tab"]')) return;
-      if (storyV2) views.express.stepChapter?.(k === 'ArrowRight' ? 1 : -1);
-      else views.express.stepCodon?.(k === 'ArrowRight' ? 1 : -1);
+      views.express.stepChapter?.(k === 'ArrowRight' ? 1 : -1);
       e.preventDefault(); return;
     }
-    if (k === 'Home' && mode === 'express' && storyV2) {
+    if (k === 'Home' && mode === 'express') {
       if (t.closest && t.closest('input[type="range"], [role="radio"], [role="tab"]')) return;
       views.express.restart?.(); e.preventDefault();
     }

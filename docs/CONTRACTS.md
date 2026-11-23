@@ -72,24 +72,18 @@ This document defines the shared data structures, coordinate conventions, sequen
 
 ## 4. Deterministic Simulation Contract (`js/sim/`)
 
-Every simulation module (`createMeltSim`, `createReplicationSim`, `createExpressionSim`) has **zero DOM or Three.js dependencies** and obeys:
+Updated at Gate G4 (R3-INT4, ST9). The Round 1 Express simulation (`createExpressionSim` in `js/sim/expression.js`) and its named blob actors were removed (R3-P1, DEC-032); its invariants are ported to Construct v3 in `tests/story-legacy-port.test.mjs`. Express is now the Round 3 story, whose contract is §7.3 (`buildStory`, `stateAt`, `chapterAt`), §7.4 (`createPoser`) and §7.5 (`createStoryScene`).
 
-- **Pure function of time:** `sim.seek(progressOrTime)` computes all nucleotide frames, pair strengths, link states, residue coordinates, and macromolecular actor transforms deterministically from `progress` $\in [0, 1]$. Scrubbing forward or backward to the same progress produces identical `Float32Array` coordinates.
+The remaining Round 1 simulation modules (`createMeltSim`, `createReplicationSim`) have **zero DOM or Three.js dependencies** and obey:
+
+- **Pure function of time:** `sim.seek(progressOrTime)` computes all nucleotide frames, pair strengths, link states and actor transforms deterministically from `progress` $\in [0, 1]$. Scrubbing forward or backward to the same progress produces identical `Float32Array` coordinates.
 - **Common Sim API:**
   - `sim.assembly`: `Assembly` instance (mutated in place on `seek`/`update`, followed by `asm.updatePositions()`).
-  - `sim.blobs`: array of macromolecular actor descriptors `{ id, label, kind, pos: [x,y,z], scale?: [sx,sy,sz], rot?: [9], radius, color, opacity, visible, cutaway?: boolean, anchors?: {} }`.
-  - `sim.state`: plain object for UI consumption (`progress`, `playing`, `finished`, `speed`, `phase`, `caption`, counters, and active sequence highlights).
+  - `sim.blobs`: array of actor descriptors `{ id, label, kind, pos: [x,y,z], scale?: [sx,sy,sz], rot?: [9], radius, color, opacity, visible, anchors?: {} }` (Copy mode only).
+  - `sim.state`: plain object for UI consumption (`progress`, `playing`, `finished`, `speed`, `phase`, `caption`, counters).
   - `sim.play()`, `sim.pause()`, `sim.seek(progress01)`, `sim.update(dt)`, `sim.setSpeed(v)`, `sim.dispose()`.
 
-### Named Macromolecular Actors & Anchors (`createExpressionSim`)
-1. `rnap` (`RNA Polymerase`, color `0x4fb6ff`):
-   - Anchors: `dnaEntry`, `activeSite`, `dnaExit`, `rnaExit`.
-2. `ribosome-30s` (`30S Small Subunit`, color `0x38d9a9`) & `ribosome-50s` (`50S Large Subunit`, color `0x63e6be`):
-   - Anchors: `mrnaEntry`, `siteA`, `siteP`, `siteE`, `mrnaExit`, `peptideTunnelExit`.
-3. `trna-init` (`fMet-tRNAfMet`, color `0xffd43b`) & `trna-elong-*` (`aa-tRNA`, color `0xff922b`):
-   - Anchors: `anticodon`, `acceptorStem`.
-4. `rf1` (`Release Factor RF1`, color `0xff6b6b`):
-   - Binds `siteA` specifically on `UAA` termination codon.
+The story engine (§7.3) is likewise a pure function of story time `t`: `stateAt(story, t, out)` is deterministic and independent of the seek path (PLAN.md §5.3 item 2). In Coupled mode the coupling distance `D` comes from `opts.D`, else from the `rnap-ec` asset (`source.coupling.D`), else from the fallback `DEFAULT_D = 38` (6ZTJ, DEC-024).
 
 ---
 
@@ -114,12 +108,13 @@ Every simulation module (`createMeltSim`, `createReplicationSim`, `createExpress
   - `onMeasureToggle(bool)`
   - `onMelt({ T, Na })`
   - `onReplication({ action, value })`
-  - `onExpression({ action, value })` — `action`: `'play' | 'pause' | 'restart' | 'seek' | 'speed' | 'camera' | 'cutaway' | 'selectCodon'`
+  - `onExpression({ action, value })` — `action`: `'play' | 'pause' | 'restart' | 'seek' | 'speed' | 'mode' | 'camera' | 'toggle' | 'chapter' | 'selectCodon' | 'clearInspect'`, forwarded to the `StoryScene` (§7.5)
   - `onCrystal({ waters, bfactor })`
   - `onLayout(insets)`
 - **Setters (`app -> UI`):**
   - `setNucleicAcid('dna' | 'rna')`
-  - `setExpressState(state)` — merges `{ progress, playing, speed, phase, caption, cameraMode, cutaway, rnaLength, codonIndex, peptideLength, peptideSeq, activeCodon, activeResidue, construct }`
+  - `setExpressState(state)` — receives the `StoryScene` UI state (`scene.state()`, §7.5) and renders it in `js/ui/view-story.js` (`section.view#view-express`)
+- **URL parameters for Express (from G4):** `?mode=express` opens the story; `t`, `chapter`, `frac` and `paused` set the start point. `?scene=v1` and `?scene=v2` are no longer read; any `scene` value is ignored.
 
 ---
 
@@ -242,7 +237,7 @@ Asset format v2 extends v1 (`docs/CONTRACTS.md` §6.2). Both `version: 1` and `v
 | Scene | `js/scene/`: `story-scene.js`, `camera-rails.js`, `crowd.js`, `labels.js` | Builds Assembly and atom groups, calls viewer API, applies shots, owns crowders and labels | all above, `js/render/` |
 | Render | `js/render/` (plus `atom-groups.js`, `fx.js`) | Existing layers plus instanced atom groups and event effects | three.js |
 | UI | `js/ui/view-story.js`, `js/ui/inspect.js` | Express v2 panel and inspection card | dom |
-| App | `js/main.js` | Application wiring (Chief only); routes `?mode=express&scene=v2` until G4 | all |
+| App | `js/main.js` | Application wiring (Chief only); routes `?mode=express` to the story scene (G4 cutover; `?scene` is ignored) | all |
 
 ### 7.3 Story API (`js/sim/gene/`)
 

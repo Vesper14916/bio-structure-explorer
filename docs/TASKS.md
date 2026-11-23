@@ -133,7 +133,7 @@ Base: `r3-st5` + Chief `js/render/viewer.js` `setLabels` / `controlstart` / `Ato
 
 ### Stage ST7 — Translation Choreography (Claude C3; tag `r3-st7`)
 
-Delivered on `origin/claude/project-thread-hhdgkv` (`--no-ff` merges `d037442` R3-K3, `ba78ec3` R3-S4). The tag `r3-st7` could not be pushed from the Claude session (HTTP 403 on tag pushes); the user creates it on the ST7 head.
+Delivered on `origin/claude/project-thread-hhdgkv` (`--no-ff` merges `d037442` R3-K3, `ba78ec3` R3-S4). Tag `r3-st7` now exists on `origin` at `b2748a7`.
 
 | Task ID | Status | Owner / Executor | Branch | Deliverable & Handoff |
 | :--- | :--- | :--- | :--- | :--- |
@@ -153,13 +153,27 @@ The user reassigned ST8 from Gemini to Claude (this overrides `AGENTS.md` owners
 | **R3-INT3** | `DONE` | Claude (Chief role for ST8) | Full Step by step story in the app, audit fixes, Gate **G3** (`docs/VALIDATION.md` §9); `docs/handoffs/R3-INT3.md`, `DEC-030`, `DEC-031`. |
 | **ST8 audit** | `DONE` | Two read-only Sonnet reviewers + Claude | `docs/reviews/R3-ST8-audit.md` (and two raw reports). Replaces the Argon job for ST8. |
 
+### Stage ST9 (2026-11-21)
+
+Base: `2675b1b` (`main`, post-PR #5; not `r3-w3` at `9182358`). Stage branch: `r3/st9` (PR to `main`; target tag `r3-w4` to be created by the user after merge). Pre-ST9 rulings: `DEC-032`.
+Model note (`PLAN.md` §9.1): Antigravity `invoke_subagent` inherits the parent session model (`Model: 'inherit'`); all ST9 implementation subagents and the ST9 read-only science review subagent therefore inherit the Chief session model.
+
+| Task ID | Status | Owner / Executor | Branch | Deliverable & Handoff |
+| :--- | :--- | :--- | :--- | :--- |
+| **R3-P1** | `MERGED` (R3-INT4, `--no-ff`) | Gemini subagent (inherited model) | `r3/R3-P1` (`08752e1`) | Port Round 1 Express invariants to `tests/story-legacy-port.test.mjs`, update `tests/sim.test.mjs`, delete `js/sim/expression.js` and `js/ui/view-express.js`; handoff `docs/handoffs/R3-P1.md`. |
+| **R3-D1** | `MERGED` | Gemini subagent (inherited model) | `r3/R3-D1` (merged `--no-ff` at `3b7a565`) | User-facing `README.md`, `docs/SCIENCE.md` (§1–2 & §6+ only; §3–4 S1 and §5 R4 untouched), `docs/RELEASE-NOTES.md` (`D = 38`, `164.05 s`, `121.30 s` per `DEC-024`); handoff `docs/handoffs/R3-D1.md`. |
+| **R3-S5** | `MERGED` | Gemini subagent (inherited model) | `r3/R3-S5` (merged `--no-ff` at `f3404a5`) | Coupled mode Ch 6–12 (`js/sim/gene/coupled.js`, `js/kin/pose.js` coupled path per `DEC-032`), `tests/story-coupled.test.mjs` (`D = 38`, S-04 hairpin vs uS3 clash test), `docs/evidence/r3/S5/`; handoff `docs/handoffs/R3-S5.md`. |
+| **R3-V1** | `DONE` (2026-11-21, 11:30–11:50 UTC) | Claude (ST9 continuation; two read-only Haiku subagents) | `r3/st9` | `docs/reviews/R3-V1-science.md`: 0 High, 8 Medium (5 fixed in INT4, 3 open), 11 new Low + 12 carried from ST8; I-06 not verified (RCSB unreachable). |
+| **R3-INT4** | `DONE` (PR to `main` open; G4 waits on the human frame-time row) | Claude (ST9 continuation) | `r3/st9` | Merged `r3/R3-P1`; Express is the story scene, `?scene` removed (`js/main.js`, `js/ui/ui.js`, browser tests); `DEFAULT_D = 38` (DEC-032 plan A); V1 M-03 label fix with test; doc fixes (M-04, M-05, M-06); `sweep.mjs` covers coupled chapters 6–12; `dist/` rebuilt; CONTRACTS §4–§5, PERF §3.1/§5, VALIDATION §10, DEC-033. |
+
 ### Upcoming Stages (ST7–ST10)
 
 | Stage | Executor | Tasks (merge order) | Base Tag | Target Tag | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **ST7** | **Claude (C3)** | `R3-K3` → `R3-S4` (translation choreography) | `r3-w2` | `r3-st7` | `DONE` |
-| **ST8** | Claude (reassigned) | Intake ST7; `R3-R4` → `R3-Q2` → `R3-U3` → `R3-V2` → `R3-INT3`; Gate **G3** | `r3-st7` | `r3-w3` | `DONE` (tag `r3-w3` to be created by the user) |
-| **ST9** | Gemini | `R3-P1` → `R3-D1` → `R3-S5` → `R3-V1` → `R3-INT4`; Gate **G4** | `r3-w3` | `r3-w4` | `PENDING` |
+| **ST8** | Claude (reassigned) | Intake ST7; `R3-R4` → `R3-Q2` → `R3-U3` → `R3-V2` → `R3-INT3`; Gate **G3** | `r3-st7` | `r3-w3` | `DONE` (tag `r3-w3` exists on `origin` at `9182358` [PR #4]; `origin/main` is at `2675b1b` [PR #5]) |
+| **ST9** | Gemini | `R3-P1` → `R3-D1` → `R3-S5` → `R3-V1` → `R3-INT4`; Gate **G4** (merge order per `DEC-032`: `D1` → `S5` → `V1` → `P1`+`INT4`) | `2675b1b` (`main`, post-PR #5; not `r3-w3`) | `r3-w4` | `REVIEW` (PR open; user merges and tags `r3-w4`) |
 | **ST10** | Gemini + Human | `R3-Q3` → `R3-INT5` + Human visual acceptance; Gate **G5** | `r3-w4` | `v1.0.0` | `PENDING` |
+
 
 

@@ -13,7 +13,7 @@
 // 3. For every PDB-backed asset, the `RCSB ↗` link (`a.link-btn`) has `target="_blank"`,
 //    `rel="noopener"`, and `href="https://www.rcsb.org/structure/<PDB>"`, is the ONLY external URL,
 //    and causes zero external network requests on page load or card render.
-// 4. Opening the About dialog (`?` key or button on `index.html?mode=express&scene=v2`) displays
+// 4. Opening the About dialog (`?` key or button on `index.html?mode=express`) displays
 //    the `"Sources"` section containing every `PLAN.md` §7.2 PDB entry (`6ALF`, `6C9Y`, `6CA0`,
 //    `7K00`, `7ST2`, `8FZH`, `5WE4`, `7PJV`, `9ZN2`, `9FDA`, `6ZTJ`, `7YPA`, `1BNA`) formatted per
 //    `PLAN.md` §4.10 with zero console or network errors.
@@ -478,7 +478,7 @@ async function runTests() {
     const appPage = await desktopCtx.newPage();
     appPage.setDefaultTimeout(120000); // the real app renders software-GL frames of several seconds
     attachMonitors(appPage, 'about-sources', localHost, extCounter);
-    await appPage.goto(`${base}/index.html?mode=express&scene=v2`, { waitUntil: 'load' });
+    await appPage.goto(`${base}/index.html?mode=express`, { waitUntil: 'load' });
     await appPage.waitForFunction(() => {
       const l = document.querySelector('.loading');
       return l && l.classList.contains('is-off');

@@ -346,10 +346,11 @@ test('coupled: chapters 6-12 structure for D = 48', () => {
   assert.equal(cpl.meta.mode, 'coupled');
   assert.equal(cpl.meta.D, 48);
   assert.equal(cpl.meta.dSource, 'option opts.D');
+  // Fallback when neither opts.D nor the asset gives D: 38 from 6ZTJ (DEC-024; DEC-032 plan A).
   const dflt = buildTimeline(C, assets, { mode: 'coupled' });
-  assert.equal(dflt.meta.D, 48);
-  assert.equal(dflt.meta.dSource, 'default 48 (PLAN.md §6.4); pending task A4');
-  assert.deepEqual(dflt.events, cpl.events);
+  assert.equal(dflt.meta.D, 38);
+  assert.equal(dflt.meta.dSource, '6ZTJ, DEC-024');
+  assert.deepEqual(dflt.events, buildTimeline(C, assets, { mode: 'coupled', D: 38 }).events);
   const inCh = (i, type) => cpl.events.filter(e => e.chapter === i && e.type === type);
   const rel = (i, e) => [e.t0 - cpl.chapters[i].t0, e.t1 - cpl.chapters[i].t0];
   // chapter 6: nt 13..72
