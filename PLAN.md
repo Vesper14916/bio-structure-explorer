@@ -461,7 +461,7 @@ Coupled-mode captions (exact):
 - 7: In bacteria a ribosome can start on an mRNA that is still being made. Here transcription pauses briefly so the steps can be seen.
 - 8: The 50S subunit joins and the initiation factors leave. NusG links the ribosome to the polymerase, {D} nucleotides behind its active site.
 - 9: The polymerase and ribosome move together. Every three nucleotides transcribed match one codon translated.
-- 10: The terminator hairpin has folded and the polymerase releases the RNA. The ribosome continues on its own.
+- 10: The terminator hairpin has folded and the polymerase releases the RNA. The ribosome no longer depends on the polymerase.
 - 11: Release factor RF1 reads UAA and frees the 40-residue peptide.
 - 12: In coupled expression, transcription and translation overlap in time and space, which is possible because bacteria have no nucleus.
 

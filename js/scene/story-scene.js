@@ -211,6 +211,8 @@ export function createStoryScene(viewer, opts = {}) {
   let speed = 1;
   let selectedCodon = null;
   let inspect = null;
+  let focus = null;          // what the reader clicked: { actorId } | { role } | { residues } | { groupId }
+  let codonNucIds = null;    // nucleotides of the selected codon (highlight when nothing is focused)
   let disposed = false;
 
   const toggles = {
@@ -293,8 +295,8 @@ export function createStoryScene(viewer, opts = {}) {
       act.cutaway = cutSpec && actorMatchesCutaway(act, cutSpec) ? cutSpec : false;
     }
 
-    viewer.setActors?.(target.actors);
-    viewer.setAtomGroups?.(target.groups);
+    viewer.setActors?.(focusedActors());
+    viewer.setAtomGroups?.(focusedGroups());
     viewer.setFx?.(normalizeFxList(world.fx));
     syncCrowd();
 
@@ -454,32 +456,85 @@ export function createStoryScene(viewer, opts = {}) {
     if (disposed) return;
     if (codonIdx === null || codonIdx === undefined || codonIdx < 0) {
       selectedCodon = null;
-      viewer.setHighlight?.(null);
+      codonNucIds = null;
+      applyHighlight();
       emitState();
       return;
     }
     const idx = Math.floor(Number(codonIdx));
     selectedCodon = selectedCodon === idx ? null : idx;
-    if (selectedCodon === null) {
-      viewer.setHighlight?.(null);
-    } else {
+    codonNucIds = null;
+    if (selectedCodon !== null) {
       const nucIds = [];
       const wantCodon1Based = selectedCodon + 1;
       for (let i = 496; i < target.asm.nucleotides.length; i++) {
         const nu = target.asm.nucleotides[i];
         if (nu && nu.codon === wantCodon1Based) nucIds.push(nu.id);
       }
-      viewer.setHighlight?.(nucIds.length ? { nucleotides: nucIds } : null);
+      codonNucIds = nucIds.length ? nucIds : null;
     }
+    applyHighlight();
     emitState();
   }
 
   function clearInspect() {
     if (disposed) return;
-    if (inspect !== null) {
+    if (inspect !== null || focus !== null) {
       inspect = null;
+      setFocus(null);
       emitState();
     }
+  }
+
+  // ---- Focus: the clicked molecule stays bright, everything else fades (plain-language inspection) ------------
+  const DIM = 0.22;
+
+  function focusOf(norm) {
+    if (!norm) return null;
+    if (norm.kind === 'actor' && norm.actorId) return { actorId: norm.actorId };
+    if (norm.kind === 'atomGroup' && norm.groupId) return { groupId: norm.groupId };
+    if (norm.kind === 'peptide') return { residues: true };
+    if (norm.kind === 'nucleotide') {
+      const r = norm.role === 'template' ? 'coding' : norm.role;
+      return { role: r };
+    }
+    return null;
+  }
+
+  function focusedActors() {
+    if (!focus) return target.actors;
+    return target.actors.map(a => (a && a.id !== focus.actorId ? { ...a, opacity: (a.opacity ?? 1) * DIM } : a));
+  }
+
+  function focusedGroups() {
+    if (!focus) return target.groups;
+    return target.groups.map(g => (g && g.id !== focus.groupId ? { ...g, opacity: (g.opacity ?? 1) * DIM } : g));
+  }
+
+  function applyHighlight() {
+    if (!focus) {
+      viewer.setHighlight?.(codonNucIds ? { nucleotides: codonNucIds } : null);
+      return;
+    }
+    const nucs = target.asm && target.asm.nucleotides ? target.asm.nucleotides : [];
+    const hl = { nucleotides: [], residues: [], dim: true };
+    if (focus.role) {
+      for (const nu of nucs) {
+        if (!nu) continue;
+        const r = nu.role === 'template' ? 'coding' : (nu.role || (nu.strand === 2 ? 'mrna' : 'coding'));
+        if (r === focus.role) hl.nucleotides.push(nu.id);
+      }
+    } else if (focus.residues) {
+      for (const res of target.asm.residues || []) if (res) hl.residues.push(res.id);
+    }
+    viewer.setHighlight?.(hl);
+  }
+
+  function setFocus(next) {
+    focus = next;
+    applyHighlight();
+    viewer.setActors?.(focusedActors());
+    viewer.setAtomGroups?.(focusedGroups());
   }
 
   function pick(hit) {
@@ -487,6 +542,7 @@ export function createStoryScene(viewer, opts = {}) {
     const norm = normalizePickHit(hit, target);
     const info = norm ? buildInspectInfo(norm, assets, world, { actorLevels: getActorLevels() }) : null;
     inspect = info;
+    setFocus(info ? focusOf(norm) : null);
     emitState();
     return info;
   }
@@ -538,6 +594,8 @@ export function createStoryScene(viewer, opts = {}) {
     setCameraOption,
     setToggles,
     invalidateCrowd,
+    /** Re-send the inspect focus / codon highlight (other modes clear the viewer highlight). */
+    refreshHighlight: () => { if (!disposed) applyHighlight(); },
     selectCodon,
     clearInspect,
     pick,

@@ -53,7 +53,7 @@ const COUPLED_CAPTIONS = [
   'In bacteria a ribosome can start on an mRNA that is still being made. Here transcription pauses briefly so the steps can be seen.',
   'The 50S subunit joins and the initiation factors leave. NusG links the ribosome to the polymerase, {D} nucleotides behind its active site.',
   'The polymerase and ribosome move together. Every three nucleotides transcribed match one codon translated.',
-  'The terminator hairpin has folded and the polymerase releases the RNA. The ribosome continues on its own.',
+  'The terminator hairpin has folded and the polymerase releases the RNA. The ribosome no longer depends on the polymerase.',
   'Release factor RF1 reads UAA and frees the 40-residue peptide.',
   'In coupled expression, transcription and translation overlap in time and space, which is possible because bacteria have no nucleus.',
 ];

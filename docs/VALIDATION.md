@@ -385,3 +385,51 @@ ST9 covered `R3-P1`, `R3-D1`, `R3-S5` (Gemini), then `R3-V1` and `R3-INT4` (Clau
 - RCSB titles, authors and codon facts (V1 I-06); `build-assets --check`.
 - Hardware GPU (G4) and real phones (G5).
 - New 2× captures after INT4: the panel and scene did not change in INT4 apart from the Coupled label rule; the S5 captures in `docs/evidence/r3/S5/` predate it.
+
+## 11. Round 3 Stage ST10 / Gate G5 (`v1.0.0`, 2026-11-23)
+
+Branch `claude/project-thread-8h87jx` (base `r3/st9` @ `162db89`). Adds the Vercel deployment config, the plain-language layer (`claude/project-thread-wt5yns`, ported onto the post-INT4 story view) and Coupled caption 10 option (b) from V1 M-01.
+
+### 11.1 Automated checks
+
+| Check | Result |
+| --- | --- |
+| `npm test` | 324 / 324 pass (the `poseNtp` < 1.0 ms perf test fails only while a Playwright run shares the CPU; it passes alone) |
+| `npm run smoke` | SMOKE PASS |
+| `tests/ui-story.browser.mjs` | UI-STORY PASS (51 checks) |
+| `npm run build:vercel` | 98 files, 7.6 MB in `public/`; served page loads with zero console errors and zero 4xx/5xx |
+
+### 11.2 R3-Q3 release audit (Chromium, SwiftShader, 800×500)
+
+Run against `public/` served on localhost: Express in Step by step and Coupled, each scrubbed 0 → 1 in 17 steps, then 10 cycles Explore ↔ Express.
+
+| Item | `index.html` | `dist/helix-standalone.html` |
+| --- | --- | --- |
+| Requests | 88, all same-origin | 1 (the page itself) |
+| Third-party requests | 0 | 0 |
+| HTTP errors | 0 | 0 |
+| Console errors | 0 | 0 |
+| Console warnings | 4 (SwiftShader/WebGL driver notices) | 0 |
+| `renderer.info.memory` baseline (geometries, textures) | 11, 15 | 11, 15 |
+| After each of 10 mode cycles | 11, 15 every cycle (±0) | 11, 15 every cycle (±0) |
+
+Sizes against PLAN §7.5: all asset JSON together 1.5 MB (budget ≤ 3.0 MB); standalone HTML 4.72 MB (budget ≤ 7.5 MB); per-asset budgets are enforced by `tests/asset-budgets.test.mjs` (pass).
+
+The memory and network runs used the build before the plain-language merge, which adds UI text and DOM only; the final build was re-checked for console errors, HTTP errors and third-party requests (all 0).
+
+### 11.3 Gate G5 (PLAN §12)
+
+| Criterion | Status |
+| --- | --- |
+| Zero external requests | PASS |
+| Sizes within §7.5 | PASS |
+| Memory check | PASS |
+| Phone frame time (≤ 33 ms median at `low` or `auto`) | **PENDING (human)** |
+| Desktop hardware-GPU frame time (carried from G4) | **PENDING (human)**, steps in `docs/PERF.md` §5.1 |
+| Human visual acceptance | **PENDING (human)** |
+
+The human items can be done on the Vercel deployment. Tag `v1.0.0` after they pass.
+
+### 11.4 Deployment
+
+`vercel.json` runs `node tools/build-vercel.mjs`, which copies `index.html`, `css/`, `js/`, `assets/` and `dist/helix-standalone.html` into `public/`, the output directory. No install step and no dependencies. The standalone build is served at `/dist/helix-standalone.html`.
