@@ -21,6 +21,7 @@ import { h, hex, setText, rafThrottle, clamp } from './dom.js';
 import { icon } from './icons.js';
 import { segmented, toggleTile, range, stat, sectionLabel } from './components.js';
 import { TRUE_SCALE_GENE_CONSTRUCT, codonTable } from '../science/scenario.js';
+import { chapterPlain, createStepper, plainLine } from './plain.js';
 
 const GROUP_LEVEL = {
   T: 'closed', // transcription
@@ -189,6 +190,7 @@ export function createStoryView(ctx) {
   }
 
   function togglePlay() {
+    pauseNote.hidden = true;
     setPlaying(!playing);
     send(playing ? 'play' : 'pause');
   }
@@ -197,12 +199,40 @@ export function createStoryView(ctx) {
     send('restart');
   }
 
+  // Plain-language narration: four big steps, one everyday sentence per chapter, optional pause at each step.
+  const stepper = createStepper({ onSelect: i => selectStep(i) });
+  const plain = plainLine('plain-line');
+  const pauseNote = h('p', { class: 'pause-note', hidden: true }, 'Paused at the start of a new step. Press play to continue.');
+  let pauseAtSteps = true;
+  let lastStep = 0;
+
+  function selectStep(i) {
+    const idx = chapters.findIndex(ch => chapterPlain(ch).step === i);
+    if (idx >= 0) selectChapter(idx);
+  }
+
+  /** Paint the stepper and plain sentence; pause when playback crosses into the next big step. */
+  function paintPlain(chIdx, fromPlayback) {
+    const info = chapterPlain(chapters[chIdx]);
+    stepper.set(info.step);
+    plain.set(info.text);
+    if (fromPlayback && playing && !scrubbing && pauseAtSteps && info.step === lastStep + 1) {
+      setPlaying(false);
+      send('pause');
+      pauseNote.hidden = false;
+    }
+    lastStep = info.step;
+  }
+
   const peek = h('div', { class: 'peek' },
     h('div', { class: 'transport' },
       playBtn,
       restartBtn,
       h('div', { class: 'scrub' }, scrub.el, scrubTicks),
       pct),
+    stepper.el,
+    plain.el,
+    pauseNote,
     h('div', { class: 'row-between' }, phase, chapterCount),
     caption);
 
@@ -289,6 +319,12 @@ export function createStoryView(ctx) {
       send('toggle', { crowding: v });
     },
   });
+  const pauseTile = toggleTile({
+    label: 'Pause at steps',
+    hint: 'Stop at each of the 4 main steps',
+    onChange: v => { pauseAtSteps = v; if (!v) pauseNote.hidden = true; },
+  });
+  pauseTile.set(pauseAtSteps);
   cutawayTile.set(toggles.cutaway);
   labelsTile.set(toggles.labels);
   crowdingTile.set(toggles.crowding);
@@ -296,7 +332,8 @@ export function createStoryView(ctx) {
   const tilesGroup = h('div', { class: 'group tiles' },
     cutawayTile.el,
     labelsTile.el,
-    crowdingTile.el);
+    crowdingTile.el,
+    pauseTile.el);
 
   // ---- Item 6: Chapter list card ----------------------------------------------------------------
   const totalDurEl = h('span', { class: 'card-sub mono' }, formatTime(totalDuration / currentSpeed));
@@ -308,14 +345,18 @@ export function createStoryView(ctx) {
   function selectChapter(idx) {
     if (!chapters.length) return;
     const next = clamp(idx, 0, chapters.length - 1);
+    pauseNote.hidden = true;
     setActiveChapter(next, true);
+    paintPlain(next, false);
     send('chapter', next);
   }
 
   function stepChapter(dir) {
     if (!chapters.length) return;
     const next = clamp(activeChapterIdx + dir, 0, chapters.length - 1);
+    pauseNote.hidden = true;
     setActiveChapter(next, true);
+    paintPlain(next, false);
     send('chapter', next);
   }
 
@@ -400,6 +441,7 @@ export function createStoryView(ctx) {
     chapterListEl);
 
   buildChapters();
+  paintPlain(activeChapterIdx, false);
 
   // ---- Item 7: Codon & polypeptide card (41 cells: 40 sense + UAA) ------------------------------
   const codonStrip = h('div', {
@@ -635,7 +677,7 @@ export function createStoryView(ctx) {
   }, icon('close', 16));
 
   const inspectEmpty = h('p', { class: 'note' },
-    'Click or tap a molecule to see what it is and where its structure comes from.');
+    'Click or tap a molecule to see what it is and what it does. The rest of the scene fades so it stands out.');
   const inspectRole = h('p', { class: 'inspect-role' });
   const inspectSourceDd = h('dd');
   const inspectOrganismDd = h('dd');
@@ -644,15 +686,33 @@ export function createStoryView(ctx) {
   const inspectDetailDd = h('dd');
   const inspectSimpList = h('ul');
 
+  // Two lists with the same class: the source row (with its RCSB link) is always shown; the other rows fold away.
+  const inspectSourceDl = h('dl', { class: 'inspect-dl inspect-source' },
+    h('dt', {}, 'Source'), inspectSourceDd);
   const inspectDl = h('dl', { class: 'inspect-dl' },
-    h('dt', {}, 'Source'), inspectSourceDd,
     h('dt', {}, 'Organism'), inspectOrganismDd,
     h('dt', {}, 'Method'), inspectMethodDd,
     h('dt', {}, 'Chains shown'), inspectChainsDd,
     h('dt', {}, 'Detail level'), inspectDetailDd,
     h('dt', {}, 'Simplifications'), h('dd', {}, inspectSimpList));
 
-  const inspectFilled = h('div', { hidden: true }, inspectRole, inspectDl);
+  // Plain explanation first; the exact role sentence and provenance rows are one click away.
+  const inspectPlain = h('p', { class: 'inspect-plain' });
+  const inspectMoreBody = h('div', { class: 'inspect-more-body', id: 'inspect-more-body', hidden: true }, inspectRole, inspectDl);
+  const inspectMoreBtn = h('button', {
+    type: 'button',
+    class: 'link-btn inspect-more-btn',
+    'aria-expanded': 'false',
+    'aria-controls': 'inspect-more-body',
+    onclick: () => {
+      const open = inspectMoreBody.hidden;
+      inspectMoreBody.hidden = !open;
+      inspectMoreBtn.setAttribute('aria-expanded', String(open));
+      setText(inspectMoreBtn, open ? 'Hide scientific details' : 'Scientific details');
+    },
+  }, 'Scientific details');
+  const inspectMore = h('div', { class: 'inspect-more' }, inspectSourceDl, inspectMoreBtn, inspectMoreBody);
+  const inspectFilled = h('div', { hidden: true }, inspectPlain, inspectMore);
 
   function renderInspect(info) {
     lastInspectRef = info;
@@ -670,6 +730,8 @@ export function createStoryView(ctx) {
     inspectFilled.hidden = false;
 
     setText(inspectRole, info.role || '');
+    setText(inspectPlain, info.plain || info.role || '');
+    inspectPlain.hidden = !(info.plain || info.role);
 
     // Source row: label (e.g. "PDB 7K00") + optional click-only RCSB link.
     inspectSourceDd.replaceChildren();
@@ -792,6 +854,7 @@ export function createStoryView(ctx) {
         chapSig = nextSig;
         totalDuration = Number.isFinite(s.duration) && s.duration > 0 ? s.duration : totalDurationOf(chapters);
         buildChapters();
+        paintPlain(activeChapterIdx, false);
       } else if (Number.isFinite(s.duration) && s.duration > 0 && s.duration !== totalDuration) {
         totalDuration = s.duration;
         updateChapterDurations();
@@ -826,7 +889,9 @@ export function createStoryView(ctx) {
     if (nextCrowding !== undefined) { toggles.crowding = !!nextCrowding; crowdingTile.set(toggles.crowding); }
 
     if ('chapterIndex' in s && Number.isInteger(s.chapterIndex)) {
+      const prevIdx = activeChapterIdx;
       setActiveChapter(s.chapterIndex, false, s.phaseLevel || null);
+      if (activeChapterIdx !== prevIdx || stepper.get() < 0) paintPlain(activeChapterIdx, true);
     } else if ('phase' in s && s.phase) {
       setText(phase, s.phase);
       if (s.phaseLevel) phase.dataset.level = s.phaseLevel;

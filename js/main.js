@@ -295,6 +295,7 @@ function ensureStoryScene() {
     viewer.setStyle(styleForMode());
     viewer.setAssembly(app.asm, { keepCamera: true });
     app.storyScene.seek(app.storyScene.state().t, { instantCamera: true });
+    app.storyScene.refreshHighlight?.();
     pushStoryState(app.storyScene.state());
     return Promise.resolve(app.storyScene);
   }

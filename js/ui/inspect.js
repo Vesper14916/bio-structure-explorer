@@ -120,6 +120,33 @@ export const MACHINE_INSPECT_TABLE = Object.freeze({
  * Procedural molecule inspection metadata (PLAN.md §5.2, §5.4, §10 R3-U2).
  * Each role sentence is strictly <= 120 characters and cites PLAN.md §5.2 mechanisms.
  */
+/**
+ * Plain-language explanations for readers without a molecular-biology background: what the molecule is and
+ * what it does in this story, in one or two everyday sentences. Shown first on the inspection card; the
+ * exact role sentences and provenance rows stay under "Scientific details".
+ */
+export const PLAIN_INSPECT = Object.freeze({
+  'rnap-core': 'A molecular machine that slides along DNA and builds an RNA copy of one strand, one letter at a time.',
+  sigma: 'A helper that lets RNA polymerase recognise the "start here" signal in front of the gene.',
+  'ribosome-small': 'The smaller half of the ribosome, the protein-making machine. It holds the RNA and checks that each adapter matches.',
+  'ribosome-large': 'The larger half of the ribosome. It links amino acids together; the growing protein leaves through a tunnel in it.',
+  'trna-init': 'The first adapter. It carries the first amino acid and finds the "start" word on the RNA.',
+  'trna-aa': 'An adapter molecule. One end reads a three-letter word on the RNA; the other end carries the matching amino acid.',
+  'ef-tu': 'A delivery helper that brings each loaded adapter (tRNA) to the ribosome.',
+  'ef-g': 'A helper that pushes the ribosome forward by one three-letter word, using chemical energy (GTP).',
+  rf1: 'A release helper. It recognises the "stop" word and cuts the finished protein chain free.',
+  if1: 'A start-up helper that keeps the wrong adapters out while the ribosome gets ready.',
+  if2: 'A start-up helper that brings the first adapter and helps the two ribosome halves join.',
+  if3: 'A start-up helper that keeps the ribosome halves apart until the right start is found.',
+  nusg: 'A bridge that links the copying machine (RNA polymerase) to the ribosome when both work at once.',
+  dna: 'DNA, the long-term store of genetic information: two strands of letters (A, T, G, C) wound around each other.',
+  mrna: 'Messenger RNA, a working copy of the gene. The ribosome reads it three letters at a time.',
+  anticodon: 'The three letters at the tip of an adapter (tRNA). They pair with a three-letter word on the RNA.',
+  peptide: 'The new protein chain, built one amino acid at a time. Later it would fold into a working shape.',
+  ntp: 'A single RNA building block arriving to be added to the growing RNA copy.',
+  ppi: 'A small leftover piece released each time a building block is added to the RNA.',
+});
+
 export const PROCEDURAL_INSPECT_TABLE = Object.freeze({
   dna: Object.freeze({
     name: 'DNA duplex',
@@ -370,6 +397,7 @@ function buildProceduralInspect(kindKey, pick) {
 
   return {
     name: spec.name,
+    plain: PLAIN_INSPECT[kindKey] || null,
     title: spec.name,
     role: spec.role,
     source: spec.source,
@@ -441,7 +469,7 @@ export function buildInspectInfo(pick, assets = {}, worldState = null, opts = {}
       || lookupAsset(assets, actorId);
 
     if (resolved) {
-      const { entry, partId } = resolved;
+      const { entry, partId, key } = resolved;
       const src = asset && asset.source && asset.source.type === 'pdb' ? asset.source : null;
       const pdbId = (src && src.pdbId) || entry.defaultPdbId;
       const sourceLabel = pdbId ? `PDB ${pdbId}` : 'Procedural';
@@ -453,6 +481,7 @@ export function buildInspectInfo(pick, assets = {}, worldState = null, opts = {}
 
       return {
         name: entry.name,
+        plain: PLAIN_INSPECT[key] || null,
         title: entry.name,
         role: entry.role,
         source: sourceLabel,

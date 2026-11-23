@@ -173,7 +173,7 @@ Model note (`PLAN.md` §9.1): Antigravity `invoke_subagent` inherits the parent 
 | **ST7** | **Claude (C3)** | `R3-K3` → `R3-S4` (translation choreography) | `r3-w2` | `r3-st7` | `DONE` |
 | **ST8** | Claude (reassigned) | Intake ST7; `R3-R4` → `R3-Q2` → `R3-U3` → `R3-V2` → `R3-INT3`; Gate **G3** | `r3-st7` | `r3-w3` | `DONE` (tag `r3-w3` exists on `origin` at `9182358` [PR #4]; `origin/main` is at `2675b1b` [PR #5]) |
 | **ST9** | Gemini | `R3-P1` → `R3-D1` → `R3-S5` → `R3-V1` → `R3-INT4`; Gate **G4** (merge order per `DEC-032`: `D1` → `S5` → `V1` → `P1`+`INT4`) | `2675b1b` (`main`, post-PR #5; not `r3-w3`) | `r3-w4` | `REVIEW` (PR open; user merges and tags `r3-w4`) |
-| **ST10** | Gemini + Human | `R3-Q3` → `R3-INT5` + Human visual acceptance; Gate **G5** | `r3-w4` | `v1.0.0` | `PENDING` |
+| **ST10** | Claude + Human | `R3-Q3` done (VALIDATION §11); `R3-INT5` waits for human frame times and visual acceptance; Gate **G5** | `r3-w4` | `v1.0.0` | `IN PROGRESS` |
 
 
 
