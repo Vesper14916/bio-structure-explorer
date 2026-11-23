@@ -8,6 +8,7 @@
     "smoke": "node tests/smoke.browser.mjs",
     "perf": "node tools/perf/story-bench.mjs && node tools/perf/browser-bench.mjs",
     "fetch-sources": "node tools/fetch-sources.mjs",
-    "build:standalone": "node tools/build-standalone.mjs"
+    "build:standalone": "node tools/build-standalone.mjs",
+    "build:vercel": "node tools/build-vercel.mjs"
   }
 }
