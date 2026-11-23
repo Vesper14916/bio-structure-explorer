@@ -594,6 +594,8 @@ export function createStoryScene(viewer, opts = {}) {
     setCameraOption,
     setToggles,
     invalidateCrowd,
+    /** Re-send the inspect focus / codon highlight (other modes clear the viewer highlight). */
+    refreshHighlight: () => { if (!disposed) applyHighlight(); },
     selectCodon,
     clearInspect,
     pick,
